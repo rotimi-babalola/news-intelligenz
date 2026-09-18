@@ -2,6 +2,7 @@
   "name": "news-intelligenz",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.18.3",
   "engines": {
     "node": ">=24 <25"
   },
@@ -9,8 +10,9 @@
     "build": "tsc",
     "db:migrate": "node --env-file-if-exists=.env dist/src/cli.js migrate",
     "collect": "node --env-file-if-exists=.env dist/src/cli.js collect",
+    "start": "node --env-file-if-exists=.env dist/src/server.js",
     "test": "pnpm build && node --test dist/test/*.test.js",
-    "test:integration": "pnpm build && node --test dist/test/*.integration.js",
+    "test:integration": "pnpm build && node --env-file-if-exists=.env --test dist/test/*.integration.js",
     "check": "tsc --noEmit",
     "format": "prettier --check .",
     "format:write": "prettier --write ."
@@ -20,7 +22,7 @@
     "pg": "^8.23.0"
   },
   "devDependencies": {
-    "@types/node": "^26.6.1",
+    "@types/node": "^24.13.5",
     "@types/pg": "^8.23.1",
     "prettier": "^3.9.8",
     "typescript": "^7.0.2"

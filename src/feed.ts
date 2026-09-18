@@ -12,6 +12,7 @@ export type Candidate = {
   originalUrl: string;
   sourceId: string;
   publishedAt: string | null;
+  sourceDate: string;
   language: string;
   errors: string[];
 };
@@ -63,6 +64,7 @@ export function parseFeed(xml: string): Candidate[] {
       originalUrl,
       sourceId,
       language,
+      sourceDate: date,
       publishedAt: Number.isFinite(timestamp)
         ? new Date(timestamp).toISOString()
         : null,

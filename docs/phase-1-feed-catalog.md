@@ -2,6 +2,10 @@
 
 User-provided launch selection: 34 feeds (9 public-news feeds and 25 Bundestag feeds). This replaces the earlier five-feed proposal. Endpoints and formats require live validation during implementation; listing does not claim they have been verified. Retain each feed's discovery provenance even when items overlap. All valid configured feed items are eligible without relevance filtering, including sport, culture and international coverage.
 
+The first local implementation verifies the Aktuelle Themen RSS format but keeps
+live collection disabled pending metadata retention permission. It uses synthetic
+fixtures; see the [verification report](launch-feed-verification.md).
+
 ## Public-news feeds
 
 - [tagesschau (ARD) – all updates](https://www.tagesschau.de/infoservices/alle-meldungen-100~rdf.xml)
@@ -41,4 +45,3 @@ User-provided launch selection: 34 feeds (9 public-news feeds and 25 Bundestag f
 - [Wirtschaft und Energie](https://www.bundestag.de/static/appdata/includes/rss/wirtschaft.rss)
 - [Wirtschaftliche Zusammenarbeit und Entwicklung](https://www.bundestag.de/static/appdata/includes/rss/entwicklung.rss)
 - [Wohnen, Stadtentwicklung, Bauwesen und Kommunen](https://www.bundestag.de/static/appdata/includes/rss/bauwohnenstadtentwicklungkommunen.rss)
-

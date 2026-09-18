@@ -15,6 +15,7 @@ test("preserves German/English metadata and exposes invalid candidates", async (
   assert.equal(candidates[1]?.language, "en");
   assert.deepEqual(candidates[0]?.errors, []);
   assert.equal(candidates[2]?.errors.length, 2);
+  assert.equal(candidates[2]?.sourceDate, "not-a-date");
   assert.ok(!JSON.stringify(candidates).includes("description"));
 });
 

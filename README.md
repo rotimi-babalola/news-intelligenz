@@ -4,7 +4,70 @@ News Intelligenz aims to help immigrants living in Germany understand the countr
 
 ## Project status
 
-Phase 1 design is confirmed and its implementation is tracked in [12 GitHub issues labelled Phase 1](https://github.com/rotimi-babalola/news-intelligenz/issues?q=is%3Aissue%20label%3A%22Phase%201%22). The repository currently contains design documentation; there is no runnable application or installation workflow yet.
+Phase 1 design is confirmed and its implementation is tracked in [12 GitHub issues labelled Phase 1](https://github.com/rotimi-babalola/news-intelligenz/issues?q=is%3Aissue%20label%3A%22Phase%201%22). The first local slice collects a synthetic RSS feed into PostgreSQL and provides a read-only inspection page. Live collection remains disabled because applicable metadata retention permissions are unresolved; see the [feed verification report](docs/launch-feed-verification.md).
+
+## Run locally
+
+Requirements: Node.js **24 LTS**, pnpm **10.18.3**, and Docker with Compose.
+Run commands from the repository root. Use `nvm install` / `nvm use` if you manage
+Node through nvm. The runtime and direct SQL approach are recorded in
+[ADR 0003](docs/adr/0003-local-runtime-and-database-access.md).
+
+```sh
+pnpm install --frozen-lockfile
+cp .env.example .env
+docker compose up -d --wait
+pnpm build
+pnpm collect demo-001
+pnpm start
+```
+
+Open [the local admin page](http://127.0.0.1:3000). The fixture produces two valid
+publications (German and English) and one rejected candidate. Select a run to
+inspect its candidates, validation errors and discovery history. The page shows
+up to 100 records per section; all records remain in PostgreSQL. No article text
+or feed descriptions are retained. The admin is bound to `127.0.0.1`; deployed
+authentication and hosting belong to later tickets.
+
+Collection and server startup apply the SQL migration automatically. Use
+`pnpm db:migrate` to apply it separately. `DATABASE_URL` and `PORT` can be set in
+`.env` or the environment. The Compose credentials are local development defaults.
+
+```sh
+pnpm collect demo-001 # Replay: returns the stored result without changing rows
+pnpm collect demo-002 # New encounter: same publications, new discoveries
+```
+
+A run ID identifies one immutable feed input. Changed XML requires a new run ID.
+Candidate counts count feed entries; discovery counts count distinct publications
+per feed/run. Publication identity uses publisher-scoped GUIDs or exact original
+URLs, without headline matching. Conflicting identity evidence rejects the
+candidate for inspection. Redirect resolution and extraction are later work.
+
+Stop the admin with Ctrl-C. `docker compose down` stops PostgreSQL while keeping
+its named volume; `docker compose up -d --wait` restores access to the saved data.
+Do not add `--volumes` unless you intend to delete that data. To roll back this
+initial schema on a disposable database, stop the app and run
+`psql "$DATABASE_URL" --single-transaction -f migrations/001_collection.down.sql`;
+this removes the collection tables and their contents.
+
+### Verification
+
+```sh
+pnpm test
+pnpm test:integration # Requires the running local PostgreSQL service and .env
+pnpm check
+pnpm format
+```
+
+The integration test creates and removes its own isolated schema. It runs the
+collector in separate processes, restarts the admin, compares persisted rows and
+rendered pages, and checks idempotent/concurrent replay, distinct discoveries,
+identity conflicts, transaction rollback and HTML escaping. It does not stop
+your database. Database outages roll back the current transaction; retry the same
+run after restoring connectivity. Malformed feeds receive a persisted failed run
+result; SQL/connection failures are reported by the operator command and roll
+back all writes. Durable retry jobs are deferred.
 
 ## Phase 1: news collection
 
@@ -28,7 +91,9 @@ All valid items from configured feeds are eligible without relevance filtering. 
 - Provide an internal inspection page, relevance review and reversible duplicate merges. Protect deployed admin access with Basic Auth over HTTPS.
 - Measure source contributions, extraction outcomes, search relevance and resource usage. Explore free tiers first and pause affected providers when allowances run out.
 
-Source endpoints, formats and retention permissions still require validation. Runtime, search provider and hosting selections will be documented during implementation research.
+The first feed's format has been verified, but retention permissions remain unresolved.
+Node.js 24 and direct PostgreSQL access are selected for the local runtime.
+Other feed endpoints, search provider and hosting selections remain future work.
 
 ### Completion criteria
 
@@ -36,14 +101,14 @@ Phase 1 requires seven consecutive scheduled runs, demonstrated persistence and 
 
 ## Documentation
 
-| Document | Purpose |
-| --- | --- |
-| [Phase 1 architecture](docs/phase-1-architecture.md) | Agreed scope, collection flow and operational behaviour |
-| [Design notes](docs/phase-1-design-notes.md) | Decisions, acceptance criteria and unresolved factual checks |
-| [Feed catalog](docs/phase-1-feed-catalog.md) | Exact launch feed URLs |
-| [Domain glossary](CONTEXT.md) | Shared terminology for publications, versions and discoveries |
-| [ADR: publication versions](docs/adr/0001-preserve-publication-versions.md) | Why historical article text is retained |
-| [ADR: PostgreSQL storage and jobs](docs/adr/0002-postgresql-for-storage-and-jobs.md) | Why persistent data and durable jobs share a database |
+| Document                                                                             | Purpose                                                       |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| [Phase 1 architecture](docs/phase-1-architecture.md)                                 | Agreed scope, collection flow and operational behaviour       |
+| [Design notes](docs/phase-1-design-notes.md)                                         | Decisions, acceptance criteria and unresolved factual checks  |
+| [Feed catalog](docs/phase-1-feed-catalog.md)                                         | Exact launch feed URLs                                        |
+| [Domain glossary](CONTEXT.md)                                                        | Shared terminology for publications, versions and discoveries |
+| [ADR: publication versions](docs/adr/0001-preserve-publication-versions.md)          | Why historical article text is retained                       |
+| [ADR: PostgreSQL storage and jobs](docs/adr/0002-postgresql-for-storage-and-jobs.md) | Why persistent data and durable jobs share a database         |
 
 ## Implementation roadmap
 

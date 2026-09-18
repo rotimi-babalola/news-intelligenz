@@ -91,7 +91,7 @@ export async function collect(pool: pg.Pool, runId: string, xml: string) {
       ]);
     }
     const result = await client.query(
-      `UPDATE runs SET status = $2, completed_at = now(), valid_count = $3,
+      `UPDATE runs SET status = $2, completed_at = clock_timestamp(), valid_count = $3,
        invalid_count = $4, error = $5 WHERE id = $1 RETURNING *`,
       [
         runId,

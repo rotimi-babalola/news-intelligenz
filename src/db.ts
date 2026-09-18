@@ -3,7 +3,11 @@ import pg from "pg";
 
 export function database() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required");
-  return new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  pool.on("error", (error) =>
+    console.error("Idle PostgreSQL connection failed:", error.message),
+  );
+  return pool;
 }
 
 export async function migrate(pool: pg.Pool) {
