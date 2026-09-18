@@ -1,0 +1,25 @@
+{
+  "name": "news-intelligenz",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "pnpm build && node --test dist/test/*.test.js",
+    "check": "tsc --noEmit",
+    "format": "prettier --check .",
+    "format:write": "prettier --write ."
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.11.1",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.1",
+    "@types/pg": "^8.23.1",
+    "prettier": "^3.9.8",
+    "typescript": "^7.0.2"
+  }
+}
