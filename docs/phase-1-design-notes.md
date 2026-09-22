@@ -1,8 +1,8 @@
 # Phase 1 design interview
 
-These notes capture confirmed decisions from the design interview. The consolidated [Phase 1 architecture](phase-1-architecture.md) records the agreed design and takes precedence over the original supplied proposal where they differ. Implementation has not been authorized by this interview.
+These notes preserve the original confirmed design interview. The confirmed [DIP amendment](dip-design-notes.md) supersedes the Bundestag RSS source, publication-only model, and institutional collection details below: nine public-news RSS feeds remain, and DIP proceedings and steps supply parliamentary activity. The [Phase 1 architecture](phase-1-architecture.md) incorporates that amendment. These interviews do not authorize implementation.
 
-## Agreed direction
+## Original agreed direction (see DIP amendment above)
 
 Phase 1 deliverable: a fault-tolerant collection system combining targeted search agents, parliamentary discovery and direct RSS feeds into a validated, deduplicated and traceable stream of German news content. It collects, processes, and stores news according to a shared schema. There is no reader-facing product in this phase; the inspection page is an internal operational tool.
 
@@ -41,6 +41,8 @@ Phase 1 deliverable: a fault-tolerant collection system combining targeted searc
 - Delegate remaining technical selections (runtime, search provider, hosting, exact query wording, and bounded retry settings) to implementation research, guided by free-tier availability and measured results. Document selections and reasoning; revisit payment or scope changes with the user.
 
 ## Agreed completion criteria
+
+These original criteria remain applicable; the [DIP verification criteria](dip-design-notes.md#verification-criteria) supplement them for parliamentary collection.
 
 - Seven consecutive scheduled runs with inspectable results and failures.
 - Repeating a run creates no duplicate publications or discovery encounters.
