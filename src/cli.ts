@@ -7,19 +7,22 @@ import {
   customFeed,
   fetchFeedXml,
   fixtureFeed,
+  type Feed,
 } from "./sources.js";
 
 async function main(
   command: string | undefined,
-  second: string | undefined,
-  third: string | undefined,
+  // Run ID for collect/collect-fixture; feed URL for verify.
+  target: string | undefined,
+  // Optional feed URL for collect.
+  feedUrl: string | undefined,
 ) {
   const needsRunId = command === "collect" || command === "collect-fixture";
   if (
     (command !== "collect" &&
       command !== "collect-fixture" &&
       command !== "verify") ||
-    (needsRunId && !second)
+    (needsRunId && !target)
   ) {
     console.error(
       "Usage: cli collect <run-id> [feed-url] | collect-fixture <run-id> | verify [feed-url]",
@@ -30,17 +33,17 @@ async function main(
   const prisma = database();
   try {
     if (command === "verify") {
-      const url = second ?? configuredFeed.url;
-      if (!url) throw new Error("No feed URL");
-      const xml = await fetchFeedXml(url);
-      const candidates = parseFeed(xml, configuredFeed.defaultLanguage);
+      const inspected = target ? customFeed(target) : configuredFeed;
+      if (!inspected.url) throw new Error("No feed URL");
+      const xml = await fetchFeedXml(inspected.url);
+      const candidates = parseFeed(xml, inspected.defaultLanguage);
       const valid = candidates.filter((c) => !c.errors.length).length;
       console.log(
         JSON.stringify(
           {
-            feed: configuredFeed.id,
-            publisher: configuredFeed.publisher,
-            url,
+            feed: inspected.id,
+            publisher: inspected.publisher,
+            url: inspected.url,
             entries: candidates.length,
             valid,
             invalid: candidates.length - valid,
@@ -55,17 +58,15 @@ async function main(
       );
       return;
     }
-    const feed =
-      command === "collect-fixture"
-        ? fixtureFeed
-        : command === "collect" && third
-          ? customFeed(third)
-          : configuredFeed;
+    let feed: Feed;
+    if (command === "collect-fixture") feed = fixtureFeed;
+    else if (feedUrl) feed = customFeed(feedUrl);
+    else feed = configuredFeed;
     const xml =
       command === "collect-fixture"
         ? await readFile("fixtures/bundestag.xml", "utf8")
         : await fetchFeedXml(feed.url!);
-    const result = await collect(prisma, second!, xml, feed);
+    const result = await collect(prisma, target!, xml, feed);
     console.log(JSON.stringify(result));
     if (result.status === "failed") process.exitCode = 1;
   } catch (error) {

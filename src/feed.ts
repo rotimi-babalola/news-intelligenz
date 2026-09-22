@@ -37,7 +37,8 @@ export function parseFeed(
     const language =
       scalar(raw["dc:language"] || channel.language)
         .split("-")[0]
-        ?.trim() || defaultLanguage;
+        ?.trim()
+        .toLowerCase() || defaultLanguage;
     const date = scalar(raw.pubDate || raw["dc:date"]).trim();
     const errors: string[] = [];
     if (!headline.trim()) errors.push("Missing headline");

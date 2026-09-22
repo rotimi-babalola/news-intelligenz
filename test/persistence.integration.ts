@@ -63,8 +63,8 @@ test("PostgreSQL retains candidates and distinct discoveries; replay is idempote
   const env = { ...process.env, DATABASE_URL: url };
   try {
     await promisify(execFile)(
-      process.execPath,
-      ["node_modules/prisma/build/index.js", "migrate", "deploy"],
+      "node_modules/.bin/prisma",
+      ["migrate", "deploy"],
       { env, cwd: root },
     );
     const { database } = await import("../src/db.js");

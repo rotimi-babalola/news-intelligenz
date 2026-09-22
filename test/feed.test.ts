@@ -73,6 +73,14 @@ test("BCP-47 language tags normalize to the primary subtag", () => {
   assert.equal(candidate?.language, "de");
 });
 
+test("language tags are case-insensitive", () => {
+  const [candidate] = parseFeed(
+    "<rss><channel><language>EN-us</language><item><title>Headline</title><link>https://example.org/a</link></item></channel></rss>",
+  );
+  assert.equal(candidate?.language, "en");
+  assert.deepEqual(candidate?.errors, []);
+});
+
 test("rejects malformed XML, entities, wrong formats and oversized feeds", () => {
   for (const xml of [
     "<rss>",

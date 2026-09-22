@@ -39,6 +39,11 @@ export async function collect(
       const { errors, ...metadata } = candidate;
       let publicationId: string | null = null;
       if (!errors.length) {
+        // The parser only emits valid candidates with a de|en language;
+        // fail loudly instead of persisting anything else.
+        const language = candidate.language;
+        if (language !== "de" && language !== "en")
+          throw new Error(`Unexpected candidate language: ${language}`);
         const matches = await tx.publicationIdentifier.findMany({
           where: {
             publisher: feed.publisher,
@@ -62,7 +67,7 @@ export async function collect(
             headline: candidate.headline,
             originalUrl: candidate.originalUrl,
             publishedAt: candidate.publishedAt,
-            language: candidate.language as "de" | "en",
+            language,
           };
           await tx.publication.upsert({
             where: { id: publicationId },
@@ -71,7 +76,7 @@ export async function collect(
               headline: candidate.headline,
               originalUrl: candidate.originalUrl,
               publishedAt: candidate.publishedAt,
-              language: candidate.language as "de" | "en",
+              language,
               lastDiscoveredAt: new Date(),
             },
           });
