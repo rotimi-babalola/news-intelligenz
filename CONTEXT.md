@@ -14,8 +14,18 @@ _Avoid_: German-language news (language alone does not define the scope)
 **Explainer**:
 An English explanation that makes source reporting understandable to a reader.
 
-**Bundestag update**:
-Information published by the German federal parliament and made available through its RSS feeds.
+**Parliamentary activity**:
+Parliamentary proceedings and the documented steps within them, including participation by the Bundestag, Bundesrat, Bundesversammlung, and Europakammer.
+_Avoid_: Bundestag update (when referring to activity across institutions)
+
+**Parliamentary proceeding (Vorgang)**:
+A parliamentary matter followed across its individual steps, which may have an overall summary and state of deliberation. A proceeding is distinct from the documents and reporting about it.
+
+**Proceeding step (Vorgangsposition)**:
+An individual documented step within a parliamentary proceeding, attributed to a parliamentary institution and providing evidence of the proceeding's development.
+
+**Parliamentary record version**:
+A retained state of a proceeding or proceeding step as observed during collection. A changed record may represent a correction or added description rather than a new parliamentary development.
 
 **State parliament**:
 The parliament of one of Germany's 16 federal states (Bundesländer).
@@ -30,7 +40,7 @@ A retained state of a publication's text. A correction or text update belongs to
 Two records suspected of representing the same publication, without sufficient identity evidence to merge automatically. Similar headlines alone do not establish that they are the same publication.
 
 **Discovery**:
-An encounter with a publication through a particular feed or search query during a collection run. Multiple discoveries can refer to the same publication.
+An encounter with a publication, parliamentary proceeding, or proceeding step through a particular source during a collection run. Multiple discoveries can refer to the same underlying record.
 
 **Relevance review**:
 A manual decision about whether a search candidate with uncertain relevance belongs in the collection. Items from configured RSS feeds do not require relevance review.

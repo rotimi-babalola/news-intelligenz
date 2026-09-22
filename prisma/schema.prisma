@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RunStatus {
+  running
+  completed
+  failed
+}
+
+enum Language {
+  de
+  en
+}
+
+enum IdentifierKind {
+  guid
+  url
+}
+
+enum ContentAvailability {
+  metadata_only
+  full_text
+}
+
+model Run {
+  id           String        @id @db.Text
+  feedId       String        @map("feed_id") @db.Text
+  inputHash    String        @map("input_hash") @db.Text
+  startedAt    DateTime      @map("started_at") @default(now()) @db.Timestamptz(6)
+  completedAt  DateTime?     @map("completed_at") @db.Timestamptz(6)
+  status       RunStatus
+  validCount   Int           @map("valid_count") @default(0)
+  invalidCount Int           @map("invalid_count") @default(0)
+  error        String?       @db.Text
+  candidates   Candidate[]
+  discoveries  Discovery[]
+
+  @@map("runs")
+}
+
+model Publication {
+  id                 String              @id @db.Uuid
+  publisher          String              @db.Text
+  headline           String              @db.Text
+  originalUrl        String              @map("original_url") @db.Text
+  publishedAt        DateTime?           @map("published_at") @db.Timestamptz(6)
+  language           Language
+  contentAvailability ContentAvailability @map("content_availability") @default(metadata_only)
+  firstDiscoveredAt  DateTime            @map("first_discovered_at") @default(now()) @db.Timestamptz(6)
+  lastDiscoveredAt   DateTime            @map("last_discovered_at") @default(now()) @db.Timestamptz(6)
+  identifiers        PublicationIdentifier[]
+  candidates         Candidate[]
+  discoveries        Discovery[]
+
+  @@map("publications")
+}
+
+model PublicationIdentifier {
+  publisher     String         @db.Text
+  kind          IdentifierKind
+  value         String         @db.Text
+  publicationId String         @map("publication_id") @db.Uuid
+  publication   Publication    @relation(fields: [publicationId], references: [id])
+
+  @@id([publisher, kind, value])
+  @@map("publication_identifiers")
+}
+
+model Candidate {
+  runId         String       @map("run_id") @db.Text
+  itemIndex     Int          @map("item_index")
+  metadata      Json
+  errors        Json
+  publicationId String?      @map("publication_id") @db.Uuid
+  run           Run          @relation(fields: [runId], references: [id])
+  publication   Publication? @relation(fields: [publicationId], references: [id])
+
+  @@id([runId, itemIndex])
+  @@map("candidates")
+}
+
+model Discovery {
+  runId         String      @map("run_id") @db.Text
+  publicationId String      @map("publication_id") @db.Uuid
+  discoveredAt  DateTime    @map("discovered_at") @default(now()) @db.Timestamptz(6)
+  run           Run         @relation(fields: [runId], references: [id])
+  publication   Publication @relation(fields: [publicationId], references: [id])
+
+  @@id([runId, publicationId])
+  @@map("discoveries")
+}

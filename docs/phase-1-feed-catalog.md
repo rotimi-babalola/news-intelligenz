@@ -1,6 +1,13 @@
 # Phase 1 feed catalog
 
-User-provided launch selection: 34 feeds (9 public-news feeds and 25 Bundestag feeds). This replaces the earlier five-feed proposal. Endpoints and formats require live validation during implementation; listing does not claim they have been verified. Retain each feed's discovery provenance even when items overlap. All valid configured feed items are eligible without relevance filtering, including sport, culture and international coverage.
+Launch RSS selection under the [DIP amendment](dip-design-notes.md): nine public-news feeds. DIP `/vorgang` and `/vorgangsposition` replace the 25 previously selected Bundestag feeds. Endpoints and formats require live validation during implementation; listing does not claim they have been verified. Retain each feed's discovery provenance even when items overlap. All valid configured feed items are eligible without relevance filtering, including sport, culture and international coverage.
+
+The first local implementation enables the Deutschlandfunk Nachrichten feed with
+metadata-only retention (headline, dates, URL, `guid`), keeps the Bundestag
+Aktuelle Themen endpoint disabled with retention unresolved, and uses the
+synthetic Bundestag fixture as the deterministic parser and persistence test; see
+the [verification report](launch-feed-verification.md). Feed tags such as
+`de-DE` normalize to their primary language subtag.
 
 ## Public-news feeds
 
@@ -14,7 +21,9 @@ User-provided launch selection: 34 feeds (9 public-news feeds and 25 Bundestag f
 - [Deutschlandfunk – Gesellschaft](https://www.deutschlandfunk.de/gesellschaft-106.rss)
 - [Deutschlandfunk – Sport](https://www.deutschlandfunk.de/sportportal-100.rss)
 
-## Bundestag feeds
+## Former Bundestag selection (historical; excluded from launch)
+
+These URLs record the superseded RSS selection. The existing synthetic RSS fixture remains a parser test; it does not authorize live collection from these feeds.
 
 - [Aktuelle Themen](https://www.bundestag.de/static/appdata/includes/rss/aktuellethemen.rss)
 - [Arbeit und Soziales](https://www.bundestag.de/static/appdata/includes/rss/arbeitsoziales.rss)
@@ -41,4 +50,3 @@ User-provided launch selection: 34 feeds (9 public-news feeds and 25 Bundestag f
 - [Wirtschaft und Energie](https://www.bundestag.de/static/appdata/includes/rss/wirtschaft.rss)
 - [Wirtschaftliche Zusammenarbeit und Entwicklung](https://www.bundestag.de/static/appdata/includes/rss/entwicklung.rss)
 - [Wohnen, Stadtentwicklung, Bauwesen und Kommunen](https://www.bundestag.de/static/appdata/includes/rss/bauwohnenstadtentwicklungkommunen.rss)
-

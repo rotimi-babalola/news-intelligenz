@@ -1,0 +1,38 @@
+{
+  "name": "news-intelligenz",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.18.3",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "prepare": "prisma generate",
+    "build": "prisma generate && tsc",
+    "db:migrate": "prisma migrate deploy",
+    "collect": "pnpm db:migrate && node --env-file-if-exists=.env dist/src/cli.js collect",
+    "collect-fixture": "pnpm db:migrate && node --env-file-if-exists=.env dist/src/cli.js collect-fixture",
+    "verify": "pnpm db:migrate && node --env-file-if-exists=.env dist/src/cli.js verify",
+    "start": "pnpm db:migrate && node --env-file-if-exists=.env dist/src/server.js",
+    "studio": "prisma studio",
+    "test": "pnpm build && node --test dist/test/*.test.js",
+    "test:integration": "pnpm build && node --env-file-if-exists=.env --test dist/test/*.integration.js",
+    "check": "prisma generate && tsc --noEmit",
+    "format": "prettier --check .",
+    "format:write": "prettier --write ."
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "dotenv": "^18.0.2",
+    "fast-xml-parser": "^5.11.1",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.5",
+    "@types/pg": "^8.23.1",
+    "prettier": "^3.9.8",
+    "prisma": "7.10.0",
+    "typescript": "^7.0.2"
+  }
+}
