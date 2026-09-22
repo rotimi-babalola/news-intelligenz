@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns="http://purl.org/rss/1.0/" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel rdf:about="https://www.tagesschau.de/infoservices/alle-meldungen-100.html">
+    <title>Synthetic tagesschau RDF fixture — not live reporting</title>
+    <link>https://www.tagesschau.de/infoservices/alle-meldungen-100.html</link>
+    <description>Synthetic channel description; must not be retained.</description>
+    <language>de</language>
+    <dc:language>de</dc:language>
+  </channel>
+  <item rdf:about="fixture-rdf-1">
+    <title>Kabinett beschließt Entlastung bei den Energiekosten</title>
+    <link>https://example.org/tagesschau/entlastung</link>
+    <description>Synthetic teaser; must not be retained.</description>
+    <guid>fixture-rdf-1</guid>
+    <pubDate>Tue, 22 Sep 2026 08:59:17 +0200</pubDate>
+    <dc:date>2026-09-22T06:59:17Z</dc:date>
+    <dc:language>de</dc:language>
+    <content:encoded><![CDATA[<p>Synthetic full text; must not be retained.<img src="https://example.org/x.jpg"/></p>]]></content:encoded>
+  </item>
+  <item rdf:about="fixture-rdf-2">
+    <title>Sport: Berlin marathon draws record crowd</title>
+    <link>https://example.org/tagesschau/marathon</link>
+    <description>Synthetic sport teaser; must not be retained.</description>
+    <guid>fixture-rdf-2</guid>
+    <dc:date>2026-09-21T10:00:00Z</dc:date>
+    <dc:language>en</dc:language>
+    <content:encoded><![CDATA[<p>Synthetic sport text; must not be retained.</p>]]></content:encoded>
+  </item>
+  <item rdf:about="fixture-rdf-3">
+    <title>Invalid RDF fixture for inspection</title>
+    <link>javascript:alert(1)</link>
+    <pubDate>not-a-date</pubDate>
+    <content:encoded><![CDATA[<p>Invalid entry text; must not be retained.</p>]]></content:encoded>
+  </item>
+</rdf:RDF>

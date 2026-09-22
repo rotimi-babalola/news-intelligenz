@@ -14,6 +14,62 @@ export const configuredFeed: Feed = {
   defaultLanguage: "de",
 };
 
+export const publicNewsFeeds: Feed[] = [
+  {
+    id: "tagesschau-alle-meldungen",
+    publisher: "tagesschau (ARD)",
+    url: "https://www.tagesschau.de/infoservices/alle-meldungen-100~rdf.xml",
+    defaultLanguage: "de",
+  },
+  configuredFeed,
+  {
+    id: "deutschlandfunk-politik",
+    publisher: "Deutschlandfunk",
+    url: "https://www.deutschlandfunk.de/politikportal-100.rss",
+    defaultLanguage: "de",
+  },
+  {
+    id: "deutschlandfunk-wirtschaft",
+    publisher: "Deutschlandfunk",
+    url: "https://www.deutschlandfunk.de/wirtschaft-106.rss",
+    defaultLanguage: "de",
+  },
+  {
+    id: "deutschlandfunk-wissen",
+    publisher: "Deutschlandfunk",
+    url: "https://www.deutschlandfunk.de/wissen-106.rss",
+    defaultLanguage: "de",
+  },
+  {
+    id: "deutschlandfunk-kultur",
+    publisher: "Deutschlandfunk",
+    url: "https://www.deutschlandfunk.de/kulturportal-100.rss",
+    defaultLanguage: "de",
+  },
+  {
+    id: "deutschlandfunk-europa",
+    publisher: "Deutschlandfunk",
+    url: "https://www.deutschlandfunk.de/europa-112.rss",
+    defaultLanguage: "de",
+  },
+  {
+    id: "deutschlandfunk-gesellschaft",
+    publisher: "Deutschlandfunk",
+    url: "https://www.deutschlandfunk.de/gesellschaft-106.rss",
+    defaultLanguage: "de",
+  },
+  {
+    id: "deutschlandfunk-sport",
+    publisher: "Deutschlandfunk",
+    url: "https://www.deutschlandfunk.de/sportportal-100.rss",
+    defaultLanguage: "de",
+  },
+];
+
+export function publicNewsFeedById(id: string): Feed | undefined {
+  return publicNewsFeeds.find((feed) => feed.id === id);
+}
+
 export const fixtureFeed: Feed = {
   id: "bundestag-aktuelle-themen-fixture",
   publisher: "Synthetic Bundestag fixture",

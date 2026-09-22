@@ -1,7 +1,29 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "./generated/prisma/client.js";
 import { parseFeed, type Candidate } from "./feed.js";
-import { configuredFeed, type Feed } from "./sources.js";
+import {
+  configuredFeed,
+  fetchFeedXml,
+  publicNewsFeeds,
+  type Feed,
+} from "./sources.js";
+
+export type FeedResult =
+  | {
+      feedId: string;
+      runId: string;
+      status: "completed" | "failed";
+      valid: number;
+      invalid: number;
+    }
+  | {
+      feedId: string;
+      runId: string;
+      status: "failed";
+      error: string;
+      valid: number;
+      invalid: number;
+    };
 
 export async function collect(
   prisma: PrismaClient,
@@ -131,4 +153,92 @@ export async function collect(
       },
     });
   });
+}
+
+async function recordFeedFailure(
+  prisma: PrismaClient,
+  runId: string,
+  feed: Feed,
+  message: string,
+) {
+  const inputHash = createHash("sha256")
+    .update(`fetch-failure:${message}`)
+    .digest("hex");
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+    const previous = await tx.run.findUnique({ where: { id: runId } });
+    if (previous) return previous;
+    return tx.run.create({
+      data: {
+        id: runId,
+        feedId: feed.id,
+        inputHash,
+        status: "failed",
+        completedAt: new Date(),
+        validCount: 0,
+        invalidCount: 0,
+        error: message,
+      },
+    });
+  });
+}
+
+export function feedRunId(prefix: string, feed: Feed): string {
+  return `${prefix}:${feed.id}`;
+}
+
+export async function collectAll(
+  prisma: PrismaClient,
+  runPrefix: string,
+  fetchXml: (url: string) => Promise<string> = fetchFeedXml,
+  feeds: Feed[] = publicNewsFeeds,
+): Promise<FeedResult[]> {
+  if (!runPrefix.trim() || runPrefix.length > 100)
+    throw new Error("Run prefix must contain 1–100 characters");
+  const results: FeedResult[] = [];
+  for (const feed of feeds) {
+    const runId = feedRunId(runPrefix, feed);
+    if (!feed.url) {
+      const error = "Feed has no live URL";
+      await recordFeedFailure(prisma, runId, feed, error);
+      results.push({
+        feedId: feed.id,
+        runId,
+        status: "failed",
+        error,
+        valid: 0,
+        invalid: 0,
+      });
+      continue;
+    }
+    try {
+      const xml = await fetchXml(feed.url);
+      const run = await collect(prisma, runId, xml, feed);
+      results.push({
+        feedId: feed.id,
+        runId,
+        status: run.status as "completed" | "failed",
+        valid: run.validCount,
+        invalid: run.invalidCount,
+        ...(run.error ? { error: run.error } : {}),
+      } as FeedResult);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Feed collection failed";
+      try {
+        await recordFeedFailure(prisma, runId, feed, message);
+      } catch {
+        // Failure bookkeeping must not hide the original error.
+      }
+      results.push({
+        feedId: feed.id,
+        runId,
+        status: "failed",
+        error: message,
+        valid: 0,
+        invalid: 0,
+      });
+    }
+  }
+  return results;
 }

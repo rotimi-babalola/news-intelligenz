@@ -21,21 +21,38 @@ export function parseFeed(
   if (/<!DOCTYPE|<!ENTITY/i.test(xml))
     throw new Error("XML declarations forbidden");
   if (XMLValidator.validate(xml) !== true) throw new Error("Malformed XML");
-  const channel = new XMLParser({
+  const parsed = new XMLParser({
     ignoreAttributes: true,
     parseTagValue: false,
     trimValues: false,
     isArray: (name) => name === "item",
-  }).parse(xml)?.rss?.channel;
+  }).parse(xml);
+  const rssChannel = parsed?.rss?.channel;
+  const rdf = parsed?.["rdf:RDF"];
+  // RSS 2.0 nests items under rss/channel; RDF (RSS 1.0, e.g. tagesschau)
+  // keeps channel metadata and sibling item elements under rdf:RDF.
+  const channel =
+    rssChannel && typeof rssChannel === "object"
+      ? rssChannel
+      : rdf && typeof rdf === "object"
+        ? (rdf.channel ?? {})
+        : null;
   if (!channel || typeof channel !== "object")
     throw new Error("Expected RSS channel");
-  return (channel.item ?? []).map((item: Record<string, unknown> | null) => {
+  const items = Array.isArray(rssChannel?.item)
+    ? rssChannel.item
+    : Array.isArray(rdf?.item)
+      ? rdf.item
+      : Array.isArray(channel.item)
+        ? channel.item
+        : [];
+  return items.map((item: Record<string, unknown> | null) => {
     const raw = item ?? {};
     const headline = scalar(raw.title);
     const originalUrl = scalar(raw.link).trim();
     const sourceId = scalar(raw.guid).trim();
     const language =
-      scalar(raw["dc:language"] || channel.language)
+      scalar(raw["dc:language"] || channel.language || channel["dc:language"])
         .split("-")[0]
         ?.trim()
         .toLowerCase() || defaultLanguage;

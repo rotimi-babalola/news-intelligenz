@@ -101,3 +101,21 @@ test("missing dates stay unknown and empty entries remain inspectable", () => {
     "Invalid HTTP(S) original URL",
   ]);
 });
+
+test("parses RDF with namespaced dates and ignores encoded content", async () => {
+  const candidates = parseFeed(
+    await readFile("fixtures/tagesschau-rdf.xml", "utf8"),
+  );
+  assert.equal(candidates.length, 3);
+  assert.equal(
+    candidates[0]?.headline,
+    "Kabinett beschließt Entlastung bei den Energiekosten",
+  );
+  assert.equal(candidates[0]?.publishedAt, "2026-09-22T06:59:17.000Z");
+  assert.equal(candidates[1]?.language, "en");
+  assert.deepEqual(candidates[0]?.errors, []);
+  assert.equal(candidates[2]?.errors.length, 2);
+  assert.ok(!JSON.stringify(candidates).includes("content:encoded"));
+  assert.ok(!JSON.stringify(candidates).includes("Synthetic full text"));
+  assert.ok(!JSON.stringify(candidates).includes("description"));
+});
