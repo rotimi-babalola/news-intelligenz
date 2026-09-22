@@ -175,10 +175,6 @@ async function recordFeedFailure(
   });
 }
 
-function feedRunId(prefix: string, feed: Feed): string {
-  return `${prefix}:${feed.id}`;
-}
-
 export async function collectAll(
   prisma: PrismaClient,
   runPrefix: string,
@@ -189,7 +185,7 @@ export async function collectAll(
     throw new Error("Run prefix must contain 1–100 characters");
   const results: FeedResult[] = [];
   for (const feed of feeds) {
-    const runId = feedRunId(runPrefix, feed);
+    const runId = `${runPrefix}:${feed.id}`;
     if (!feed.url) {
       const error = "Feed has no live URL";
       await recordFeedFailure(prisma, runId, feed, error);

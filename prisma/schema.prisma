@@ -25,7 +25,6 @@ enum IdentifierKind {
 
 enum ContentAvailability {
   metadata_only
-  full_text
 }
 
 model Run {

@@ -96,15 +96,13 @@ export function customFeed(url: string): Feed {
 }
 
 export async function fetchFeedXml(url: string): Promise<string> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15_000);
   try {
     const response = await fetch(url, {
       headers: {
         "user-agent": "NewsIntelligenz/0.1 (local operator verification)",
         accept: "application/rss+xml, application/xml, text/xml",
       },
-      signal: controller.signal,
+      signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok)
       throw new Error(`Feed fetch failed: HTTP ${response.status}`);
@@ -113,9 +111,8 @@ export async function fetchFeedXml(url: string): Promise<string> {
       throw new Error("Feed exceeds 1 MB");
     return xml;
   } catch (error) {
-    if (controller.signal.aborted) throw new Error("Feed fetch timed out");
+    if (error instanceof Error && error.name === "TimeoutError")
+      throw new Error("Feed fetch timed out");
     throw error;
-  } finally {
-    clearTimeout(timer);
   }
 }

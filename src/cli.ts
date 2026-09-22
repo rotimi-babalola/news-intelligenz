@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { collect, collectAll } from "./collect.js";
 import { database } from "./db.js";
-import { parseFeed } from "./feed.js";
+import { parseFeed, type Candidate } from "./feed.js";
 import {
   configuredFeed,
   customFeed,
@@ -10,6 +10,22 @@ import {
   publicNewsFeeds,
   type Feed,
 } from "./sources.js";
+
+function summarize(feed: Feed, candidates: Candidate[], limit = 3) {
+  const valid = candidates.filter((c) => !c.errors.length).length;
+  return {
+    feed: feed.id,
+    publisher: feed.publisher,
+    url: feed.url,
+    entries: candidates.length,
+    valid,
+    invalid: candidates.length - valid,
+    languages: [...new Set(candidates.map((c) => c.language))],
+    firstHeadlines: candidates
+      .slice(0, limit)
+      .map((c) => ({ headline: c.headline, url: c.originalUrl })),
+  };
+}
 
 async function main(
   command: string | undefined,
@@ -48,20 +64,7 @@ async function main(
       }
       try {
         const xml = await fetchFeedXml(feed.url);
-        const candidates = parseFeed(xml, feed.defaultLanguage);
-        const valid = candidates.filter((c) => !c.errors.length).length;
-        report.push({
-          feed: feed.id,
-          publisher: feed.publisher,
-          url: feed.url,
-          entries: candidates.length,
-          valid,
-          invalid: candidates.length - valid,
-          languages: [...new Set(candidates.map((c) => c.language))],
-          firstHeadlines: candidates
-            .slice(0, 2)
-            .map((c) => ({ headline: c.headline, url: c.originalUrl })),
-        });
+        report.push(summarize(feed, parseFeed(xml, feed.defaultLanguage), 2));
       } catch (error) {
         report.push({
           feed: feed.id,
@@ -87,22 +90,9 @@ async function main(
       const inspected = target ? customFeed(target) : configuredFeed;
       if (!inspected.url) throw new Error("No feed URL");
       const xml = await fetchFeedXml(inspected.url);
-      const candidates = parseFeed(xml, inspected.defaultLanguage);
-      const valid = candidates.filter((c) => !c.errors.length).length;
       console.log(
         JSON.stringify(
-          {
-            feed: inspected.id,
-            publisher: inspected.publisher,
-            url: inspected.url,
-            entries: candidates.length,
-            valid,
-            invalid: candidates.length - valid,
-            languages: [...new Set(candidates.map((c) => c.language))],
-            firstHeadlines: candidates
-              .slice(0, 3)
-              .map((c) => ({ headline: c.headline, url: c.originalUrl })),
-          },
+          summarize(inspected, parseFeed(xml, inspected.defaultLanguage)),
           null,
           2,
         ),
