@@ -43,3 +43,38 @@ jobs:
 
       - name: Unit tests
         run: pnpm test
+
+  smoke:
+    name: Integration + documented-path smoke
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: news
+          POSTGRES_PASSWORD: local-news-only
+          POSTGRES_DB: news
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U news -d news"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://news:local-news-only@127.0.0.1:5432/news
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Integration tests (server, collector, persistence)
+        run: pnpm test:integration
