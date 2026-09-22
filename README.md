@@ -26,8 +26,10 @@ pnpm start
 
 Open [the local admin page](http://127.0.0.1:3000). The fixture produces two valid
 publications (German and English) and one rejected candidate. `pnpm collect <run-id>`
-fetches the live Deutschlandfunk Nachrichten feed; the run appears alongside the
-fixture run and the page labels each input. Select a run to inspect its
+fetches the live Deutschlandfunk Nachrichten feed; `pnpm collect <run-id> [feed-url]`
+imports any RSS 2.0 URL instead, stored under a per-host publisher scope with a
+distinct feed ID for operator QA. Each run appears alongside the others and the
+page labels each input. Select a run to inspect its
 candidates, validation errors and discovery history. The page shows up to 100
 records per section; all records remain in PostgreSQL. No article text or feed
 descriptions are retained. The admin is bound to `127.0.0.1`; deployed
@@ -113,17 +115,19 @@ The [DIP criteria](docs/dip-design-notes.md#verification-criteria) add initial i
 
 ## Documentation
 
-| Document                                                                             | Purpose                                                       |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
-| [Phase 1 architecture](docs/phase-1-architecture.md)                                 | Agreed scope, collection flow and operational behaviour       |
-| [Design notes](docs/phase-1-design-notes.md)                                         | Decisions, acceptance criteria and unresolved factual checks  |
-| [DIP amendment](docs/dip-design-notes.md)                                            | Parliamentary collection decisions and verification criteria  |
-| [Feed catalog](docs/phase-1-feed-catalog.md)                                         | Exact launch feed URLs                                        |
-| [Domain glossary](CONTEXT.md)                                                        | Shared terminology for publications, versions and discoveries |
-| [ADR: publication versions](docs/adr/0001-preserve-publication-versions.md)          | Why historical article text is retained                       |
-| [ADR: PostgreSQL storage and jobs](docs/adr/0002-postgresql-for-storage-and-jobs.md) | Why persistent data and durable jobs share a database         |
-| [ADR: local runtime](docs/adr/0003-local-runtime-and-database-access.md)             | Node.js 24 and Prisma with PostgreSQL 17                      |
-| [Launch feed verification](docs/launch-feed-verification.md)                         | First live feed, terms and retention distinction              |
+| Document                                                                             | Purpose                                                        |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| [Phase 1 architecture](docs/phase-1-architecture.md)                                 | Agreed scope, collection flow and operational behaviour        |
+| [Design notes](docs/phase-1-design-notes.md)                                         | Decisions, acceptance criteria and unresolved factual checks   |
+| [DIP amendment](docs/dip-design-notes.md)                                            | Parliamentary collection decisions and verification criteria   |
+| [Feed catalog](docs/phase-1-feed-catalog.md)                                         | Exact launch feed URLs                                         |
+| [Domain glossary](CONTEXT.md)                                                        | Shared terminology for publications, versions and discoveries  |
+| [ADR: publication versions](docs/adr/0001-preserve-publication-versions.md)          | Why historical article text is retained                        |
+| [ADR: PostgreSQL storage and jobs](docs/adr/0002-postgresql-for-storage-and-jobs.md) | Why persistent data and durable jobs share a database          |
+| [ADR: local runtime](docs/adr/0003-local-runtime-and-database-access.md)             | Node.js 24 and Prisma with PostgreSQL 17                       |
+| [Launch feed verification](docs/launch-feed-verification.md)                         | First live feed, terms and retention distinction               |
+| [Database tables](docs/database-tables.md)                                           | Collection schema: runs, publications, candidates, discoveries |
+| [Issue #1 QA plan](docs/issue-1-qa-plan.md)                                          | Manual end-to-end checks: import URL, inspect DB, review admin |
 
 ## Implementation roadmap
 

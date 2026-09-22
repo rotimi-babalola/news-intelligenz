@@ -2,18 +2,27 @@ import { readFile } from "node:fs/promises";
 import { collect } from "./collect.js";
 import { database } from "./db.js";
 import { parseFeed } from "./feed.js";
-import { configuredFeed, fetchFeedXml, fixtureFeed } from "./sources.js";
+import {
+  configuredFeed,
+  customFeed,
+  fetchFeedXml,
+  fixtureFeed,
+} from "./sources.js";
 
-async function main(command: string | undefined, runId: string | undefined) {
+async function main(
+  command: string | undefined,
+  second: string | undefined,
+  third: string | undefined,
+) {
   const needsRunId = command === "collect" || command === "collect-fixture";
   if (
     (command !== "collect" &&
       command !== "collect-fixture" &&
       command !== "verify") ||
-    (needsRunId && !runId)
+    (needsRunId && !second)
   ) {
     console.error(
-      "Usage: cli collect <run-id> | collect-fixture <run-id> | verify [feed-url]",
+      "Usage: cli collect <run-id> [feed-url] | collect-fixture <run-id> | verify [feed-url]",
     );
     process.exitCode = 1;
     return;
@@ -21,7 +30,7 @@ async function main(command: string | undefined, runId: string | undefined) {
   const prisma = database();
   try {
     if (command === "verify") {
-      const url = process.argv[3] ?? configuredFeed.url;
+      const url = second ?? configuredFeed.url;
       if (!url) throw new Error("No feed URL");
       const xml = await fetchFeedXml(url);
       const candidates = parseFeed(xml, configuredFeed.defaultLanguage);
@@ -46,12 +55,17 @@ async function main(command: string | undefined, runId: string | undefined) {
       );
       return;
     }
-    const feed = command === "collect-fixture" ? fixtureFeed : configuredFeed;
+    const feed =
+      command === "collect-fixture"
+        ? fixtureFeed
+        : command === "collect" && third
+          ? customFeed(third)
+          : configuredFeed;
     const xml =
       command === "collect-fixture"
         ? await readFile("fixtures/bundestag.xml", "utf8")
         : await fetchFeedXml(feed.url!);
-    const result = await collect(prisma, runId!, xml, feed);
+    const result = await collect(prisma, second!, xml, feed);
     console.log(JSON.stringify(result));
     if (result.status === "failed") process.exitCode = 1;
   } catch (error) {
@@ -62,4 +76,4 @@ async function main(command: string | undefined, runId: string | undefined) {
   }
 }
 
-await main(process.argv[2], process.argv[3]);
+await main(process.argv[2], process.argv[3], process.argv[4]);
