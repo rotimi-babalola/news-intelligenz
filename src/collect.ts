@@ -8,22 +8,14 @@ import {
   type Feed,
 } from "./sources.js";
 
-export type FeedResult =
-  | {
-      feedId: string;
-      runId: string;
-      status: "completed" | "failed";
-      valid: number;
-      invalid: number;
-    }
-  | {
-      feedId: string;
-      runId: string;
-      status: "failed";
-      error: string;
-      valid: number;
-      invalid: number;
-    };
+export type FeedResult = {
+  feedId: string;
+  runId: string;
+  status: "completed" | "failed";
+  valid: number;
+  invalid: number;
+  error?: string;
+};
 
 export async function collect(
   prisma: PrismaClient,
@@ -162,7 +154,7 @@ async function recordFeedFailure(
   message: string,
 ) {
   const inputHash = createHash("sha256")
-    .update(`fetch-failure:${message}`)
+    .update(`fetch-failure:${feed.id}:${feed.url}`)
     .digest("hex");
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
@@ -183,7 +175,7 @@ async function recordFeedFailure(
   });
 }
 
-export function feedRunId(prefix: string, feed: Feed): string {
+function feedRunId(prefix: string, feed: Feed): string {
   return `${prefix}:${feed.id}`;
 }
 
@@ -214,14 +206,16 @@ export async function collectAll(
     try {
       const xml = await fetchXml(feed.url);
       const run = await collect(prisma, runId, xml, feed);
+      // collect() never returns a "running" run; error presence marks failure.
+      const status = run.error ? "failed" : "completed";
       results.push({
         feedId: feed.id,
         runId,
-        status: run.status as "completed" | "failed",
+        status,
         valid: run.validCount,
         invalid: run.invalidCount,
         ...(run.error ? { error: run.error } : {}),
-      } as FeedResult);
+      });
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Feed collection failed";

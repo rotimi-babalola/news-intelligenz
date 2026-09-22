@@ -34,41 +34,49 @@ async function main(
     process.exitCode = 1;
     return;
   }
+  if (command === "verify-all") {
+    const report = [];
+    for (const feed of publicNewsFeeds) {
+      if (!feed.url) {
+        report.push({
+          feed: feed.id,
+          publisher: feed.publisher,
+          url: feed.url,
+          error: "Feed has no live URL",
+        });
+        continue;
+      }
+      try {
+        const xml = await fetchFeedXml(feed.url);
+        const candidates = parseFeed(xml, feed.defaultLanguage);
+        const valid = candidates.filter((c) => !c.errors.length).length;
+        report.push({
+          feed: feed.id,
+          publisher: feed.publisher,
+          url: feed.url,
+          entries: candidates.length,
+          valid,
+          invalid: candidates.length - valid,
+          languages: [...new Set(candidates.map((c) => c.language))],
+          firstHeadlines: candidates
+            .slice(0, 2)
+            .map((c) => ({ headline: c.headline, url: c.originalUrl })),
+        });
+      } catch (error) {
+        report.push({
+          feed: feed.id,
+          publisher: feed.publisher,
+          url: feed.url,
+          error: error instanceof Error ? error.message : "Verification failed",
+        });
+      }
+    }
+    console.log(JSON.stringify(report, null, 2));
+    if (report.some((r) => "error" in r)) process.exitCode = 1;
+    return;
+  }
   const prisma = database();
   try {
-    if (command === "verify-all") {
-      const report = [];
-      for (const feed of publicNewsFeeds) {
-        try {
-          const xml = await fetchFeedXml(feed.url!);
-          const candidates = parseFeed(xml, feed.defaultLanguage);
-          const valid = candidates.filter((c) => !c.errors.length).length;
-          report.push({
-            feed: feed.id,
-            publisher: feed.publisher,
-            url: feed.url,
-            entries: candidates.length,
-            valid,
-            invalid: candidates.length - valid,
-            languages: [...new Set(candidates.map((c) => c.language))],
-            firstHeadlines: candidates
-              .slice(0, 2)
-              .map((c) => ({ headline: c.headline, url: c.originalUrl })),
-          });
-        } catch (error) {
-          report.push({
-            feed: feed.id,
-            publisher: feed.publisher,
-            url: feed.url,
-            error:
-              error instanceof Error ? error.message : "Verification failed",
-          });
-        }
-      }
-      console.log(JSON.stringify(report, null, 2));
-      if (report.some((r) => "error" in r)) process.exitCode = 1;
-      return;
-    }
     if (command === "collect-all") {
       const results = await collectAll(prisma, target!);
       console.log(JSON.stringify(results, null, 2));

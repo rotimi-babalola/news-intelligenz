@@ -66,10 +66,6 @@ export const publicNewsFeeds: Feed[] = [
   },
 ];
 
-export function publicNewsFeedById(id: string): Feed | undefined {
-  return publicNewsFeeds.find((feed) => feed.id === id);
-}
-
 export const fixtureFeed: Feed = {
   id: "bundestag-aktuelle-themen-fixture",
   publisher: "Synthetic Bundestag fixture",
