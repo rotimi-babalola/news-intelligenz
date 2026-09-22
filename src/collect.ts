@@ -98,7 +98,6 @@ export async function collect(
             create: publication,
             update: {
               headline: candidate.headline,
-              originalUrl: candidate.originalUrl,
               publishedAt: candidate.publishedAt,
               language,
               lastDiscoveredAt: new Date(),
