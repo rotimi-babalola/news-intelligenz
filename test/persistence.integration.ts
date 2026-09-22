@@ -8,7 +8,9 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import pg from "pg";
 import { collect } from "../src/collect.js";
-import { database, migrate } from "../src/db.js";
+import { fixtureFeed } from "../src/sources.js";
+
+const root = process.cwd();
 
 async function startAdmin(env: NodeJS.ProcessEnv) {
   const child = spawn(process.execPath, ["dist/src/server.js"], {
@@ -52,38 +54,47 @@ async function startAdmin(env: NodeJS.ProcessEnv) {
 }
 
 test("PostgreSQL retains candidates and distinct discoveries; replay is idempotent", async () => {
-  const admin = database();
+  const baseUrl = process.env.DATABASE_URL!;
+  const admin = new pg.Pool({ connectionString: baseUrl });
   const schema = `test_${randomUUID().replaceAll("-", "")}`;
   await admin.query(`CREATE SCHEMA ${schema}`);
-  const pool = new pg.Pool({
-    connectionString: process.env.DATABASE_URL,
-    options: `-c search_path=${schema}`,
-  });
+  const url = `${baseUrl}?schema=${schema}`;
+  process.env.DATABASE_URL = url;
+  const env = { ...process.env, DATABASE_URL: url };
   try {
-    await migrate(pool);
+    await promisify(execFile)(
+      process.execPath,
+      ["node_modules/prisma/build/index.js", "migrate", "deploy"],
+      { env, cwd: root },
+    );
+    const { database } = await import("../src/db.js");
+    const prisma = database();
     const xml = await readFile("fixtures/bundestag.xml", "utf8");
-    const env = { ...process.env, PGOPTIONS: `-c search_path=${schema}` };
     const run = () =>
       promisify(execFile)(
         process.execPath,
-        ["dist/src/cli.js", "collect", "first"],
+        ["dist/src/cli.js", "collect-fixture", "first"],
         { env },
       );
     const first = JSON.parse((await run()).stdout);
-    assert.equal(first.valid_count, 2);
-    assert.equal(first.invalid_count, 1);
+    assert.equal(first.validCount, 2);
+    assert.equal(first.invalidCount, 1);
     const snapshot = async () => {
       const result: Record<string, unknown> = {};
-      for (const table of [
-        "runs",
-        "publications",
-        "publication_identifiers",
-        "candidates",
-        "discoveries",
-      ])
-        result[table] = (
-          await pool.query(`SELECT * FROM ${table} ORDER BY 1, 2`)
-        ).rows;
+      result.runs = await prisma.run.findMany({ orderBy: [{ id: "asc" }] });
+      result.publications = await prisma.publication.findMany({
+        orderBy: [{ id: "asc" }],
+      });
+      result.publicationIdentifiers =
+        await prisma.publicationIdentifier.findMany({
+          orderBy: [{ publisher: "asc" }, { kind: "asc" }, { value: "asc" }],
+        });
+      result.candidates = await prisma.candidate.findMany({
+        orderBy: [{ runId: "asc" }, { itemIndex: "asc" }],
+      });
+      result.discoveries = await prisma.discovery.findMany({
+        orderBy: [{ runId: "asc" }, { publicationId: "asc" }],
+      });
       return result;
     };
     const saved = await snapshot();
@@ -128,67 +139,83 @@ test("PostgreSQL retains candidates and distinct discoveries; replay is idempote
     } finally {
       await server.stop();
     }
-    await collect(pool, "second", xml);
-    const counts = await pool.query(
-      "SELECT (SELECT count(*) FROM publications)::int AS publications, (SELECT count(*) FROM discoveries)::int AS discoveries, (SELECT count(*) FROM candidates)::int AS candidates",
-    );
-    assert.deepEqual(counts.rows[0], {
+    await collect(prisma, "second", xml, fixtureFeed);
+    const counts = {
+      publications: await prisma.publication.count(),
+      discoveries: await prisma.discovery.count(),
+      candidates: await prisma.candidate.count(),
+    };
+    assert.deepEqual(counts, {
       publications: 2,
       discoveries: 4,
       candidates: 6,
     });
-    await assert.rejects(collect(pool, "first", xml + " "), /different input/);
-    assert.equal((await collect(pool, "broken", "<rss>")).status, "failed");
+    await assert.rejects(
+      collect(prisma, "first", xml + " ", fixtureFeed),
+      /different input/,
+    );
+    assert.equal(
+      (await collect(prisma, "broken", "<rss>", fixtureFeed)).status,
+      "failed",
+    );
     await Promise.all([
-      collect(pool, "concurrent", xml),
-      collect(pool, "concurrent", xml),
+      collect(prisma, "concurrent", xml, fixtureFeed),
+      collect(prisma, "concurrent", xml, fixtureFeed),
     ]);
     assert.equal(
-      (
-        await pool.query(
-          "SELECT * FROM discoveries WHERE run_id = 'concurrent'",
-        )
-      ).rowCount,
+      await prisma.discovery.count({ where: { runId: "concurrent" } }),
       2,
     );
     const conflict = xml.replace("fixture-de-1", "fixture-en-1");
-    assert.equal((await collect(pool, "conflict", conflict)).invalid_count, 2);
-    assert.equal((await pool.query("SELECT * FROM publications")).rowCount, 2);
+    assert.equal(
+      (await collect(prisma, "conflict", conflict, fixtureFeed)).invalidCount,
+      2,
+    );
+    assert.equal(await prisma.publication.count(), 2);
     const duplicate = xml.replace(
       "</channel>",
       `${xml.match(/<item>[\s\S]*?<\/item>/)![0]}</channel>`,
     );
-    assert.equal((await collect(pool, "duplicate", duplicate)).valid_count, 3);
     assert.equal(
-      (await pool.query("SELECT * FROM discoveries WHERE run_id = 'duplicate'"))
-        .rowCount,
+      (await collect(prisma, "duplicate", duplicate, fixtureFeed)).validCount,
+      3,
+    );
+    assert.equal(
+      await prisma.discovery.count({ where: { runId: "duplicate" } }),
       2,
     );
     // A database failure halfway through must roll back publications and the run.
-    await pool.query(
-      "CREATE FUNCTION reject_candidate() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected storage failure'; END $$",
+    await prisma.$executeRawUnsafe(
+      `CREATE FUNCTION ${schema}.reject_candidate() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected storage failure'; END $$`,
     );
-    await pool.query(
-      "CREATE TRIGGER reject_candidate BEFORE INSERT ON candidates FOR EACH ROW EXECUTE FUNCTION reject_candidate()",
+    await prisma.$executeRawUnsafe(
+      `CREATE TRIGGER reject_candidate BEFORE INSERT ON ${schema}.candidates FOR EACH ROW EXECUTE FUNCTION ${schema}.reject_candidate()`,
     );
     const beforeFailure = await snapshot();
     await assert.rejects(
       collect(
-        pool,
+        prisma,
         "rollback",
         xml.replaceAll("fixture-de-1", "new-id").replaceAll("/wohnen", "/new"),
+        fixtureFeed,
       ),
       /injected storage failure/,
     );
     assert.deepEqual(await snapshot(), beforeFailure);
-    await pool.query("DROP TRIGGER reject_candidate ON candidates");
+    await prisma.$executeRawUnsafe(
+      `DROP TRIGGER reject_candidate ON ${schema}.candidates`,
+    );
+    await prisma.$executeRawUnsafe(
+      `DROP FUNCTION ${schema}.reject_candidate()`,
+    );
     await collect(
-      pool,
+      prisma,
       "html",
       xml.replace(
         "Öffentliche Anhörung: Wohnen &amp; Städte",
         "&lt;script&gt;alert(1)&lt;/script&gt;",
       ),
+      fixtureFeed,
     );
     server = await startAdmin(env);
     try {
@@ -198,8 +225,9 @@ test("PostgreSQL retains candidates and distinct discoveries; replay is idempote
     } finally {
       await server.stop();
     }
+    await prisma.$disconnect();
   } finally {
-    await pool.end();
+    process.env.DATABASE_URL = baseUrl;
     await admin.query(`DROP SCHEMA ${schema} CASCADE`);
     await admin.end();
   }

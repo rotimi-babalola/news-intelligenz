@@ -4,7 +4,7 @@ News Intelligenz aims to help immigrants living in Germany understand the countr
 
 ## Project status
 
-Phase 1 design is confirmed and its implementation is tracked in [GitHub issues labelled Phase 1](https://github.com/rotimi-babalola/news-intelligenz/issues?q=is%3Aissue%20label%3A%22Phase%201%22). The first local slice collects a synthetic RSS feed into PostgreSQL and provides a read-only inspection page. Live collection remains disabled because applicable metadata retention permissions are unresolved; see the [feed verification report](docs/launch-feed-verification.md).
+Phase 1 design is confirmed and its implementation is tracked in [GitHub issues labelled Phase 1](https://github.com/rotimi-babalola/news-intelligenz/issues?q=is%3Aissue%20label%3A%22Phase%201%22). The first local slice collects the Deutschlandfunk Nachrichten RSS feed (metadata only) and a synthetic fixture into PostgreSQL and provides a read-only inspection page. Full-text retention remains disabled pending the feed's usage terms; see the [feed verification report](docs/launch-feed-verification.md).
 
 The confirmed [DIP architecture amendment](docs/dip-design-notes.md) replaces Bundestag RSS with parliamentary proceedings and steps. The planned behavior below reflects the amendment; DIP is not implemented yet.
 
@@ -12,7 +12,7 @@ The confirmed [DIP architecture amendment](docs/dip-design-notes.md) replaces Bu
 
 Requirements: Node.js **24 LTS**, pnpm **10.18.3**, and Docker with Compose.
 Run commands from the repository root. Use `nvm install` / `nvm use` if you manage
-Node through nvm. The runtime and direct SQL approach are recorded in
+Node through nvm. The runtime and Prisma approach are recorded in
 [ADR 0003](docs/adr/0003-local-runtime-and-database-access.md).
 
 ```sh
@@ -20,38 +20,42 @@ pnpm install --frozen-lockfile
 cp .env.example .env
 docker compose up -d --wait
 pnpm build
-pnpm collect demo-001
+pnpm collect-fixture f001   # Deterministic synthetic feed (no network)
 pnpm start
 ```
 
 Open [the local admin page](http://127.0.0.1:3000). The fixture produces two valid
-publications (German and English) and one rejected candidate. Select a run to
-inspect its candidates, validation errors and discovery history. The page shows
-up to 100 records per section; all records remain in PostgreSQL. No article text
-or feed descriptions are retained. The admin is bound to `127.0.0.1`; deployed
+publications (German and English) and one rejected candidate. `pnpm collect <run-id>`
+fetches the live Deutschlandfunk Nachrichten feed; the run appears alongside the
+fixture run and the page labels each input. Select a run to inspect its
+candidates, validation errors and discovery history. The page shows up to 100
+records per section; all records remain in PostgreSQL. No article text or feed
+descriptions are retained. The admin is bound to `127.0.0.1`; deployed
 authentication and hosting belong to later tickets.
 
-Collection and server startup apply the SQL migration automatically. Use
-`pnpm db:migrate` to apply it separately. `DATABASE_URL` and `PORT` can be set in
-`.env` or the environment. The Compose credentials are local development defaults.
+Collection start (`collect`/`collect-fixture`) applies the Prisma migrations
+automatically. Use `pnpm db:migrate` to apply them separately. `DATABASE_URL`
+and `PORT` can be set in `.env` or the environment. The Compose credentials are
+local development defaults.
 
 ```sh
-pnpm collect demo-001 # Replay: returns the stored result without changing rows
-pnpm collect demo-002 # New encounter: same publications, new discoveries
+pnpm collect-fixture f001       # Replay: returns the stored result without changing rows
+pnpm collect-fixture f002       # New encounter: same publications, new discoveries
 ```
 
-A run ID identifies one immutable feed input. Changed XML requires a new run ID.
-Candidate counts count feed entries; discovery counts count distinct publications
-per feed/run. Publication identity uses publisher-scoped GUIDs or exact original
-URLs, without headline matching. Conflicting identity evidence rejects the
-candidate for inspection. Redirect resolution and extraction are later work.
+A run ID identifies one immutable feed input. Changed XML requires a new run ID;
+a live feed that changed between snapshots is a different input, so use a fresh
+run ID per live collect. Candidate counts count feed entries; discovery counts
+count distinct publications per feed/run. Publication identity uses
+publisher-scoped GUIDs or exact original URLs, without headline matching.
+Conflicting identity evidence rejects the candidate for inspection. Redirect
+resolution and extraction are later work.
 
 Stop the admin with Ctrl-C. `docker compose down` stops PostgreSQL while keeping
 its named volume; `docker compose up -d --wait` restores access to the saved data.
-Do not add `--volumes` unless you intend to delete that data. To roll back this
-initial schema on a disposable database, stop the app and run
-`psql "$DATABASE_URL" --single-transaction -f migrations/001_collection.down.sql`;
-this removes the collection tables and their contents.
+Do not add `--volumes` unless you intend to delete that data. The schema is owned
+by Prisma; `pnpm exec prisma migrate reset` resets a disposable database to the
+migration history.
 
 ### Verification
 
@@ -96,8 +100,9 @@ All valid items from configured feeds are eligible without relevance filtering. 
 - Inspect proceedings, institution-labeled steps, retained versions, document references, and collection outcomes in dedicated admin views.
 - Measure source contributions, extraction outcomes, search relevance and resource usage. Explore free tiers first and pause affected providers when allowances run out.
 
-The first feed's format has been verified, but retention permissions remain unresolved.
-Node.js 24 and direct PostgreSQL access are selected for the local runtime.
+The first feed's metadata format is verified and live metadata collection is
+enabled; full-text retention remains unresolved pending the feed's usage terms.
+Node.js 24 and Prisma with PostgreSQL are selected for the local runtime.
 Other feed endpoints, search provider and hosting selections remain future work.
 DIP authentication, permissions, limits, and live synchronization behavior require verification before enabling collection.
 
@@ -117,6 +122,8 @@ The [DIP criteria](docs/dip-design-notes.md#verification-criteria) add initial i
 | [Domain glossary](CONTEXT.md)                                                        | Shared terminology for publications, versions and discoveries |
 | [ADR: publication versions](docs/adr/0001-preserve-publication-versions.md)          | Why historical article text is retained                       |
 | [ADR: PostgreSQL storage and jobs](docs/adr/0002-postgresql-for-storage-and-jobs.md) | Why persistent data and durable jobs share a database         |
+| [ADR: local runtime](docs/adr/0003-local-runtime-and-database-access.md)             | Node.js 24 and Prisma with PostgreSQL 17                      |
+| [Launch feed verification](docs/launch-feed-verification.md)                         | First live feed, terms and retention distinction              |
 
 ## Implementation roadmap
 

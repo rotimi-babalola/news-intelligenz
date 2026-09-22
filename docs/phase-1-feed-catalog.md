@@ -2,9 +2,12 @@
 
 Launch RSS selection under the [DIP amendment](dip-design-notes.md): nine public-news feeds. DIP `/vorgang` and `/vorgangsposition` replace the 25 previously selected Bundestag feeds. Endpoints and formats require live validation during implementation; listing does not claim they have been verified. Retain each feed's discovery provenance even when items overlap. All valid configured feed items are eligible without relevance filtering, including sport, culture and international coverage.
 
-The first local implementation verifies the Aktuelle Themen RSS format but keeps
-live collection disabled pending metadata retention permission. It uses synthetic
-fixtures; see the [verification report](launch-feed-verification.md).
+The first local implementation enables the Deutschlandfunk Nachrichten feed with
+metadata-only retention (headline, dates, URL, `guid`), keeps the Bundestag
+Aktuelle Themen endpoint disabled with retention unresolved, and uses the
+synthetic Bundestag fixture as the deterministic parser and persistence test; see
+the [verification report](launch-feed-verification.md). Feed tags such as
+`de-DE` normalize to their primary language subtag.
 
 ## Public-news feeds
 

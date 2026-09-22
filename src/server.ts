@@ -1,10 +1,9 @@
 import { adminServer } from "./admin.js";
-import { database, migrate } from "./db.js";
+import { database } from "./db.js";
 
-const pool = database();
+const prisma = database();
 try {
-  await migrate(pool);
-  const server = adminServer(pool);
+  const server = adminServer(prisma);
   server.listen(Number(process.env.PORT ?? 3000), "127.0.0.1", () => {
     const address = server.address();
     if (address && typeof address !== "string")
@@ -12,19 +11,19 @@ try {
   });
   server.on("error", async (error) => {
     console.error(error.message);
-    await pool.end();
+    await prisma.$disconnect();
     process.exitCode = 1;
   });
   for (const signal of ["SIGINT", "SIGTERM"] as const)
     process.once(signal, () =>
       server.close(() => {
-        void pool.end();
+        void prisma.$disconnect();
       }),
     );
 } catch (error) {
   console.error(
     error instanceof Error ? error.message : "Server startup failed",
   );
-  await pool.end();
+  await prisma.$disconnect();
   process.exitCode = 1;
 }

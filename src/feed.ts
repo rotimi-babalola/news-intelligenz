@@ -1,12 +1,5 @@
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 
-export const feed = {
-  id: "bundestag-aktuelle-themen-fixture",
-  publisher: "Synthetic Bundestag fixture",
-  mode: "fixture",
-  liveEnabled: false,
-} as const;
-
 export type Candidate = {
   headline: string;
   originalUrl: string;
@@ -20,7 +13,10 @@ export type Candidate = {
 const scalar = (value: unknown): string =>
   typeof value === "string" ? value : "";
 
-export function parseFeed(xml: string): Candidate[] {
+export function parseFeed(
+  xml: string,
+  defaultLanguage: "de" | "en" = "de",
+): Candidate[] {
   if (Buffer.byteLength(xml) > 1_000_000) throw new Error("Feed exceeds 1 MB");
   if (/<!DOCTYPE|<!ENTITY/i.test(xml))
     throw new Error("XML declarations forbidden");
@@ -38,7 +34,10 @@ export function parseFeed(xml: string): Candidate[] {
     const headline = scalar(raw.title);
     const originalUrl = scalar(raw.link).trim();
     const sourceId = scalar(raw.guid).trim();
-    const language = scalar(raw["dc:language"] || channel.language).trim();
+    const language =
+      scalar(raw["dc:language"] || channel.language)
+        .split("-")[0]
+        ?.trim() || defaultLanguage;
     const date = scalar(raw.pubDate || raw["dc:date"]).trim();
     const errors: string[] = [];
     if (!headline.trim()) errors.push("Missing headline");
