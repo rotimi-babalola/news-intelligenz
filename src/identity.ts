@@ -17,12 +17,12 @@ const TRACKING_PARAMS = new Set([
 ]);
 
 function isTrackingParam(name: string): boolean {
-  return (
-    name === "utm_source" ||
-    name.startsWith("utm_") ||
-    TRACKING_PARAMS.has(name.toLowerCase())
-  );
+  const normalized = name.toLowerCase();
+  return normalized.startsWith("utm_") || TRACKING_PARAMS.has(normalized);
 }
+
+const compareStrings = (a: string, b: string): number =>
+  a < b ? -1 : a > b ? 1 : 0;
 
 export function canonicalArticleUrl(raw: string): string {
   const trimmed = raw.trim();
@@ -46,16 +46,9 @@ export function canonicalArticleUrl(raw: string): string {
   url.searchParams.forEach((value, name) => {
     if (!isTrackingParam(name)) kept.push([name, value]);
   });
-  kept.sort(([aName, aValue], [bName, bValue]) =>
-    aName === bName
-      ? aValue < bValue
-        ? -1
-        : aValue > bValue
-          ? 1
-          : 0
-      : aName < bName
-        ? -1
-        : 1,
+  kept.sort(
+    ([aName, aValue], [bName, bValue]) =>
+      compareStrings(aName, bName) || compareStrings(aValue, bValue),
   );
   url.search = "";
   for (const [name, value] of kept) url.searchParams.append(name, value);

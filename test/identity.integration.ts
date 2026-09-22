@@ -78,6 +78,26 @@ test("URL aliases share one publication; publishers and titles never merge", asy
       // Raw original URL is preserved on the row.
       assert.equal(dlPubs[0]!.originalUrl, "https://example.org/a.html");
 
+      // Publisher case/whitespace variants share the same identity scope.
+      await collect(
+        prisma,
+        "case-variant",
+        xml(item("Headline", "https://example.org/a.html", "a-1")),
+        feed("DEUTSCHLANDFUNK "),
+      );
+      assert.equal(
+        await prisma.publication.count({
+          where: { publisher: "deutschlandfunk" },
+        }),
+        1,
+      );
+      assert.equal(
+        await prisma.discovery.count({
+          where: { publicationId: dlPubs[0]!.id },
+        }),
+        3,
+      );
+
       // Same URL under another publisher stays separate.
       await collect(
         prisma,
