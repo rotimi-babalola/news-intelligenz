@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Format, typecheck, unit tests
+    runs-on: ubuntu-latest
+    env:
+      # prisma.config.ts throws when DATABASE_URL is unset, and
+      # `pnpm check` runs `prisma generate`. No connection is made here.
+      DATABASE_URL: postgresql://news:local-news-only@127.0.0.1:55432/news
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        run: pnpm format
+
+      - name: Typecheck
+        run: pnpm check
+
+      - name: Unit tests
+        run: pnpm test
+
+  smoke:
+    name: Integration + documented-path smoke
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: news
+          POSTGRES_PASSWORD: local-news-only
+          POSTGRES_DB: news
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U news -d news"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://news:local-news-only@127.0.0.1:5432/news
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Integration tests (server, collector, persistence)
+        run: pnpm test:integration
+
+      - name: Documented-path smoke (collect, start, curl)
+        run: |
+          pnpm build
+          pnpm collect-fixture ci-smoke
+          pnpm start &
+          echo $! > server.pid
+          trap 'kill "$(cat server.pid)"' EXIT
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:3000/ > /dev/null && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/ | grep -q "News Intelligenz"
+          [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/missing)" = "404" ]
+          [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3000/)" = "405" ]
+          [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: attacker.example' http://127.0.0.1:3000/)" = "403" ]
