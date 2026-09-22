@@ -1,4 +1,5 @@
-import { XMLParser, XMLValidator } from "fast-xml-parser";
+import { XMLParser } from "fast-xml-parser";
+import { SyntaxValidator } from "fast-xml-validator";
 
 export type Candidate = {
   headline: string;
@@ -20,7 +21,11 @@ export function parseFeed(
   if (Buffer.byteLength(xml) > 1_000_000) throw new Error("Feed exceeds 1 MB");
   if (/<!DOCTYPE|<!ENTITY/i.test(xml))
     throw new Error("XML declarations forbidden");
-  if (XMLValidator.validate(xml) !== true) throw new Error("Malformed XML");
+  try {
+    SyntaxValidator.validate(xml);
+  } catch {
+    throw new Error("Malformed XML");
+  }
   const parsed = new XMLParser({
     ignoreAttributes: true,
     parseTagValue: false,
@@ -31,22 +36,29 @@ export function parseFeed(
   const rdf = parsed?.["rdf:RDF"];
   // RSS 2.0 nests items under rss/channel; RDF (RSS 1.0, e.g. tagesschau)
   // keeps channel metadata and sibling item elements under rdf:RDF.
-  const channel =
-    rssChannel && typeof rssChannel === "object"
-      ? rssChannel
-      : rdf && typeof rdf === "object"
-        ? (rdf.channel ?? {})
-        : null;
-  if (!channel || typeof channel !== "object")
-    throw new Error("Expected RSS channel");
-  const items = Array.isArray(rssChannel?.item)
-    ? rssChannel.item
-    : Array.isArray(rdf?.item)
-      ? rdf.item
-      : Array.isArray(channel.item)
-        ? channel.item
-        : [];
-  return items.map((item: Record<string, unknown> | null) => {
+  let channel: Record<string, unknown> | null = null;
+  let items: Array<Record<string, unknown> | null> = [];
+  if (rssChannel && typeof rssChannel === "object") {
+    channel = rssChannel as Record<string, unknown>;
+    if (Array.isArray(channel.item)) {
+      items = channel.item as Array<Record<string, unknown> | null>;
+    }
+  } else if (rdf && typeof rdf === "object") {
+    const rdfRoot = rdf as Record<string, unknown>;
+    const rdfChannel = rdfRoot.channel;
+    if (rdfChannel && typeof rdfChannel === "object") {
+      channel = rdfChannel as Record<string, unknown>;
+    } else {
+      channel = {};
+    }
+    if (Array.isArray(rdfRoot.item)) {
+      items = rdfRoot.item as Array<Record<string, unknown> | null>;
+    } else if (Array.isArray(channel.item)) {
+      items = channel.item as Array<Record<string, unknown> | null>;
+    }
+  }
+  if (!channel) throw new Error("Expected RSS channel");
+  return items.map((item) => {
     const raw = item ?? {};
     const headline = scalar(raw.title);
     const originalUrl = scalar(raw.link).trim();

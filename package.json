@@ -12,7 +12,9 @@
     "db:migrate": "prisma migrate deploy",
     "collect": "pnpm db:migrate && node --env-file-if-exists=.env dist/src/cli.js collect",
     "collect-fixture": "pnpm db:migrate && node --env-file-if-exists=.env dist/src/cli.js collect-fixture",
+    "collect-all": "pnpm db:migrate && node --env-file-if-exists=.env dist/src/cli.js collect-all",
     "verify": "pnpm db:migrate && node --env-file-if-exists=.env dist/src/cli.js verify",
+    "verify-all": "node --env-file-if-exists=.env dist/src/cli.js verify-all",
     "start": "pnpm db:migrate && node --env-file-if-exists=.env dist/src/server.js",
     "studio": "prisma studio",
     "test": "pnpm build && node --test dist/test/*.test.js",
@@ -26,6 +28,7 @@
     "@prisma/client": "7.10.0",
     "dotenv": "^18.0.2",
     "fast-xml-parser": "^5.11.1",
+    "fast-xml-validator": "^1.4.2",
     "pg": "^8.23.0"
   },
   "devDependencies": {

@@ -4,7 +4,7 @@ News Intelligenz aims to help immigrants living in Germany understand the countr
 
 ## Project status
 
-Phase 1 design is confirmed and its implementation is tracked in [GitHub issues labelled Phase 1](https://github.com/rotimi-babalola/news-intelligenz/issues?q=is%3Aissue%20label%3A%22Phase%201%22). The first local slice collects the Deutschlandfunk Nachrichten RSS feed (metadata only) and a synthetic fixture into PostgreSQL and provides a read-only inspection page. Full-text retention remains disabled pending the feed's usage terms; see the [feed verification report](docs/launch-feed-verification.md).
+Phase 1 design is confirmed and its implementation is tracked in [GitHub issues labelled Phase 1](https://github.com/rotimi-babalola/news-intelligenz/issues?q=is%3Aissue%20label%3A%22Phase%201%22). The first local slice collects the nine public-news RSS feeds (tagesschau all updates plus eight Deutschlandfunk feeds, metadata only) and a synthetic fixture into PostgreSQL and provides a read-only inspection page. Full-text retention remains disabled pending the feeds' usage terms; see the [feed verification report](docs/launch-feed-verification.md).
 
 The confirmed [DIP architecture amendment](docs/dip-design-notes.md) replaces Bundestag RSS with parliamentary proceedings and steps. The planned behavior below reflects the amendment; DIP is not implemented yet.
 
@@ -25,10 +25,13 @@ pnpm start
 ```
 
 Open [the local admin page](http://127.0.0.1:3000). The fixture produces two valid
-publications (German and English) and one rejected candidate. `pnpm collect <run-id>`
-fetches the live Deutschlandfunk Nachrichten feed; `pnpm collect <run-id> [feed-url]`
+publications (German and English) and one rejected candidate. `pnpm collect-all <run-prefix>`
+fetches all nine public-news feeds, one run per feed, so each feed's results and
+failures stay visible; `pnpm collect <run-id>` fetches only the
+Deutschlandfunk Nachrichten feed; `pnpm collect <run-id> [feed-url]`
 imports any RSS 2.0 URL instead, stored under a per-host publisher scope with a
-distinct feed ID for operator QA. Each run appears alongside the others and the
+distinct feed ID for operator QA. `pnpm verify-all` checks all nine live
+endpoints without persisting anything. Each run appears alongside the others and the
 page labels each input. Select a run to inspect its
 candidates, validation errors and discovery history. The page shows up to 100
 records per section; all records remain in PostgreSQL. No article text or feed
@@ -102,10 +105,10 @@ All valid items from configured feeds are eligible without relevance filtering. 
 - Inspect proceedings, institution-labeled steps, retained versions, document references, and collection outcomes in dedicated admin views.
 - Measure source contributions, extraction outcomes, search relevance and resource usage. Explore free tiers first and pause affected providers when allowances run out.
 
-The first feed's metadata format is verified and live metadata collection is
-enabled; full-text retention remains unresolved pending the feed's usage terms.
+The nine launch feeds' metadata formats are verified and live metadata collection is
+enabled; full-text retention remains unresolved pending the feeds' usage terms.
 Node.js 24 and Prisma with PostgreSQL are selected for the local runtime.
-Other feed endpoints, search provider and hosting selections remain future work.
+Search provider and hosting selections remain future work.
 DIP authentication, permissions, limits, and live synchronization behavior require verification before enabling collection.
 
 ### Completion criteria
