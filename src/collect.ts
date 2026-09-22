@@ -2,6 +2,11 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "./generated/prisma/client.js";
 import { parseFeed, type Candidate } from "./feed.js";
 import {
+  canonicalArticleUrl,
+  normalizeIdentifierValue,
+  normalizePublisher,
+} from "./identity.js";
+import {
   configuredFeed,
   fetchFeedXml,
   publicNewsFeeds,
@@ -58,16 +63,21 @@ export async function collect(
         const language = candidate.language;
         if (language !== "de" && language !== "en")
           throw new Error(`Unexpected candidate language: ${language}`);
-        const matches = await tx.publicationIdentifier.findMany({
-          where: {
-            publisher: feed.publisher,
-            OR: [
-              { kind: "url", value: candidate.originalUrl },
-              { kind: "guid", value: candidate.sourceId },
-            ],
-          },
-          select: { publicationId: true },
-        });
+        // Identity scope is the normalized publisher; URL aliases resolve to
+        // one canonical key while the raw original URL stays on the row.
+        const publisher = normalizePublisher(feed.publisher);
+        const urlKey = canonicalArticleUrl(candidate.originalUrl);
+        const guidKey = normalizeIdentifierValue(candidate.sourceId);
+        const keys = [
+          urlKey ? { kind: "url" as const, value: urlKey } : null,
+          guidKey ? { kind: "guid" as const, value: guidKey } : null,
+        ].filter((k) => k !== null);
+        const matches = keys.length
+          ? await tx.publicationIdentifier.findMany({
+              where: { publisher, OR: keys },
+              select: { publicationId: true },
+            })
+          : [];
         const identities = new Set(matches.map((m) => m.publicationId));
         if (identities.size > 1)
           errors.push(
@@ -77,7 +87,7 @@ export async function collect(
           publicationId = [...identities][0] ?? randomUUID();
           const publication: Prisma.PublicationUncheckedCreateInput = {
             id: publicationId,
-            publisher: feed.publisher,
+            publisher,
             headline: candidate.headline,
             originalUrl: candidate.originalUrl,
             publishedAt: candidate.publishedAt,
@@ -94,27 +104,23 @@ export async function collect(
               lastDiscoveredAt: new Date(),
             },
           });
-          for (const [kind, value] of [
-            ["url", candidate.originalUrl],
-            ["guid", candidate.sourceId],
-          ] as const) {
-            if (value)
-              await tx.publicationIdentifier.upsert({
-                where: {
-                  publisher_kind_value: {
-                    publisher: feed.publisher,
-                    kind,
-                    value,
-                  },
-                },
-                create: {
-                  publisher: feed.publisher,
+          for (const { kind, value } of keys) {
+            await tx.publicationIdentifier.upsert({
+              where: {
+                publisher_kind_value: {
+                  publisher,
                   kind,
                   value,
-                  publicationId,
                 },
-                update: {},
-              });
+              },
+              create: {
+                publisher,
+                kind,
+                value,
+                publicationId,
+              },
+              update: {},
+            });
           }
           await tx.discovery.upsert({
             where: { runId_publicationId: { runId, publicationId } },
