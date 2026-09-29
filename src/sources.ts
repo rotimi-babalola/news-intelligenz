@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { parseRetryAfterMs, RateLimitedError } from "./jobs.js";
 
 export type Feed = {
   id: string;
@@ -104,6 +105,16 @@ export async function fetchFeedXml(url: string): Promise<string> {
       },
       signal: AbortSignal.timeout(15_000),
     });
+    if (response.status === 429) {
+      // Back off this provider; collectAll keeps other feeds moving and the
+      // job worker reuses the delay for downstream retries.
+      const retryAfterMs =
+        parseRetryAfterMs(response.headers.get("retry-after")) ?? 60_000;
+      throw new RateLimitedError(
+        `Feed rate limited: HTTP 429 (retry after ${Math.ceil(retryAfterMs / 1000)}s)`,
+        retryAfterMs,
+      );
+    }
     if (!response.ok)
       throw new Error(`Feed fetch failed: HTTP ${response.status}`);
     const xml = await response.text();
