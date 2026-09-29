@@ -67,7 +67,12 @@ test("interrupted workers resume without duplicating committed work", async () =
   const { prisma, done } = await isolatedDb();
   try {
     // Crash between handoff and processing: intake commits, nothing downstream.
-    const intake = await collectIntake(prisma, "interrupted", xml(["a", "b"]), feed);
+    const intake = await collectIntake(
+      prisma,
+      "interrupted",
+      xml(["a", "b"]),
+      feed,
+    );
     assert.equal(intake.settled, false);
     assert.equal(await prisma.publication.count(), 0);
     assert.equal(await prisma.discovery.count(), 0);
@@ -130,11 +135,19 @@ test("concurrent claims hand each job to exactly one worker", async () => {
       1,
     );
     // The loser finds nothing left to claim for this run.
-    assert.equal(await claimNextJob(prisma, loser, undefined, { runId: "race" }), null);
-    await processJob(prisma, winner);
-    await completeJob(prisma, winner, winner.id === first?.id ? "worker-a" : "worker-b");
     assert.equal(
-      await prisma.processingJob.findUniqueOrThrow({ where: { id: winner.id } })
+      await claimNextJob(prisma, loser, undefined, { runId: "race" }),
+      null,
+    );
+    await processJob(prisma, winner);
+    await completeJob(
+      prisma,
+      winner,
+      winner.id === first?.id ? "worker-a" : "worker-b",
+    );
+    assert.equal(
+      await prisma.processingJob
+        .findUniqueOrThrow({ where: { id: winner.id } })
         .then((job) => job.status),
       "succeeded",
     );
@@ -154,21 +167,26 @@ test("expired leases are reclaimed and failures exhaust with visible state", asy
     });
     assert.ok(claimed);
     assert.equal(
-      await prisma.processingJob.findUniqueOrThrow({ where: { id: claimed!.id } })
+      await prisma.processingJob
+        .findUniqueOrThrow({ where: { id: claimed!.id } })
         .then((job) => job.status),
       "claimed",
     );
     await new Promise((resolve) => setTimeout(resolve, 120));
     const requeued = await requeueStaleClaims(prisma);
     assert.equal(requeued.count, 1);
-    const outcome = await drainJobs(prisma, "recovery-worker", { runId: "leases" });
+    const outcome = await drainJobs(prisma, "recovery-worker", {
+      runId: "leases",
+    });
     assert.deepEqual(outcome, { succeeded: 1, retrying: 0, exhausted: 0 });
     assert.equal(await prisma.publication.count(), 1);
 
     // A deterministically failing job exhausts within its attempt budget
     // while an independent job from another source still succeeds.
     await collectIntake(prisma, "mixed", xml(["m"]), feed);
-    const jobs = await prisma.processingJob.findMany({ where: { runId: "mixed" } });
+    const jobs = await prisma.processingJob.findMany({
+      where: { runId: "mixed" },
+    });
     await prisma.processingJob.update({
       where: { id: jobs[0]!.id },
       data: { operation: "bogus-operation", maxAttempts: 1 },
@@ -191,7 +209,9 @@ test("expired leases are reclaimed and failures exhaust with visible state", asy
     assert.equal(exhausted.length, 2);
     assert.match(exhausted[0]!.lastError ?? "", /bogus-operation/);
     assert.equal(
-      (await listJobs(prisma, "exhausted")).some((job) => job.runId === "mixed"),
+      (await listJobs(prisma, "exhausted")).some(
+        (job) => job.runId === "mixed",
+      ),
       true,
     );
     // Deliberate operator retry resets the budget for another attempt.

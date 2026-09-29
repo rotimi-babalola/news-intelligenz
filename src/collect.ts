@@ -118,7 +118,9 @@ export async function processJob(
     throw new Error("Publication job is missing its publisher");
   await prisma.$transaction(async (tx) => {
     const candidate = await tx.candidate.findUnique({
-      where: { runId_itemIndex: { runId: job.runId, itemIndex: job.itemIndex! } },
+      where: {
+        runId_itemIndex: { runId: job.runId, itemIndex: job.itemIndex! },
+      },
     });
     if (!candidate) throw new Error("Candidate for job no longer exists");
     const errors = [...(candidate.errors as string[])];
@@ -208,7 +210,9 @@ export async function processJob(
       }
     }
     await tx.candidate.update({
-      where: { runId_itemIndex: { runId: job.runId, itemIndex: job.itemIndex! } },
+      where: {
+        runId_itemIndex: { runId: job.runId, itemIndex: job.itemIndex! },
+      },
       data: { errors, publicationId },
     });
   });

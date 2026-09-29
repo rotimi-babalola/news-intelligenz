@@ -34,7 +34,10 @@ const BACKOFF_BASE_MS = 30 * 1000;
 const BACKOFF_CAP_MS = 60 * 60 * 1000;
 
 export function backoffMs(attempts: number): number {
-  return Math.min(BACKOFF_BASE_MS * 2 ** Math.max(0, attempts - 1), BACKOFF_CAP_MS);
+  return Math.min(
+    BACKOFF_BASE_MS * 2 ** Math.max(0, attempts - 1),
+    BACKOFF_CAP_MS,
+  );
 }
 
 export function parseRetryAfterMs(value: string | null): number | null {
@@ -54,7 +57,11 @@ export class RateLimitedError extends Error {
   }
 }
 
-export function dedupeKey(runId: string, itemIndex: number | null, operation: string) {
+export function dedupeKey(
+  runId: string,
+  itemIndex: number | null,
+  operation: string,
+) {
   return `${runId}:${itemIndex ?? "-"}:${operation}`;
 }
 
@@ -79,7 +86,8 @@ export async function enqueueJob(
       dedupeKey: key,
       sourceKind: spec.source.kind,
       sourceKey: spec.source.key,
-      sourceScope: (spec.source.scope ?? undefined) as Prisma.InputJsonValue | undefined,
+      sourceScope: (spec.source.scope ?? undefined) as
+        Prisma.InputJsonValue | undefined,
       runId: spec.runId,
       itemIndex: spec.itemIndex ?? null,
       operation: spec.operation,
@@ -97,7 +105,9 @@ export async function enqueueJob(
 function qualifiedTable(table: string): string {
   let schema = "public";
   try {
-    schema = new URL(process.env.DATABASE_URL ?? "").searchParams.get("schema") || "public";
+    schema =
+      new URL(process.env.DATABASE_URL ?? "").searchParams.get("schema") ||
+      "public";
   } catch {
     // Fall through to the default schema.
   }
@@ -248,7 +258,10 @@ export async function retryExhausted(prisma: PrismaClient, jobId: string) {
 
 export type JobFilter = "pending" | "retrying" | "exhausted" | "all";
 
-export async function listJobs(prisma: PrismaClient, filter: JobFilter = "all") {
+export async function listJobs(
+  prisma: PrismaClient,
+  filter: JobFilter = "all",
+) {
   return prisma.processingJob.findMany({
     where:
       filter === "all"
