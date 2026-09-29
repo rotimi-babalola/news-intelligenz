@@ -25,11 +25,28 @@ enum IdentifierKind {
 
 enum ContentAvailability {
   metadata_only
+  full_text
+}
+
+enum SourceKind {
+  news_feed
+  search_query
+  dip_endpoint
+}
+
+enum JobStatus {
+  pending
+  claimed
+  retrying
+  succeeded
+  exhausted
 }
 
 model Run {
   id           String        @id @db.Text
   feedId       String        @map("feed_id") @db.Text
+  sourceKind   SourceKind    @map("source_kind") @default(news_feed)
+  sourceScope  Json?         @map("source_scope")
   inputHash    String        @map("input_hash") @db.Text
   startedAt    DateTime      @map("started_at") @default(now()) @db.Timestamptz(6)
   completedAt  DateTime?     @map("completed_at") @db.Timestamptz(6)
@@ -39,6 +56,7 @@ model Run {
   error        String?       @db.Text
   candidates   Candidate[]
   discoveries  Discovery[]
+  jobs         ProcessingJob[]
 
   @@map("runs")
 }
@@ -93,4 +111,45 @@ model Discovery {
 
   @@id([runId, publicationId])
   @@map("discoveries")
+}
+
+model ProcessingJob {
+  id             String     @id @default(uuid()) @db.Uuid
+  dedupeKey      String     @unique @map("dedupe_key") @db.Text
+  sourceKind     SourceKind @map("source_kind")
+  sourceKey      String     @map("source_key") @db.Text
+  sourceScope    Json?      @map("source_scope")
+  runId          String     @map("run_id") @db.Text
+  run            Run        @relation(fields: [runId], references: [id])
+  itemIndex      Int?       @map("item_index")
+  operation      String     @db.Text
+  payload        Json
+  status         JobStatus  @default(pending)
+  attempts       Int        @default(0)
+  maxAttempts    Int        @map("max_attempts") @default(5)
+  nextAttemptAt  DateTime   @map("next_attempt_at") @default(now()) @db.Timestamptz(6)
+  claimedAt      DateTime?  @map("claimed_at") @db.Timestamptz(6)
+  claimedBy      String?    @map("claimed_by") @db.Text
+  leaseExpiresAt DateTime?  @map("lease_expires_at") @db.Timestamptz(6)
+  lastError      String?    @map("last_error") @db.Text
+  createdAt      DateTime   @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime   @map("updated_at") @updatedAt @db.Timestamptz(6)
+  attemptsLog    JobAttempt[]
+
+  @@index([status, nextAttemptAt])
+  @@map("processing_jobs")
+}
+
+model JobAttempt {
+  jobId      String        @map("job_id") @db.Uuid
+  job        ProcessingJob @relation(fields: [jobId], references: [id])
+  attemptNo  Int           @map("attempt_no")
+  startedAt  DateTime      @map("started_at") @default(now()) @db.Timestamptz(6)
+  finishedAt DateTime?     @map("finished_at") @db.Timestamptz(6)
+  outcome    String?       @db.Text
+  error      String?       @db.Text
+  workerId   String?       @map("worker_id") @db.Text
+
+  @@id([jobId, attemptNo])
+  @@map("job_attempts")
 }
