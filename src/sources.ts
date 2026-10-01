@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { parseRetryAfterMs, RateLimitedError } from "./jobs.js";
+import { parseRetryAfterMs, RateLimitedError } from "./jobs";
 
 export type Feed = {
   id: string;

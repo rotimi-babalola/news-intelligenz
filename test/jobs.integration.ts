@@ -9,7 +9,7 @@ import {
   drainJobs,
   finalizeRunIfSettled,
   processJob,
-} from "../src/collect.js";
+} from "../src/import/service.js";
 import {
   claimNextJob,
   completeJob,

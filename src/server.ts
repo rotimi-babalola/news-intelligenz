@@ -1,5 +1,5 @@
-import { adminServer } from "./admin.js";
-import { database } from "./db.js";
+import { adminServer } from "./admin";
+import { database } from "./db";
 
 const prisma = database();
 try {

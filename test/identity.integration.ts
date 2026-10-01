@@ -4,7 +4,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { test } from "node:test";
 import pg from "pg";
-import { collect } from "../src/collect.js";
+import { collect } from "../src/import/service.js";
 import type { Feed } from "../src/sources.js";
 
 const root = process.cwd();

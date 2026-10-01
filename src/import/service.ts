@@ -1,25 +1,48 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { Prisma, PrismaClient } from "./generated/prisma/client.js";
-import { parseFeed, type Candidate } from "./feed.js";
+import { readFile } from "node:fs/promises";
+import type { PrismaClient } from "../generated/prisma/client";
+import { parseFeed, type Candidate } from "../feed";
 import {
   canonicalArticleUrl,
   normalizeIdentifierValue,
   normalizePublisher,
-} from "./identity.js";
+} from "../identity";
 import {
   claimNextJob,
   completeJob,
+  countOpenJobs,
   enqueueJob,
   failJob,
   feedSource,
   type ClaimedJob,
-} from "./jobs.js";
+} from "../jobs";
 import {
   configuredFeed,
+  customFeed,
   fetchFeedXml,
+  fixtureFeed,
   publicNewsFeeds,
   type Feed,
-} from "./sources.js";
+} from "../sources";
+import {
+  createCandidate,
+  getCandidate,
+  listCandidatesForTally,
+  updateCandidateResult,
+} from "./candidate.repository";
+import { upsertDiscovery } from "./discovery.repository";
+import {
+  findPublicationIdsByKeys,
+  upsertIdentifier,
+  upsertPublication,
+  type IdentityKey,
+} from "./publication.repository";
+import {
+  createRun,
+  finalizeRun,
+  findRun,
+  findRunOrThrow,
+} from "./run.repository";
 
 export type FeedResult = {
   feedId: string;
@@ -54,7 +77,7 @@ export async function collectIntake(
   return prisma.$transaction(async (tx) => {
     // One configured collector; serialize identity resolution and concurrent replay.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
-    const previous = await tx.run.findUnique({ where: { id: runId } });
+    const previous = await findRun(tx, runId);
     if (previous) {
       if (previous.inputHash !== hash || previous.feedId !== feed.id)
         throw new Error(
@@ -76,21 +99,17 @@ export async function collectIntake(
       parseError =
         error instanceof Error ? error.message : "Feed parsing failed";
     }
-    await tx.run.create({
-      data: {
-        id: runId,
-        feedId: feed.id,
-        sourceKind: "news_feed",
-        inputHash: hash,
-        status: "running",
-        error: parseError,
-      },
+    await createRun(tx, {
+      id: runId,
+      feedId: feed.id,
+      sourceKind: "news_feed",
+      inputHash: hash,
+      status: "running",
+      error: parseError,
     });
     for (const [index, candidate] of candidates.entries()) {
       const { errors, ...metadata } = candidate;
-      await tx.candidate.create({
-        data: { runId, itemIndex: index, metadata, errors },
-      });
+      await createCandidate(tx, { runId, itemIndex: index, metadata, errors });
       if (!errors.length) {
         await enqueueJob(tx, {
           source: feedSource(feed.id),
@@ -120,11 +139,7 @@ export async function processJob(
   if (typeof rawPublisher !== "string")
     throw new Error("Publication job is missing its publisher");
   await prisma.$transaction(async (tx) => {
-    const candidate = await tx.candidate.findUnique({
-      where: {
-        runId_itemIndex: { runId: job.runId, itemIndex: job.itemIndex! },
-      },
-    });
+    const candidate = await getCandidate(tx, job.runId, job.itemIndex!);
     if (!candidate) throw new Error("Candidate for job no longer exists");
     const errors = [...(candidate.errors as string[])];
     const metadata = candidate.metadata as {
@@ -153,12 +168,9 @@ export async function processJob(
       const keys = [
         urlKey ? { kind: "url" as const, value: urlKey } : null,
         guidKey ? { kind: "guid" as const, value: guidKey } : null,
-      ].filter((k) => k !== null);
+      ].filter((k): k is IdentityKey => k !== null);
       const matches = keys.length
-        ? await tx.publicationIdentifier.findMany({
-            where: { publisher, OR: keys },
-            select: { publicationId: true },
-          })
+        ? await findPublicationIdsByKeys(tx, publisher, keys)
         : [];
       const identities = new Set(matches.map((m) => m.publicationId));
       if (identities.size > 1)
@@ -167,56 +179,32 @@ export async function processJob(
         );
       else {
         publicationId = [...identities][0] ?? randomUUID();
-        const publication: Prisma.PublicationUncheckedCreateInput = {
-          id: publicationId,
-          publisher,
-          headline: metadata.headline,
-          originalUrl: metadata.originalUrl,
-          publishedAt: metadata.publishedAt,
-          language,
-        };
-        await tx.publication.upsert({
-          where: { id: publicationId },
-          create: publication,
-          update: {
+        await upsertPublication(
+          tx,
+          {
+            id: publicationId,
+            publisher,
+            headline: metadata.headline,
+            originalUrl: metadata.originalUrl,
+            publishedAt: metadata.publishedAt,
+            language,
+          },
+          {
             headline: metadata.headline,
             publishedAt: metadata.publishedAt,
             language,
             lastDiscoveredAt: new Date(),
           },
-        });
+        );
         for (const { kind, value } of keys) {
-          await tx.publicationIdentifier.upsert({
-            where: {
-              publisher_kind_value: {
-                publisher,
-                kind,
-                value,
-              },
-            },
-            create: {
-              publisher,
-              kind,
-              value,
-              publicationId,
-            },
-            update: {},
-          });
+          await upsertIdentifier(tx, { publisher, kind, value }, publicationId);
         }
-        await tx.discovery.upsert({
-          where: {
-            runId_publicationId: { runId: job.runId, publicationId },
-          },
-          create: { runId: job.runId, publicationId },
-          update: {},
-        });
+        await upsertDiscovery(tx, job.runId, publicationId);
       }
     }
-    await tx.candidate.update({
-      where: {
-        runId_itemIndex: { runId: job.runId, itemIndex: job.itemIndex! },
-      },
-      data: { errors, publicationId },
+    await updateCandidateResult(tx, job.runId, job.itemIndex!, {
+      errors,
+      publicationId,
     });
   });
 }
@@ -255,28 +243,20 @@ export async function finalizeRunIfSettled(
   runId: string,
   parseError: string | null,
 ) {
-  const open = await prisma.processingJob.count({
-    where: { runId, status: { in: ["pending", "claimed", "retrying"] } },
-  });
-  if (open > 0) return prisma.run.findUniqueOrThrow({ where: { id: runId } });
-  const candidates = await prisma.candidate.findMany({
-    where: { runId },
-    select: { errors: true, publicationId: true },
-  });
+  const open = await countOpenJobs(prisma, runId);
+  if (open > 0) return findRunOrThrow(prisma, runId);
+  const candidates = await listCandidatesForTally(prisma, runId);
   // Only successfully processed candidates count as valid: a job that
   // exhausted without processing leaves errors empty but no publication.
   const valid = candidates.filter(
     (c) => (c.errors as unknown[]).length === 0 && c.publicationId !== null,
   ).length;
-  return prisma.run.update({
-    where: { id: runId },
-    data: {
-      status: parseError ? "failed" : "completed",
-      completedAt: new Date(),
-      validCount: valid,
-      invalidCount: candidates.length - valid,
-      error: parseError,
-    },
+  return finalizeRun(prisma, runId, {
+    status: parseError ? "failed" : "completed",
+    completedAt: new Date(),
+    validCount: valid,
+    invalidCount: candidates.length - valid,
+    error: parseError,
   });
 }
 
@@ -287,10 +267,14 @@ export async function collect(
   feed: Feed = configuredFeed,
 ) {
   const intake = await collectIntake(prisma, runId, xml, feed);
-  if (intake.settled)
-    return prisma.run.findUniqueOrThrow({ where: { id: runId } });
+  if (intake.settled) return findRunOrThrow(prisma, runId);
   await drainJobs(prisma, `collect:${runId}`, { runId });
   return finalizeRunIfSettled(prisma, runId, intake.parseError);
+}
+
+export async function collectFixtureRun(prisma: PrismaClient, runId: string) {
+  const xml = await readFile("fixtures/bundestag.xml", "utf8");
+  return collect(prisma, runId, xml, fixtureFeed);
 }
 
 async function recordFeedFailure(
@@ -304,20 +288,18 @@ async function recordFeedFailure(
     .digest("hex");
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
-    const previous = await tx.run.findUnique({ where: { id: runId } });
+    const previous = await findRun(tx, runId);
     if (previous) return previous;
-    return tx.run.create({
-      data: {
-        id: runId,
-        feedId: feed.id,
-        sourceKind: "news_feed",
-        inputHash,
-        status: "failed",
-        completedAt: new Date(),
-        validCount: 0,
-        invalidCount: 0,
-        error: message,
-      },
+    return createRun(tx, {
+      id: runId,
+      feedId: feed.id,
+      sourceKind: "news_feed",
+      inputHash,
+      status: "failed",
+      completedAt: new Date(),
+      validCount: 0,
+      invalidCount: 0,
+      error: message,
     });
   });
 }
@@ -378,4 +360,60 @@ export async function collectAll(
     }
   }
   return results;
+}
+
+export function summarizeFeed(feed: Feed, candidates: Candidate[], limit = 3) {
+  const valid = candidates.filter((c) => !c.errors.length).length;
+  return {
+    feed: feed.id,
+    publisher: feed.publisher,
+    url: feed.url,
+    entries: candidates.length,
+    valid,
+    invalid: candidates.length - valid,
+    languages: [...new Set(candidates.map((c) => c.language))],
+    firstHeadlines: candidates
+      .slice(0, limit)
+      .map((c) => ({ headline: c.headline, url: c.originalUrl })),
+  };
+}
+
+export async function verifyFeed(
+  feedUrl?: string,
+  fetchXml: (url: string) => Promise<string> = fetchFeedXml,
+) {
+  const inspected = feedUrl ? customFeed(feedUrl) : configuredFeed;
+  if (!inspected.url) throw new Error("No feed URL");
+  const xml = await fetchXml(inspected.url);
+  return summarizeFeed(inspected, parseFeed(xml, inspected.defaultLanguage));
+}
+
+export async function verifyAllFeeds(
+  fetchXml: (url: string) => Promise<string> = fetchFeedXml,
+  feeds: Feed[] = publicNewsFeeds,
+) {
+  const report = [];
+  for (const feed of feeds) {
+    if (!feed.url) {
+      report.push({
+        feed: feed.id,
+        publisher: feed.publisher,
+        url: feed.url,
+        error: "Feed has no live URL",
+      });
+      continue;
+    }
+    try {
+      const xml = await fetchXml(feed.url);
+      report.push(summarizeFeed(feed, parseFeed(xml, feed.defaultLanguage), 2));
+    } catch (error) {
+      report.push({
+        feed: feed.id,
+        publisher: feed.publisher,
+        url: feed.url,
+        error: error instanceof Error ? error.message : "Verification failed",
+      });
+    }
+  }
+  return report;
 }

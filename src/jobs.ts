@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Prisma, PrismaClient } from "./generated/prisma/client.js";
+import type { Prisma, PrismaClient } from "./generated/prisma/client";
 
 export type SourceKind = "news_feed" | "search_query" | "dip_endpoint";
 export type SourceRef = {
@@ -271,6 +271,12 @@ export async function listJobs(
           : { status: filter },
     orderBy: [{ nextAttemptAt: "asc" }, { createdAt: "asc" }],
     take: 100,
+  });
+}
+
+export async function countOpenJobs(prisma: PrismaClient, runId: string) {
+  return prisma.processingJob.count({
+    where: { runId, status: { in: ["pending", "claimed", "retrying"] } },
   });
 }
 

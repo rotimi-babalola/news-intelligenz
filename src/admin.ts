@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import type { PrismaClient } from "./generated/prisma/client.js";
-import { drainJobs, finalizeRunIfSettled } from "./collect.js";
-import { jobCounts, listJobs, retryExhausted } from "./jobs.js";
+import type { PrismaClient } from "./generated/prisma/client";
+import { drainJobs, finalizeRunIfSettled } from "./import/service";
+import { jobCounts, listJobs, retryExhausted } from "./jobs";
 
 const escape = (value: unknown) =>
   String(value ?? "Unknown").replace(

@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import pg from "pg";
-import { collect } from "../src/collect.js";
+import { collect } from "../src/import/service.js";
 import { fixtureFeed } from "../src/sources.js";
 
 const root = process.cwd();
