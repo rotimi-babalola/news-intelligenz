@@ -66,15 +66,8 @@ export async function collectIntake(
         settled: previous.completedAt !== null,
       };
     }
-    await tx.run.create({
-      data: {
-        id: runId,
-        feedId: feed.id,
-        sourceKind: "news_feed",
-        inputHash: hash,
-        status: "running",
-      },
-    });
+    // Parse before creating the run so a crash after intake-commit still
+    // leaves the failure persisted for the resumed finalize.
     let candidates: Candidate[] = [];
     let parseError: string | null = null;
     try {
@@ -83,6 +76,16 @@ export async function collectIntake(
       parseError =
         error instanceof Error ? error.message : "Feed parsing failed";
     }
+    await tx.run.create({
+      data: {
+        id: runId,
+        feedId: feed.id,
+        sourceKind: "news_feed",
+        inputHash: hash,
+        status: "running",
+        error: parseError,
+      },
+    });
     for (const [index, candidate] of candidates.entries()) {
       const { errors, ...metadata } = candidate;
       await tx.candidate.create({
@@ -258,10 +261,12 @@ export async function finalizeRunIfSettled(
   if (open > 0) return prisma.run.findUniqueOrThrow({ where: { id: runId } });
   const candidates = await prisma.candidate.findMany({
     where: { runId },
-    select: { errors: true },
+    select: { errors: true, publicationId: true },
   });
+  // Only successfully processed candidates count as valid: a job that
+  // exhausted without processing leaves errors empty but no publication.
   const valid = candidates.filter(
-    (c) => (c.errors as unknown[]).length === 0,
+    (c) => (c.errors as unknown[]).length === 0 && c.publicationId !== null,
   ).length;
   return prisma.run.update({
     where: { id: runId },

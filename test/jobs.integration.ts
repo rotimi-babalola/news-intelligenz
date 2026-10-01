@@ -269,3 +269,63 @@ test("rate-limited failures resume after the provider delay", async () => {
     await done();
   }
 });
+
+test("the internal tool exposes exhausted jobs and retries them deliberately", async () => {
+  const { prisma, done } = await isolatedDb();
+  const { adminServer } = await import("../src/admin.js");
+  const server = adminServer(prisma);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const origin = `http://127.0.0.1:${(address as { port: number }).port}`;
+  try {
+    await collectIntake(prisma, "admin-retry", xml(["op"]), feed);
+    const job = await prisma.processingJob.findFirstOrThrow({
+      where: { runId: "admin-retry" },
+    });
+    await prisma.processingJob.update({
+      where: { id: job.id },
+      data: { status: "exhausted", attempts: 5, lastError: "operator case" },
+    });
+    const page = await (await fetch(`${origin}/`)).text();
+    assert.match(page, /Processing jobs/);
+    assert.match(page, new RegExp(job.id));
+    assert.match(page, /\/jobs\/retry/);
+    const retried = await fetch(`${origin}/jobs/retry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `id=${job.id}`,
+      redirect: "manual",
+    });
+    assert.equal(retried.status, 303);
+    assert.equal(
+      (
+        await prisma.processingJob.findUniqueOrThrow({
+          where: { id: job.id },
+        })
+      ).status,
+      "succeeded",
+    );
+    assert.equal(await prisma.publication.count(), 1);
+    assert.equal(
+      (
+        await prisma.run.findUniqueOrThrow({
+          where: { id: "admin-retry" },
+        })
+      ).status,
+      "completed",
+    );
+    // Unknown ids fail soft: the operator still lands back on the jobs view.
+    const unknown = await fetch(`${origin}/jobs/retry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `id=${randomUUID()}`,
+      redirect: "manual",
+    });
+    assert.equal(unknown.status, 303);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await prisma.$disconnect();
+    await done();
+  }
+});
