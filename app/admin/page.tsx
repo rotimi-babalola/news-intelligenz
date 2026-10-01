@@ -1,4 +1,3 @@
-import { headers } from "next/headers";
 import { getAdminOverview } from "../../src/admin/service";
 import { retryJobAction } from "./actions";
 
@@ -8,18 +7,11 @@ function date(value: Date | null) {
   return value ? value.toISOString() : "Unknown";
 }
 
-function isLocal(host: string) {
-  return /^localhost(?::\d+)?$|^127\.0\.0\.1(?::\d+)?$/.test(host);
-}
-
 export default async function AdminPage({
   searchParams,
 }: {
   searchParams?: Promise<{ run?: string }>;
 }) {
-  const host = (await headers()).get("host") ?? "";
-  if (host && !isLocal(host)) return <p>Local access only</p>;
-
   const params = searchParams ? await searchParams : {};
   const {
     publications,
