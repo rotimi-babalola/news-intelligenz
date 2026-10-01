@@ -9,7 +9,7 @@ import {
   drainJobs,
   finalizeRunIfSettled,
   processJob,
-} from "../src/collect.js";
+} from "../src/import/service.js";
 import {
   claimNextJob,
   completeJob,
@@ -270,14 +270,10 @@ test("rate-limited failures resume after the provider delay", async () => {
   }
 });
 
-test("the internal tool exposes exhausted jobs and retries them deliberately", async () => {
+test("the admin service exposes exhausted jobs and retries them deliberately", async () => {
   const { prisma, done } = await isolatedDb();
-  const { adminServer } = await import("../src/admin.js");
-  const server = adminServer(prisma);
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert.ok(address && typeof address !== "string");
-  const origin = `http://127.0.0.1:${(address as { port: number }).port}`;
+  const { getAdminOverview, retryJob } =
+    await import("../src/admin/service.js");
   try {
     await collectIntake(prisma, "admin-retry", xml(["op"]), feed);
     const job = await prisma.processingJob.findFirstOrThrow({
@@ -287,17 +283,14 @@ test("the internal tool exposes exhausted jobs and retries them deliberately", a
       where: { id: job.id },
       data: { status: "exhausted", attempts: 5, lastError: "operator case" },
     });
-    const page = await (await fetch(`${origin}/`)).text();
-    assert.match(page, /Processing jobs/);
-    assert.match(page, new RegExp(job.id));
-    assert.match(page, /\/jobs\/retry/);
-    const retried = await fetch(`${origin}/jobs/retry`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `id=${job.id}`,
-      redirect: "manual",
-    });
-    assert.equal(retried.status, 303);
+    const overview = await getAdminOverview("admin-retry");
+    assert.equal(overview.counts.exhausted, 1);
+    assert.ok(
+      overview.attention.some(
+        (entry) => entry.id === job.id && entry.status === "exhausted",
+      ),
+    );
+    await retryJob(job.id);
     assert.equal(
       (
         await prisma.processingJob.findUniqueOrThrow({
@@ -315,16 +308,9 @@ test("the internal tool exposes exhausted jobs and retries them deliberately", a
       ).status,
       "completed",
     );
-    // Unknown ids fail soft: the operator still lands back on the jobs view.
-    const unknown = await fetch(`${origin}/jobs/retry`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `id=${randomUUID()}`,
-      redirect: "manual",
-    });
-    assert.equal(unknown.status, 303);
+    // Unknown ids fail soft: the retry resolves without throwing.
+    await retryJob(randomUUID());
   } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
     await prisma.$disconnect();
     await done();
   }

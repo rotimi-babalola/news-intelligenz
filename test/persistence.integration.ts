@@ -7,42 +7,62 @@ import { promisify } from "node:util";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import pg from "pg";
-import { collect } from "../src/collect.js";
+import { collect } from "../src/import/service.js";
 import { fixtureFeed } from "../src/sources.js";
 
 const root = process.cwd();
 
-async function startAdmin(env: NodeJS.ProcessEnv) {
-  const child = spawn(process.execPath, ["dist/src/server.js"], {
-    env: { ...env, PORT: "0" },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+async function freePort(): Promise<number> {
+  const { createServer } = await import("node:net");
+  const probe = createServer();
+  await new Promise<void>((resolve) => probe.listen(0, "127.0.0.1", resolve));
+  const address = probe.address();
+  assert.ok(address && typeof address !== "string");
+  const port = (address as { port: number }).port;
+  await new Promise<void>((resolve) => probe.close(() => resolve()));
+  return port;
+}
+
+async function startNext(env: NodeJS.ProcessEnv) {
+  const port = await freePort();
+  const child = spawn(
+    process.execPath,
+    [
+      "node_modules/next/dist/bin/next",
+      "start",
+      "-H",
+      "127.0.0.1",
+      "-p",
+      String(port),
+    ],
+    { env, stdio: ["ignore", "pipe", "pipe"], cwd: root },
+  );
+  child.stdout.resume();
   let output = "";
-  const url = await new Promise<string>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      child.kill();
-      reject(new Error(`Server did not start: ${output}`));
-    }, 10000);
-    child.stderr.on("data", (data) => {
-      output += data.toString();
-    });
-    child.once("error", (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-    child.once("exit", (code) => {
-      clearTimeout(timeout);
-      reject(new Error(`Server exited ${code}: ${output}`));
-    });
-    child.stdout.on("data", (data) => {
-      output += data.toString();
-      const match = output.match(/http:\/\/127\.0\.0\.1:\d+/);
-      if (match) {
-        clearTimeout(timeout);
-        resolve(match[0]);
-      }
-    });
+  child.stderr.on("data", (data) => {
+    output += data.toString();
   });
+  const url = `http://127.0.0.1:${port}`;
+  const deadline = Date.now() + 30000;
+  for (;;) {
+    if (child.exitCode !== null) {
+      throw new Error(`Next exited ${child.exitCode}: ${output}`);
+    }
+    try {
+      const response = await fetch(`${url}/admin`);
+      if (response.status === 200) {
+        await response.text();
+        break;
+      }
+    } catch {
+      // Not accepting connections yet.
+    }
+    if (Date.now() > deadline) {
+      child.kill();
+      throw new Error(`Next did not start: ${output}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
   return {
     url,
     stop: async () => {
@@ -70,15 +90,25 @@ test("PostgreSQL retains candidates and distinct discoveries; replay is idempote
     const { database } = await import("../src/db.js");
     const prisma = database();
     const xml = await readFile("fixtures/bundestag.xml", "utf8");
-    const run = () =>
-      promisify(execFile)(
-        process.execPath,
-        ["dist/src/cli.js", "collect-fixture", "first"],
-        { env },
-      );
-    const first = JSON.parse((await run()).stdout);
+    let server = await startNext(env);
+    const postFixture = async (runId: string) => {
+      const response = await fetch(`${server.url}/api/collect-fixture`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId }),
+      });
+      assert.equal(response.status, 200);
+      return response.json();
+    };
+    const first = await postFixture("first");
     assert.equal(first.validCount, 2);
     assert.equal(first.invalidCount, 1);
+    const invalid = await fetch(`${server.url}/api/collect-fixture`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ runId: "  " }),
+    });
+    assert.equal(invalid.status, 400);
     const snapshot = async () => {
       const result: Record<string, unknown> = {};
       result.runs = await prisma.run.findMany({ orderBy: [{ id: "asc" }] });
@@ -98,10 +128,9 @@ test("PostgreSQL retains candidates and distinct discoveries; replay is idempote
       return result;
     };
     const saved = await snapshot();
-    let server = await startAdmin(env);
     let initialPage: string;
     try {
-      const response = await fetch(server.url);
+      const response = await fetch(`${server.url}/admin`);
       assert.equal(response.status, 200);
       initialPage = await response.text();
       assert.match(initialPage, /Öffentliche Anhörung: Wohnen &amp; Städte/);
@@ -114,7 +143,7 @@ test("PostgreSQL retains candidates and distinct discoveries; replay is idempote
       const denied = await new Promise<number | undefined>(
         (resolve, reject) => {
           get(
-            server.url,
+            `${server.url}/admin`,
             { headers: { Host: "attacker.example" } },
             (response) => {
               response.resume();
@@ -127,15 +156,29 @@ test("PostgreSQL retains candidates and distinct discoveries; replay is idempote
     } finally {
       await server.stop();
     }
-    assert.deepEqual(JSON.parse((await run()).stdout), first);
-    assert.deepEqual(
-      await snapshot(),
-      saved,
-      "a new collector process replays without altering any row",
-    );
-    server = await startAdmin(env);
+    server = await startNext(env);
     try {
-      assert.equal(await (await fetch(server.url)).text(), initialPage);
+      const replay = await postFixture("first");
+      assert.deepEqual(replay, first);
+      assert.deepEqual(
+        await snapshot(),
+        saved,
+        "a restarted server replays without altering any row",
+      );
+      assert.equal(
+        await (await fetch(`${server.url}/admin`)).text(),
+        initialPage,
+      );
+      const stuck = await prisma.processingJob.findFirstOrThrow({
+        where: { runId: "first" },
+      });
+      await prisma.processingJob.update({
+        where: { id: stuck.id },
+        data: { status: "exhausted", attempts: 5, lastError: "operator case" },
+      });
+      const jobsPage = await (await fetch(`${server.url}/admin`)).text();
+      assert.match(jobsPage, new RegExp(stuck.id));
+      assert.match(jobsPage, /<button type="submit">Retry<\/button>/);
     } finally {
       await server.stop();
     }
@@ -217,11 +260,11 @@ test("PostgreSQL retains candidates and distinct discoveries; replay is idempote
       ),
       fixtureFeed,
     );
-    server = await startAdmin(env);
+    server = await startNext(env);
     try {
-      const page = await (await fetch(`${server.url}/?run=html`)).text();
+      const page = await (await fetch(`${server.url}/admin?run=html`)).text();
       assert.match(page, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
-      assert.ok(!page.includes("<script>"));
+      assert.ok(!page.includes("<script>alert(1)</script>"));
     } finally {
       await server.stop();
     }

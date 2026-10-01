@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { parseRetryAfterMs, RateLimitedError } from "./jobs.js";
+import { parseRetryAfterMs, RateLimitedError } from "./jobs";
 
 export type Feed = {
   id: string;
@@ -74,19 +74,22 @@ export const fixtureFeed: Feed = {
   defaultLanguage: "de",
 };
 
+export function isHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 // Operator-driven import of any RSS 2.0 URL for local QA. Identity scope is
 // per host: distinct URLs on one host share a publisher, while different URLs
 // always get distinct feed IDs, so provenance stays visible in runs.
 export function customFeed(url: string): Feed {
-  let host = "";
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol === "https:" || parsed.protocol === "http:")
-      host = parsed.hostname;
-  } catch {
-    host = "";
-  }
-  if (!host) throw new Error("Custom feed URL must be an absolute HTTP(S) URL");
+  if (!isHttpUrl(url))
+    throw new Error("Custom feed URL must be an absolute HTTP(S) URL");
+  const host = new URL(url).hostname;
   const suffix = createHash("sha256").update(url).digest("hex").slice(0, 8);
   return {
     id: `custom-${host}-${suffix}`,
