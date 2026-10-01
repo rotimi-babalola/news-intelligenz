@@ -6,11 +6,15 @@ generated into `src/generated/prisma`. Model fields use camelCase; `@@map` and
 `@map` map them to snake_case tables and columns in PostgreSQL. All dates are
 `timestamptz`. No article text or feed descriptions are stored anywhere.
 
-One collection run writes inside a single transaction guarded by the
-session-level advisory lock `pg_advisory_xact_lock(8135421)`, so concurrent
-identical runs serialize and replay is safe. Integration tests run the same
-migrations into an isolated schema per test run via the driver adapter's
-`schema` option.
+One collection run writes its intake (run, candidates, processing jobs)
+inside a single transaction guarded by the session-level advisory lock
+`pg_advisory_xact_lock(8135421)`, so concurrent identical runs serialize
+and replay is safe. Downstream processing commits separately, one
+transaction per job; publication identity resolution takes a per-publisher
+advisory lock so concurrent first encounters converge on one publication.
+Integration tests run the same migrations into an isolated schema per test
+run via the driver adapter's `schema` option; raw job-claim SQL qualifies
+its tables with that schema explicitly.
 
 ## runs
 
@@ -19,17 +23,19 @@ which identifies one immutable feed input: reusing an ID against a different
 input hash or feed is rejected, while replaying identical input returns the
 stored row.
 
-| Field          | Column          | Type        | Null | Default | Notes                                                                                         |
-| -------------- | --------------- | ----------- | ---- | ------- | --------------------------------------------------------------------------------------------- |
-| `id`           | `id`            | text, PK    | no   | —       | Operator label, 1–200 chars, e.g. `live-dlf-20260922`                                         |
-| `feedId`       | `feed_id`       | text        | no   | —       | `deutschlandfunk-nachrichten`, `bundestag-aktuelle-themen-fixture`, or `custom-<host>-<hash>` |
-| `inputHash`    | `input_hash`    | text        | no   | —       | SHA-256 of the exact collected XML                                                            |
-| `startedAt`    | `started_at`    | timestamptz | no   | `now()` |                                                                                               |
-| `completedAt`  | `completed_at`  | timestamptz | yes  | —       | Set when the run finishes; null while `running`                                               |
-| `status`       | `status`        | `RunStatus` | no   | —       | `running`, `completed`, or `failed`                                                           |
-| `validCount`   | `valid_count`   | integer     | no   | `0`     | Candidates without validation errors                                                          |
-| `invalidCount` | `invalid_count` | integer     | no   | `0`     | Candidates with validation errors                                                             |
-| `error`        | `error`         | text        | yes  | —       | Parse failure message for `failed` runs                                                       |
+| Field          | Column          | Type         | Null | Default     | Notes                                                                    |
+| -------------- | --------------- | ------------ | ---- | ----------- | ------------------------------------------------------------------------ |
+| `id`           | `id`            | text, PK     | no   | —           | Operator label, 1–200 chars, e.g. `live-dlf-20260922`                    |
+| `feedId`       | `feed_id`       | text         | no   | —           | Source key for every source kind: feed ID, search query, or DIP endpoint |
+| `sourceKind`   | `source_kind`   | `SourceKind` | no   | `news_feed` | `news_feed`, `search_query`, or `dip_endpoint`                           |
+| `sourceScope`  | `source_scope`  | jsonb        | yes  | —           | Selected scope: allowed domains, electoral term, or null for feeds       |
+| `inputHash`    | `input_hash`    | text         | no   | —           | SHA-256 of the exact collected XML                                       |
+| `startedAt`    | `started_at`    | timestamptz  | no   | `now()`     |                                                                          |
+| `completedAt`  | `completed_at`  | timestamptz  | yes  | —           | Set when the run finishes; null while `running`                          |
+| `status`       | `status`        | `RunStatus`  | no   | —           | `running`, `completed`, or `failed`                                      |
+| `validCount`   | `valid_count`   | integer      | no   | `0`         | Candidates without validation errors                                     |
+| `invalidCount` | `invalid_count` | integer      | no   | `0`         | Candidates with validation errors                                        |
+| `error`        | `error`         | text         | yes  | —           | Parse failure message for `failed` runs                                  |
 
 ## publications
 
@@ -89,6 +95,40 @@ The composite primary key is `(run_id, publication_id)`.
 | `publicationId` | `publication_id` | uuid, PK/FK → `publications.id` | no   | —       |       |
 | `discoveredAt`  | `discovered_at`  | timestamptz                     | no   | `now()` |       |
 
+## processing_jobs
+
+Durable downstream work, one row per (run, candidate, operation), keyed by
+the `dedupe_key` unique constraint so replays never enqueue twice. Claiming
+is a single atomic `UPDATE ... FOR UPDATE SKIP LOCKED`: exactly one worker
+wins each ready job. See [processing jobs](processing-jobs.md) for the
+retry policy.
+
+| Field            | Column             | Type                 | Null | Default   | Notes                                                           |
+| ---------------- | ------------------ | -------------------- | ---- | --------- | --------------------------------------------------------------- |
+| `id`             | `id`               | uuid, PK             | no   | `uuid()`  |                                                                 |
+| `dedupeKey`      | `dedupe_key`       | text, UQ             | no   | —         | `<runId>:<itemIndex>:<operation>`                               |
+| `sourceKind`     | `source_kind`      | `SourceKind`         | no   | —         | `news_feed`, `search_query`, or `dip_endpoint`                  |
+| `sourceKey`      | `source_key`       | text                 | no   | —         | Feed ID, query, or endpoint                                     |
+| `sourceScope`    | `source_scope`     | jsonb                | yes  | —         | Allowed domains, electoral term, or null                        |
+| `runId`          | `run_id`           | text, FK → `runs.id` | no   | —         |                                                                 |
+| `itemIndex`      | `item_index`       | integer              | yes  | —         | Candidate position; null for run-scoped work                    |
+| `operation`      | `operation`        | text                 | no   | —         | `resolve_publication`; DIP operations arrive with later tickets |
+| `payload`        | `payload`          | jsonb                | no   | —         | Operation input, e.g. publisher snapshot                        |
+| `status`         | `status`           | `JobStatus`          | no   | `pending` | `pending`, `claimed`, `retrying`, `succeeded`, or `exhausted`   |
+| `attempts`       | `attempts`         | integer              | no   | `0`       | Incremented at claim; reset by deliberate retry                 |
+| `maxAttempts`    | `max_attempts`     | integer              | no   | `5`       | Bounded retries                                                 |
+| `nextAttemptAt`  | `next_attempt_at`  | timestamptz          | no   | `now()`   | Backoff or provider `Retry-After` delay                         |
+| `claimedAt`      | `claimed_at`       | timestamptz          | yes  | —         |                                                                 |
+| `claimedBy`      | `claimed_by`       | text                 | yes  | —         | Worker ID                                                       |
+| `leaseExpiresAt` | `lease_expires_at` | timestamptz          | yes  | —         | 5-minute claim lease; expiry makes the job reclaimable          |
+| `lastError`      | `last_error`       | text                 | yes  | —         | Inspectable failure, preserved on exhaustion                    |
+
+## job_attempts
+
+Durable per-attempt state: one row per (`job_id`, `attempt_no`), opened at
+claim and closed with the outcome (`succeeded`, `retrying`, `exhausted`)
+and error. Survives worker restarts alongside the job row.
+
 ## Enums
 
 - `RunStatus`: `running`, `completed`, `failed`.
@@ -96,10 +136,12 @@ The composite primary key is `(run_id, publication_id)`.
 - `IdentifierKind`: `guid`, `url`.
 - `ContentAvailability`: `metadata_only`, `full_text` (`full_text` is defined for
   later tickets; nothing writes it yet).
+- `SourceKind`: `news_feed`, `search_query`, `dip_endpoint`.
+- `JobStatus`: `pending`, `claimed`, `retrying`, `succeeded`, `exhausted`.
 
 ## What is deliberately absent
 
-There is no table for article text, feed descriptions, users, jobs, or
+There is no table for article text, feed descriptions, users, or
 relevance decisions in this slice — those belong to later tickets. Publication
 identity uses exact identifiers only; there is no headline matching, redirect
 resolution, or cross-publisher merging.
