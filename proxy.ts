@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 
 const LOCAL_HOST = /^localhost(?::\d+)?$|^127\.0\.0\.1(?::\d+)?$/;
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const host = request.headers.get("host") ?? "";
   if (host && !LOCAL_HOST.test(host)) {
     return new NextResponse("Local access only", { status: 403 });

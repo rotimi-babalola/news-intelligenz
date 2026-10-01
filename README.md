@@ -20,32 +20,54 @@ pnpm install --frozen-lockfile
 cp .env.example .env
 docker compose up -d --wait
 pnpm build
-pnpm collect-fixture f001   # Deterministic synthetic feed (no network)
 pnpm start
 ```
 
-Open [the local admin page](http://127.0.0.1:3000). The fixture produces two valid
-publications (German and English) and one rejected candidate. `pnpm collect-all <run-prefix>`
-fetches all nine public-news feeds, one run per feed, so each feed's results and
-failures stay visible; `pnpm collect <run-id>` fetches only the
-Deutschlandfunk Nachrichten feed; `pnpm collect <run-id> [feed-url]`
-imports any RSS 2.0 URL instead, stored under a per-host publisher scope with a
-distinct feed ID for operator QA. `pnpm verify-all` checks all nine live
-endpoints without persisting anything. Each run appears alongside the others and the
+In another terminal, import the deterministic synthetic feed (no network):
+
+```sh
+curl -X POST http://127.0.0.1:3000/api/collect-fixture \
+  -H 'Content-Type: application/json' \
+  -d '{"runId":"f001"}'
+```
+
+Open [the local admin page](http://127.0.0.1:3000/admin). The fixture produces two valid
+publications (German and English) and one rejected candidate.
+
+Collection runs through the API, one call per feed, so each feed's results and
+failures stay visible:
+
+| Endpoint                           | Behaviour                                                    |
+| ---------------------------------- | ------------------------------------------------------------ |
+| `POST /api/collect-all`            | Fetches all nine public-news feeds, one run per feed         |
+| `POST /api/collect`                | Fetches only the Deutschlandfunk Nachrichten feed by default |
+| `POST /api/collect` with `feedUrl` | Imports any RSS 2.0 URL instead, stored under a per-host     |
+|                                    | publisher scope with a distinct feed ID for operator QA      |
+| `GET /api/verify-all`              | Checks all nine live endpoints without persisting anything   |
+| `GET /api/verify?feedUrl=…`        | Checks one feed without persisting anything                  |
+
+Each run appears alongside the others and the
 page labels each input. Select a run to inspect its
 candidates, validation errors and discovery history. The page shows up to 100
 records per section; all records remain in PostgreSQL. No article text or feed
-descriptions are retained. The admin is bound to `127.0.0.1`; deployed
+descriptions are retained. The app is bound to `127.0.0.1` and refuses
+non-local hosts; deployed
 authentication and hosting belong to later tickets.
 
-Collection start (`collect`/`collect-fixture`) applies the Prisma migrations
+`pnpm start` (and `pnpm dev`) applies the Prisma migrations
 automatically. Use `pnpm db:migrate` to apply them separately. `DATABASE_URL`
 and `PORT` can be set in `.env` or the environment. The Compose credentials are
 local development defaults.
 
 ```sh
-pnpm collect-fixture f001       # Replay: returns the stored result without changing rows
-pnpm collect-fixture f002       # New encounter: same publications, new discoveries
+# Replay: returns the stored result without changing rows
+curl -X POST http://127.0.0.1:3000/api/collect-fixture \
+  -H 'Content-Type: application/json' \
+  -d '{"runId":"f001"}'
+# New encounter: same publications, new discoveries
+curl -X POST http://127.0.0.1:3000/api/collect-fixture \
+  -H 'Content-Type: application/json' \
+  -d '{"runId":"f002"}'
 ```
 
 A run ID identifies one immutable feed input. Changed XML requires a new run ID;
@@ -71,13 +93,13 @@ pnpm check
 pnpm format
 ```
 
-The integration test creates and removes its own isolated schema. It runs the
-collector in separate processes, restarts the admin, compares persisted rows and
+The integration test creates and removes its own isolated schema. It collects
+through the API in separate processes, restarts the app, compares persisted rows and
 rendered pages, and checks idempotent/concurrent replay, distinct discoveries,
 identity conflicts, transaction rollback and HTML escaping. It does not stop
 your database. Database outages roll back the current transaction; retry the same
 run after restoring connectivity. Malformed feeds receive a persisted failed run
-result; SQL/connection failures are reported by the operator command and roll
+result; SQL/connection failures are reported with a 500 response and roll
 back all writes. Durable retry jobs are deferred.
 
 ## Phase 1: news collection

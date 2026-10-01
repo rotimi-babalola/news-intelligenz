@@ -23,11 +23,14 @@ exact counts. The fixture is deterministic: 2 valid, 1 invalid.
 ### QA-1 — Import the deterministic fixture
 
 ```sh
-pnpm collect-fixture qa-f001
+pnpm start   # in one terminal; the app serves http://127.0.0.1:3000
+curl -X POST http://127.0.0.1:3000/api/collect-fixture \
+  -H 'Content-Type: application/json' \
+  -d '{"runId":"qa-f001"}'
 ```
 
 Expected: JSON result `status: "completed"`, `validCount: 2`, `invalidCount: 1`,
-`feedId: "bundestag-aktuelle-themen-fixture"`, exit code 0.
+`feedId: "bundestag-aktuelle-themen-fixture"`, HTTP 200.
 
 ### QA-2 — Confirm the fixture in the database
 
@@ -43,9 +46,8 @@ two rows (German `Öffentliche Anhörung: Wohnen & Städte`, English
 
 ### QA-3 — Review the fixture in the admin page
 
-```sh
-pnpm start   # open http://127.0.0.1:3000/?run=qa-f001#candidates
-```
+Open http://127.0.0.1:3000/admin?run=qa-f001#candidates (`/` redirects to
+`/admin`).
 
 Expected: run `qa-f001` listed with 2 valid / 1 invalid; candidates section
 shows both headlines accepted and the third rejected with `Missing headline` /
@@ -54,11 +56,13 @@ URL errors; publications show publisher, original URL, dates, `Metadata only`.
 ### QA-4 — Import the configured live feed
 
 ```sh
-pnpm verify
-pnpm collect qa-live-001
+curl 'http://127.0.0.1:3000/api/verify'
+curl -X POST http://127.0.0.1:3000/api/collect \
+  -H 'Content-Type: application/json' \
+  -d '{"runId":"qa-live-001"}'
 ```
 
-Expected: `verify` prints the Deutschlandfunk Nachrichten summary without
+Expected: `verify` returns the Deutschlandfunk Nachrichten summary without
 writing rows. `collect` returns `completed` with `validCount` equal to the entry
 count and `invalidCount: 0`. A new `runs` row and one `publications` row per
 entry appear; the admin publications section lists Deutschlandfunk headlines
@@ -67,7 +71,9 @@ with dates and original URLs.
 ### QA-5 — Import an arbitrary RSS feed URL
 
 ```sh
-pnpm collect qa-custom-001 https://www.deutschlandfunk.de/politikportal-100.rss
+curl -X POST http://127.0.0.1:3000/api/collect \
+  -H 'Content-Type: application/json' \
+  -d '{"runId":"qa-custom-001","feedUrl":"https://www.deutschlandfunk.de/politikportal-100.rss"}'
 ```
 
 Expected: `completed`; `feedId` starts with `custom-` and contains the host
@@ -79,36 +85,42 @@ run.
 ### QA-6 — Replay is idempotent
 
 ```sh
-pnpm collect-fixture qa-f001
+curl -X POST http://127.0.0.1:3000/api/collect-fixture \
+  -H 'Content-Type: application/json' \
+  -d '{"runId":"qa-f001"}'
 ```
 
 Expected: identical JSON to QA-1 (same `completedAt`, same counts). Record
 counts in `runs`, `publications`, `candidates`, `discoveries` are unchanged
-before and after (compare in Studio or restart the admin and compare pages).
+before and after (compare in Studio or restart the app and compare pages).
 
 ### QA-7 — Changed input under a reused run ID is rejected
 
 ```sh
-pnpm collect qa-f001   # reuses the QA-1 ID against a different feed/input
+curl -X POST http://127.0.0.1:3000/api/collect \
+  -H 'Content-Type: application/json' \
+  -d '{"runId":"qa-f001"}'   # reuses the QA-1 ID against a different feed/input
 ```
 
-Expected: error `Run ID already belongs to a different input; use a new run
-ID`, exit code 1, no new or altered rows. (Same-feed snapshots that changed
+Expected: HTTP 500 with error `Run ID already belongs to a different input; use
+a new run ID`, no new or altered rows. (Same-feed snapshots that changed
 since collection behave the same way: a fresh run ID is required per snapshot.)
 
 ### QA-8 — A non-RSS URL records a failed run
 
 ```sh
-pnpm collect qa-bad-001 https://example.org/
+curl -X POST http://127.0.0.1:3000/api/collect \
+  -H 'Content-Type: application/json' \
+  -d '{"runId":"qa-bad-001","feedUrl":"https://example.org/"}'
 ```
 
-Expected: JSON result `status: "failed"` with a parse `error`, exit code 1. The
+Expected: JSON result `status: "failed"` with a parse `error`. The
 `runs` row exists with `validCount: 0`, `invalidCount: 0`. No partial
 publications or candidates are stored for it.
 
 ### QA-9 — Data survives restarts
 
-1. Stop the admin (Ctrl-C), run `pnpm start` again: the page is identical.
+1. Stop the app (Ctrl-C), run `pnpm start` again: the page is identical.
 2. `docker compose down` then `docker compose up -d --wait`, then `pnpm start`:
    all runs and publications are still listed (persistent Compose volume).
 

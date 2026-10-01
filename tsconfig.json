@@ -23,7 +23,7 @@
     "src/**/*.ts",
     "test/**/*.ts",
     "app/**/*.tsx",
-    "middleware.ts",
+    "proxy.ts",
     "next.config.ts",
     "next-env.d.ts",
     ".next/types/**/*.ts",
