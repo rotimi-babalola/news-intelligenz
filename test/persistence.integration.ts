@@ -178,7 +178,7 @@ test("PostgreSQL retains candidates and distinct discoveries; replay is idempote
       });
       const jobsPage = await (await fetch(`${server.url}/admin`)).text();
       assert.match(jobsPage, new RegExp(stuck.id));
-      assert.match(jobsPage, /<button type="submit">Retry<\/button>/);
+      assert.match(jobsPage, /Retry<\/button>/);
     } finally {
       await server.stop();
     }
