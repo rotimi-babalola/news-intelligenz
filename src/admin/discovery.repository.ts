@@ -1,7 +1,10 @@
 import type { PrismaClient } from "../generated/prisma/client";
 
-export function listDiscoveriesByRun(prisma: PrismaClient, runId: string) {
-  if (!runId) return Promise.resolve([]);
+export async function listDiscoveriesByRun(
+  prisma: PrismaClient,
+  runId: string,
+) {
+  if (!runId) return [];
   return prisma.discovery.findMany({
     where: { runId },
     orderBy: { publicationId: "asc" },

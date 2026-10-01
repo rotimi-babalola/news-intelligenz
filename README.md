@@ -46,6 +46,9 @@ failures stay visible:
 | `GET /api/verify-all`              | Checks all nine live endpoints without persisting anything   |
 | `GET /api/verify?feedUrl=…`        | Checks one feed without persisting anything                  |
 
+Request bodies and query strings are validated with Zod; invalid requests get
+HTTP 400 with the details, while collection failures surface as HTTP 500.
+
 Each run appears alongside the others and the
 page labels each input. Select a run to inspect its
 candidates, validation errors and discovery history. The page shows up to 100

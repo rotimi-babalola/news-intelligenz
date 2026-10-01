@@ -379,13 +379,12 @@ export function summarizeFeed(feed: Feed, candidates: Candidate[], limit = 3) {
 }
 
 export async function verifyFeed(
-  feedUrl?: string,
+  feed: Feed = configuredFeed,
   fetchXml: (url: string) => Promise<string> = fetchFeedXml,
 ) {
-  const inspected = feedUrl ? customFeed(feedUrl) : configuredFeed;
-  if (!inspected.url) throw new Error("No feed URL");
-  const xml = await fetchXml(inspected.url);
-  return summarizeFeed(inspected, parseFeed(xml, inspected.defaultLanguage));
+  if (!feed.url) throw new Error("No feed URL");
+  const xml = await fetchXml(feed.url);
+  return summarizeFeed(feed, parseFeed(xml, feed.defaultLanguage));
 }
 
 export async function verifyAllFeeds(

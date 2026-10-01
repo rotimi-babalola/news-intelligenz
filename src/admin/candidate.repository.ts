@@ -1,7 +1,7 @@
 import type { PrismaClient } from "../generated/prisma/client";
 
-export function listCandidatesByRun(prisma: PrismaClient, runId: string) {
-  if (!runId) return Promise.resolve([]);
+export async function listCandidatesByRun(prisma: PrismaClient, runId: string) {
+  if (!runId) return [];
   return prisma.candidate.findMany({
     where: { runId },
     orderBy: { itemIndex: "asc" },

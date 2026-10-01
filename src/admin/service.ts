@@ -9,16 +9,20 @@ import { getRunOrThrow, listRuns } from "./run.repository";
 export async function getAdminOverview(runParam?: string) {
   const prisma = database();
   try {
-    const publications = await listPublications(prisma);
-    const runs = await listRuns(prisma);
+    const [publications, runs] = await Promise.all([
+      listPublications(prisma),
+      listRuns(prisma),
+    ]);
     const selectedRun = runParam ?? runs[0]?.id ?? "";
-    const candidates = await listCandidatesByRun(prisma, selectedRun);
-    const discoveries = await listDiscoveriesByRun(prisma, selectedRun);
-    const counts = await jobCounts(prisma);
-    const attention = [
-      ...(await listJobs(prisma, "retrying")),
-      ...(await listJobs(prisma, "exhausted")),
-    ]
+    const [candidates, discoveries, counts, retrying, exhausted] =
+      await Promise.all([
+        listCandidatesByRun(prisma, selectedRun),
+        listDiscoveriesByRun(prisma, selectedRun),
+        jobCounts(prisma),
+        listJobs(prisma, "retrying"),
+        listJobs(prisma, "exhausted"),
+      ]);
+    const attention = [...retrying, ...exhausted]
       .sort((a, b) => a.nextAttemptAt.getTime() - b.nextAttemptAt.getTime())
       .slice(0, 100);
     return {

@@ -103,6 +103,12 @@ test("PostgreSQL retains candidates and distinct discoveries; replay is idempote
     const first = await postFixture("first");
     assert.equal(first.validCount, 2);
     assert.equal(first.invalidCount, 1);
+    const invalid = await fetch(`${server.url}/api/collect-fixture`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ runId: "  " }),
+    });
+    assert.equal(invalid.status, 400);
     const snapshot = async () => {
       const result: Record<string, unknown> = {};
       result.runs = await prisma.run.findMany({ orderBy: [{ id: "asc" }] });
@@ -163,6 +169,16 @@ test("PostgreSQL retains candidates and distinct discoveries; replay is idempote
         await (await fetch(`${server.url}/admin`)).text(),
         initialPage,
       );
+      const stuck = await prisma.processingJob.findFirstOrThrow({
+        where: { runId: "first" },
+      });
+      await prisma.processingJob.update({
+        where: { id: stuck.id },
+        data: { status: "exhausted", attempts: 5, lastError: "operator case" },
+      });
+      const jobsPage = await (await fetch(`${server.url}/admin`)).text();
+      assert.match(jobsPage, new RegExp(stuck.id));
+      assert.match(jobsPage, /<button type="submit">Retry<\/button>/);
     } finally {
       await server.stop();
     }
