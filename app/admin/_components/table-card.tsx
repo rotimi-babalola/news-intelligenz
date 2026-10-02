@@ -1,18 +1,5 @@
 import type { ReactNode } from "react";
 
-export function formatDate(value: Date | null) {
-  if (!value) return "Unknown";
-  return `${value.toISOString().slice(0, 16).replace("T", " ")} UTC`;
-}
-
-export function runTone(status: string): "success" | "destructive" | "warning" {
-  const s = status.toLowerCase();
-  if (s.includes("fail") || s.includes("error")) return "destructive";
-  if (s.includes("complete") || s.includes("success") || s === "ok")
-    return "success";
-  return "warning";
-}
-
 export function TableCard({
   label,
   children,

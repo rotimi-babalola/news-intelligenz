@@ -12,8 +12,14 @@ import { Button } from "../../src/components/ui/button";
 import { Badge } from "../../src/components/ui/badge";
 import { cn } from "../../src/lib/utils";
 import { retryJobAction } from "./actions";
-import { Pager, paginate, parsePage } from "./_components/pager";
-import { TableCard, formatDate, runTone } from "./_components/table-card";
+import { Pager } from "./_components/pager";
+import { TableCard } from "./_components/table-card";
+import {
+  formatDate,
+  paginate,
+  parsePage,
+  runTone,
+} from "./_components/display";
 
 export const dynamic = "force-dynamic";
 
