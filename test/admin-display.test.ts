@@ -1,0 +1,78 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  formatDate,
+  paginate,
+  parsePage,
+  runTone,
+} from "../app/admin/_components/display.js";
+
+test("parsePage accepts positive pages and defaults the rest to 1", () => {
+  assert.equal(parsePage(undefined), 1);
+  assert.equal(parsePage("3"), 3);
+  assert.equal(parsePage(["2"]), 2);
+  assert.equal(parsePage("0"), 1);
+  assert.equal(parsePage("-2"), 1);
+  assert.equal(parsePage(""), 1);
+  assert.equal(parsePage("abc"), 1);
+});
+
+test("paginate slices rows and reports ranges", () => {
+  const items = Array.from({ length: 45 }, (_, i) => i + 1);
+  const first = paginate(items, 1);
+  assert.deepEqual(first.rows, items.slice(0, 20));
+  assert.deepEqual(
+    { page: first.page, totalPages: first.totalPages },
+    { page: 1, totalPages: 3 },
+  );
+  assert.deepEqual(
+    { from: first.from, to: first.to, total: first.total },
+    { from: 1, to: 20, total: 45 },
+  );
+  const last = paginate(items, 3);
+  assert.deepEqual(last.rows, items.slice(40, 45));
+  assert.deepEqual({ from: last.from, to: last.to }, { from: 41, to: 45 });
+});
+
+test("paginate clamps out-of-range pages instead of emptying", () => {
+  const items = Array.from({ length: 45 }, (_, i) => i + 1);
+  assert.equal(paginate(items, 99).page, 3);
+  assert.equal(paginate(items, 0).page, 1);
+  assert.equal(paginate(items, -5).page, 1);
+});
+
+test("paginate handles empty and single-page lists", () => {
+  const empty = paginate([], 1);
+  assert.deepEqual(empty.rows, []);
+  assert.deepEqual(
+    { page: empty.page, totalPages: empty.totalPages },
+    { page: 1, totalPages: 1 },
+  );
+  assert.deepEqual(
+    { from: empty.from, to: empty.to, total: empty.total },
+    { from: 0, to: 0, total: 0 },
+  );
+  const single = paginate([1, 2], 1);
+  assert.equal(single.totalPages, 1);
+  assert.deepEqual(single.rows, [1, 2]);
+});
+
+test("runTone maps run statuses to badge variants", () => {
+  assert.equal(runTone("completed"), "success");
+  assert.equal(runTone("OK"), "success");
+  assert.equal(runTone("complete"), "success");
+  assert.equal(runTone("failed"), "destructive");
+  assert.equal(runTone("Failed"), "destructive");
+  assert.equal(runTone("fetch-failure"), "destructive");
+  assert.equal(runTone("pending"), "warning");
+  assert.equal(runTone("retrying"), "warning");
+  assert.equal(runTone("exhausted"), "warning");
+});
+
+test("formatDate renders compact UTC timestamps", () => {
+  assert.equal(formatDate(null), "Unknown");
+  assert.equal(
+    formatDate(new Date("2026-09-18T09:00:00Z")),
+    "2026-09-18 09:00 UTC",
+  );
+});
