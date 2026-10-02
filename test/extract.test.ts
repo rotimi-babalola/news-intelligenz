@@ -20,8 +20,7 @@ function stubFetch(
   return async (url: string) => ({
     status: handler(url).status,
     headers: {
-      get: (name: string) =>
-        handler(url).headers?.[name.toLowerCase()] ?? null,
+      get: (name: string) => handler(url).headers?.[name.toLowerCase()] ?? null,
     },
     text: async () => handler(url).body ?? "",
   });
@@ -31,12 +30,7 @@ test("permission gate allows configured feed hosts, blocks others", () => {
   const allowed = defaultPermittedHosts();
   assert.ok(allowed.has("www.tagesschau.de"));
   assert.ok(allowed.has("www.deutschlandfunk.de"));
-  assert.ok(
-    isExtractionPermitted(
-      "https://www.tagesschau.de/a.html",
-      allowed,
-    ),
-  );
+  assert.ok(isExtractionPermitted("https://www.tagesschau.de/a.html", allowed));
   assert.equal(
     isExtractionPermitted("https://example.org/a.html", allowed),
     false,
@@ -57,10 +51,7 @@ test("SSRF guard blocks private/local/non-http destinations", () => {
     "https://user:pass@www.tagesschau.de/a",
   ])
     assert.equal(isBlockedDestination(url), true, url);
-  assert.equal(
-    isBlockedDestination("https://www.tagesschau.de/a.html"),
-    false,
-  );
+  assert.equal(isBlockedDestination("https://www.tagesschau.de/a.html"), false);
 });
 
 test("fetch follows bounded redirects and rechecks permission per hop", async () => {
@@ -121,9 +112,7 @@ test("fetch preserves link on failure or unsupported formats", async () => {
     ["private", () => ({ status: 200, body: "x" })],
   ] as const) {
     const url =
-      name === "private"
-        ? "https://a.example/x"
-        : "https://a.example/x";
+      name === "private" ? "https://a.example/x" : "https://a.example/x";
     const result =
       name === "private"
         ? await fetchArticleHtml(

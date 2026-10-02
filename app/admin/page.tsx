@@ -93,7 +93,7 @@ export default async function AdminPage({
       icon: Newspaper,
       label: "Publications",
       value: String(publications.length),
-      hint: "Latest 100 · metadata only",
+      hint: "Latest 100 · text or metadata",
     },
     {
       icon: ListChecks,
@@ -128,8 +128,8 @@ export default async function AdminPage({
             </h1>
             <p className="mt-1 max-w-xl text-sm text-stone-500">
               Single-operator view of publications and the encounters that
-              brought them here. Nine public-news feeds; article text is never
-              retained.
+              brought them here. Nine public-news feeds; open a publication to
+              read its extracted text or metadata-only fallback.
             </p>
           </div>
           <form
@@ -261,8 +261,7 @@ export default async function AdminPage({
                   <tr key={p.id} className="align-top hover:bg-stone-50/70">
                     <td lang={p.language} className="max-w-md px-4 py-3">
                       <a
-                        href={p.originalUrl}
-                        rel="noreferrer"
+                        href={`/admin/publications/${p.id}`}
                         className="font-medium text-emerald-900 underline-offset-4 hover:underline"
                       >
                         {p.headline}
@@ -281,7 +280,13 @@ export default async function AdminPage({
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant="secondary">Metadata only</Badge>
+                      {p.contentAvailability === "full_text" ? (
+                        <Badge variant="success">
+                          Full text · v{p._count.versions}
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">Metadata only</Badge>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {p._count.discoveries}

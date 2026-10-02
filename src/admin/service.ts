@@ -3,7 +3,10 @@ import { database } from "../db";
 import { jobCounts, listJobs, retryExhausted } from "../jobs";
 import { listCandidatesByRun } from "./candidate.repository";
 import { listDiscoveriesByRun } from "./discovery.repository";
-import { listPublications } from "./publication.repository";
+import {
+  getPublicationDetail,
+  listPublications,
+} from "./publication.repository";
 import { getRunOrThrow, listRuns } from "./run.repository";
 
 export async function getAdminOverview(runParam?: string) {
@@ -34,6 +37,15 @@ export async function getAdminOverview(runParam?: string) {
       counts,
       attention,
     };
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+export async function getPublication(id: string) {
+  const prisma = database();
+  try {
+    return await getPublicationDetail(prisma, id);
   } finally {
     await prisma.$disconnect();
   }

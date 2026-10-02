@@ -178,7 +178,9 @@ test("expired leases are reclaimed and failures exhaust with visible state", asy
     const outcome = await drainJobs(prisma, "recovery-worker", {
       runId: "leases",
     });
-    assert.deepEqual(outcome, { succeeded: 1, retrying: 0, exhausted: 0 });
+    // Resolve plus its follow-up text extraction (example.org is outside the
+    // permitted full-text hosts, so extraction records metadata-only fallback).
+    assert.deepEqual(outcome, { succeeded: 2, retrying: 0, exhausted: 0 });
     assert.equal(await prisma.publication.count(), 1);
 
     // A deterministically failing job exhausts within its attempt budget

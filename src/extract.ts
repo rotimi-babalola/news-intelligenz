@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { publicNewsFeeds } from "./sources.js";
+import { publicNewsFeeds } from "./sources";
 
 // Private-use permission gate: full-text retention is permitted only for
 // hosts on the allowlist. Defaults to the configured public-news feed hosts;
@@ -75,20 +75,32 @@ export const MAX_REDIRECTS = 3;
 export const MAX_HTML_BYTES = 1_000_000;
 
 export type FetchResult =
-  | { ok: true; finalUrl: string; html: string }
-  | { ok: false; reason: string };
+  { ok: true; finalUrl: string; html: string } | { ok: false; reason: string };
 
-type FetchFn = (url: string) => Promise<{
+type FetchFn = (
+  url: string,
+  init?: { signal: AbortSignal; headers: Record<string, string> },
+) => Promise<{
   status: number;
   headers: { get(name: string): string | null };
   text(): Promise<string>;
 }>;
 
+function defaultFetch(
+  url: string,
+  init?: { signal: AbortSignal; headers: Record<string, string> },
+) {
+  return fetch(url, {
+    signal: init?.signal,
+    headers: init?.headers ?? {},
+  });
+}
+
 // Fetch only the directly linked resource: manual redirect handling with a
 // bound, same-guard rechecks per hop, and no credentialed/private targets.
 export async function fetchArticleHtml(
   rawUrl: string,
-  fetchFn: FetchFn = fetch as unknown as FetchFn,
+  fetchFn: FetchFn = defaultFetch,
   allowedHosts: Set<string> = defaultPermittedHosts(),
 ): Promise<FetchResult> {
   if (!isExtractionPermitted(rawUrl, allowedHosts))
@@ -99,7 +111,13 @@ export async function fetchArticleHtml(
       return { ok: false, reason: "Blocked private/local destination" };
     let response: Awaited<ReturnType<FetchFn>>;
     try {
-      response = await fetchFn(current);
+      response = await fetchFn(current, {
+        signal: AbortSignal.timeout(15_000),
+        headers: {
+          "user-agent": "NewsIntelligenz/0.1 (local operator verification)",
+          accept: "text/html, application/xhtml+xml",
+        },
+      });
     } catch {
       return { ok: false, reason: "Fetch failed" };
     }
@@ -123,7 +141,10 @@ export async function fetchArticleHtml(
     if (response.status === 429)
       return { ok: false, reason: "Rate limited; kept original link" };
     if (response.status < 200 || response.status >= 300)
-      return { ok: false, reason: `HTTP ${response.status}; kept original link` };
+      return {
+        ok: false,
+        reason: `HTTP ${response.status}; kept original link`,
+      };
     const contentType = response.headers.get("content-type") ?? "";
     if (contentType && !/text\/html|application\/xhtml/i.test(contentType))
       return { ok: false, reason: `Unsupported format: ${contentType}` };
