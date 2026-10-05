@@ -11,6 +11,7 @@
     "build": "prisma generate && next build",
     "build:test": "prisma generate && tsc -p tsconfig.node.json && node scripts/fix-dist-extensions.js",
     "db:migrate": "prisma migrate deploy",
+    "db:reset": "sh scripts/reset-db.sh",
     "dev": "pnpm db:migrate && next dev -H 127.0.0.1",
     "start": "pnpm db:migrate && next start -H 127.0.0.1",
     "studio": "prisma studio",
