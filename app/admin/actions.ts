@@ -1,7 +1,7 @@
 "use server";
 
-import { retryJob } from "../../src/admin/service";
-import { jobIdSchema } from "../../src/validation";
+import { reextractPublication, retryJob } from "../../src/admin/service";
+import { jobIdSchema, publicationIdSchema } from "../../src/validation";
 
 export async function retryJobAction(formData: FormData) {
   const parsed = jobIdSchema.safeParse(formData.get("id"));
@@ -10,4 +10,13 @@ export async function retryJobAction(formData: FormData) {
     return;
   }
   await retryJob(parsed.data);
+}
+
+export async function reextractAction(formData: FormData) {
+  const parsed = publicationIdSchema.safeParse(formData.get("id"));
+  if (!parsed.success) {
+    console.error("Publication re-extract failed:", "Missing publication id");
+    return;
+  }
+  await reextractPublication(parsed.data);
 }

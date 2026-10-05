@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { RotateCcw } from "lucide-react";
 import { getPublication } from "../../../../src/admin/service";
 import { Badge } from "../../../../src/components/ui/badge";
+import { Button } from "../../../../src/components/ui/button";
+import { reextractAction } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +57,18 @@ export default async function PublicationPage({
                 : "Metadata only"}
             </Badge>
           </p>
+          <form action={reextractAction} className="mt-3">
+            <input type="hidden" name="id" value={publication.id} />
+            <Button
+              type="submit"
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+            >
+              <RotateCcw className="size-3.5" aria-hidden />
+              Re-fetch text
+            </Button>
+          </form>
         </div>
 
         {latest ? (

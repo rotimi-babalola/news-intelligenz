@@ -181,6 +181,69 @@ test("unsupported formats keep metadata-only fallback with original link", async
   }
 });
 
+test("operator re-extract recovers a publication stuck metadata-only", async () => {
+  const { prisma, done } = await isolatedDb();
+  const { reextractPublication } = await import("../src/admin/service.js");
+  try {
+    await collect(
+      prisma,
+      "stuck",
+      xml(["a"]),
+      feed,
+      stubArticles({
+        "https://example.org/article-a.html": {
+          status: 200,
+          contentType: "application/pdf",
+          body: "%PDF-1.4",
+        },
+      }),
+    );
+    const pub = await prisma.publication.findFirstOrThrow({
+      where: { originalUrl: "https://example.org/article-a.html" },
+    });
+    assert.equal(pub.contentAvailability, "metadata_only");
+    await reextractPublication(
+      pub.id,
+      stubArticles({
+        "https://example.org/article-a.html": {
+          status: 200,
+          body: article(text60),
+        },
+      }),
+    );
+    const recovered = await prisma.publication.findUniqueOrThrow({
+      where: { id: pub.id },
+    });
+    assert.equal(recovered.contentAvailability, "full_text");
+    assert.equal(recovered.extractionError, null);
+    assert.equal(
+      await prisma.publicationVersion.count({
+        where: { publicationId: pub.id },
+      }),
+      1,
+    );
+    // Repeating the re-extract with identical text stores nothing new.
+    await reextractPublication(
+      pub.id,
+      stubArticles({
+        "https://example.org/article-a.html": {
+          status: 200,
+          body: article(text60),
+        },
+      }),
+    );
+    assert.equal(
+      await prisma.publicationVersion.count({
+        where: { publicationId: pub.id },
+      }),
+      1,
+    );
+  } finally {
+    await prisma.$disconnect();
+    await done();
+  }
+});
+
 test("final URL claimed by another publication is a conflict, not a merge", async () => {
   const { prisma, done } = await isolatedDb();
   try {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   feedUrlSchema,
   jobIdSchema,
+  publicationIdSchema,
   runIdSchema,
   runPrefixSchema,
 } from "../src/validation.js";
@@ -38,4 +39,11 @@ test("job IDs require a UUID", () => {
   assert.equal(jobIdSchema.parse(id), id);
   assert.ok(!jobIdSchema.safeParse("").success);
   assert.ok(!jobIdSchema.safeParse("not-a-uuid").success);
+});
+
+test("publication IDs require a UUID", () => {
+  const id = "123e4567-e89b-12d3-a456-426614174000";
+  assert.equal(publicationIdSchema.parse(id), id);
+  assert.ok(!publicationIdSchema.safeParse("").success);
+  assert.ok(!publicationIdSchema.safeParse("not-a-uuid").success);
 });
