@@ -7,6 +7,7 @@ import pg from "pg";
 import {
   collectIntake,
   drainJobs,
+  drainOpenJobs,
   finalizeRunIfSettled,
   processJob,
 } from "../src/import/service.js";
@@ -312,6 +313,38 @@ test("the admin service exposes exhausted jobs and retries them deliberately", a
     );
     // Unknown ids fail soft: the retry resolves without throwing.
     await retryJob(randomUUID());
+  } finally {
+    await prisma.$disconnect();
+    await done();
+  }
+});
+
+test("drainOpenJobs settles intake without a new collection", async () => {
+  const { prisma, done } = await isolatedDb();
+  try {
+    // Intake only: nothing downstream has run yet.
+    await collectIntake(prisma, "drain-me", xml(["a", "b"]), feed);
+    assert.equal(await prisma.publication.count(), 0);
+    // example.org is outside the permitted full-text hosts, so extraction
+    // records metadata-only fallback without network access.
+    const result = await drainOpenJobs(prisma, "drain-worker", "drain-me");
+    assert.deepEqual(result.outcome, {
+      succeeded: 4,
+      retrying: 0,
+      exhausted: 0,
+    });
+    assert.deepEqual(result.settled, ["drain-me"]);
+    assert.equal(await prisma.publication.count(), 2);
+    assert.equal(
+      (
+        await prisma.run.findUniqueOrThrow({
+          where: { id: "drain-me" },
+        })
+      ).status,
+      "completed",
+    );
+    // Unknown runs are rejected.
+    await assert.rejects(drainOpenJobs(prisma, "drain-worker", "missing"));
   } finally {
     await prisma.$disconnect();
     await done();

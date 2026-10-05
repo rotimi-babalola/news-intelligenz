@@ -23,6 +23,7 @@ import {
   enqueueJob,
   failJob,
   feedSource,
+  requeueStaleClaims,
   type ClaimedJob,
 } from "../jobs";
 import {
@@ -374,6 +375,34 @@ export async function collect(
   if (intake.settled) return findRunOrThrow(prisma, runId);
   await drainJobs(prisma, `collect:${runId}`, { runId }, fetchArticle);
   return finalizeRunIfSettled(prisma, runId, intake.parseError);
+}
+
+// Standalone worker pass without new intake: recover stale claims, drain
+// ready jobs (optionally for one run), and settle finished runs. This is the
+// entry point for out-of-band retries and the future scheduler.
+export async function drainOpenJobs(
+  prisma: PrismaClient,
+  workerId: string,
+  runId?: string,
+  fetchArticle: ArticleFetcher = fetchArticleHtml,
+) {
+  await requeueStaleClaims(prisma);
+  const outcome = await drainJobs(
+    prisma,
+    workerId,
+    runId ? { runId } : {},
+    fetchArticle,
+  );
+  const targets = runId
+    ? [await findRunOrThrow(prisma, runId)]
+    : await prisma.run.findMany({ where: { completedAt: null } });
+  const settled: string[] = [];
+  for (const target of targets) {
+    const before = target.completedAt;
+    const run = await finalizeRunIfSettled(prisma, target.id, target.error);
+    if (!before && run.completedAt) settled.push(run.id);
+  }
+  return { outcome, settled };
 }
 
 export async function collectFixtureRun(prisma: PrismaClient, runId: string) {
