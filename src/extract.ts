@@ -3,9 +3,8 @@ import { publicNewsFeeds } from "./sources";
 
 // Private-use permission gate: full-text retention is permitted only for
 // hosts on the allowlist. Defaults to the configured public-news feed hosts;
-// the operator confirmed private non-commercial use, so no per-publisher
-// legal review blocks local extraction, but an unresolved (non-allowlisted)
-// host still stores metadata/links only.
+// the operator confirmed private non-commercial use and approved local
+// retention. Non-allowlisted hosts still store metadata/links only.
 export function defaultPermittedHosts(): Set<string> {
   const hosts = new Set<string>();
   for (const feed of publicNewsFeeds) {
@@ -93,6 +92,7 @@ function defaultFetch(
   return fetch(url, {
     signal: init?.signal,
     headers: init?.headers ?? {},
+    redirect: "manual",
   });
 }
 

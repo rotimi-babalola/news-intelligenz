@@ -133,13 +133,17 @@ export async function claimNextJob(
   prisma: PrismaClient,
   workerId: string,
   leaseMs: number = LEASE_MS_DEFAULT,
-  filter: { runId?: string } = {},
+  filter: { runId?: string; jobId?: string } = {},
 ): Promise<ClaimedJob | null> {
   const params: unknown[] = [workerId, leaseMs / 1000];
-  let runClause = "";
+  let filterClause = "";
   if (filter.runId) {
     params.push(filter.runId);
-    runClause = `AND run_id = $${params.length}`;
+    filterClause += ` AND run_id = $${params.length}`;
+  }
+  if (filter.jobId) {
+    params.push(filter.jobId);
+    filterClause += ` AND id = $${params.length}`;
   }
   const jobsTable = qualifiedTable("processing_jobs");
   const rows = (await prisma.$queryRawUnsafe(
@@ -152,7 +156,7 @@ export async function claimNextJob(
       updated_at = now()
     WHERE id = (
       SELECT id FROM ${jobsTable}
-      WHERE next_attempt_at <= now() ${runClause} AND (
+      WHERE next_attempt_at <= now() ${filterClause} AND (
         status IN ('pending', 'retrying') OR
         (status = 'claimed' AND lease_expires_at IS NOT NULL AND lease_expires_at <= now())
       )
@@ -242,11 +246,14 @@ export async function requeueStaleClaims(prisma: PrismaClient) {
 }
 
 export async function retryExhausted(prisma: PrismaClient, jobId: string) {
+  const job = await prisma.processingJob.findUniqueOrThrow({
+    where: { id: jobId, status: "exhausted" },
+  });
   return prisma.processingJob.update({
     where: { id: jobId, status: "exhausted" },
     data: {
       status: "pending",
-      attempts: 0,
+      maxAttempts: { increment: job.maxAttempts },
       nextAttemptAt: new Date(),
       lastError: null,
       claimedAt: null,

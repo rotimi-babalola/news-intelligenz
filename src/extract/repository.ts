@@ -16,8 +16,8 @@ export function listVersions(client: Client, publicationId: string) {
 }
 
 // Restart-safe single-transaction store: identity learned during extraction
-// (the redirect-resolved final URL) is reconciled before any write; identical
-// text never creates a new version (hash unique per publication).
+// (the redirect-resolved final URL) is reconciled before any write; text that
+// matches the latest version does not create another version.
 export async function storeExtractedText(
   client: Client,
   args: {
@@ -51,27 +51,18 @@ export async function storeExtractedText(
     }
   }
   const hash = textHash(args.text);
-  const existing = await client.publicationVersion.findUnique({
-    where: {
-      publicationId_textHash: {
-        publicationId: args.publicationId,
-        textHash: hash,
-      },
-    },
-    select: { versionNo: true },
+  const latest = await client.publicationVersion.findFirst({
+    where: { publicationId: args.publicationId },
+    orderBy: [{ versionNo: "desc" }],
+    select: { versionNo: true, textHash: true },
   });
-  if (existing) {
+  if (latest?.textHash === hash) {
     await client.publication.update({
       where: { id: args.publicationId },
       data: { contentAvailability: "full_text", extractionError: null },
     });
     return { stored: false, reason: "unchanged" };
   }
-  const latest = await client.publicationVersion.findFirst({
-    where: { publicationId: args.publicationId },
-    orderBy: [{ versionNo: "desc" }],
-    select: { versionNo: true },
-  });
   const versionNo = (latest?.versionNo ?? 0) + 1;
   await client.publicationVersion.create({
     data: {

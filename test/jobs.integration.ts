@@ -220,7 +220,22 @@ test("expired leases are reclaimed and failures exhaust with visible state", asy
     // Deliberate operator retry resets the budget for another attempt.
     const retried = await retryExhausted(prisma, exhausted[0]!.id);
     assert.equal(retried.status, "pending");
-    assert.equal(retried.attempts, 0);
+    assert.equal(retried.attempts, 1);
+    assert.equal(retried.maxAttempts, 2);
+    const secondClaim = await claimNextJob(prisma, "retry-worker", undefined, {
+      jobId: retried.id,
+    });
+    assert.equal(secondClaim?.attempts, 2);
+    assert.equal(
+      await prisma.jobAttempt.count({ where: { jobId: retried.id } }),
+      2,
+    );
+    await failJob(
+      prisma,
+      secondClaim!,
+      "retry-worker",
+      new Error("still bogus"),
+    );
 
     // Non-RSS source identities survive the round trip on job rows.
     await prisma.$transaction((tx) =>

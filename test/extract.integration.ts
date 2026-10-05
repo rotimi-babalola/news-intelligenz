@@ -10,6 +10,7 @@ import {
   collect,
   collectIntake,
   drainJobs,
+  EXTRACT_TEXT,
   finalizeRunIfSettled,
   type ArticleFetcher,
 } from "../src/import/service.js";
@@ -147,6 +148,20 @@ test("extraction stores versions, skips identical text, keeps history on change"
     );
     assert.equal(replay.status, "completed");
     assert.equal(await prisma.publicationVersion.count(), 2);
+    pages["https://example.org/article-a.html"] = {
+      status: 200,
+      body: article(text60),
+    };
+    await collect(prisma, "fourth", xml(["a"]), feed, stubArticles(pages));
+    const restored = await prisma.publicationVersion.findMany({
+      where: { publicationId: pub.id },
+      orderBy: [{ versionNo: "asc" }],
+    });
+    assert.deepEqual(
+      restored.map((v) => v.versionNo),
+      [1, 2, 3],
+    );
+    assert.equal(restored[2]?.textHash, restored[0]?.textHash);
   } finally {
     await prisma.$disconnect();
     await done();
@@ -181,6 +196,20 @@ test("unsupported formats keep metadata-only fallback with original link", async
   }
 });
 
+test("slow article fetch completes before the write transaction starts", async () => {
+  const { prisma, done } = await isolatedDb();
+  try {
+    await collect(prisma, "slow-fetch", xml(["a"]), feed, async (url) => {
+      await new Promise((resolve) => setTimeout(resolve, 5_500));
+      return { ok: true, finalUrl: url, html: article(text60) };
+    });
+    assert.equal(await prisma.publicationVersion.count(), 1);
+  } finally {
+    await prisma.$disconnect();
+    await done();
+  }
+});
+
 test("operator re-extract recovers a publication stuck metadata-only", async () => {
   const { prisma, done } = await isolatedDb();
   const { reextractPublication } = await import("../src/admin/service.js");
@@ -202,6 +231,9 @@ test("operator re-extract recovers a publication stuck metadata-only", async () 
       where: { originalUrl: "https://example.org/article-a.html" },
     });
     assert.equal(pub.contentAvailability, "metadata_only");
+    const originalJob = await prisma.processingJob.findFirstOrThrow({
+      where: { operation: EXTRACT_TEXT },
+    });
     await reextractPublication(
       pub.id,
       stubArticles({
@@ -222,6 +254,10 @@ test("operator re-extract recovers a publication stuck metadata-only", async () 
       }),
       1,
     );
+    assert.equal(
+      await prisma.jobAttempt.count({ where: { jobId: originalJob.id } }),
+      1,
+    );
     // Repeating the re-extract with identical text stores nothing new.
     await reextractPublication(
       pub.id,
@@ -237,6 +273,10 @@ test("operator re-extract recovers a publication stuck metadata-only", async () 
         where: { publicationId: pub.id },
       }),
       1,
+    );
+    assert.equal(
+      await prisma.processingJob.count({ where: { operation: EXTRACT_TEXT } }),
+      3,
     );
   } finally {
     await prisma.$disconnect();

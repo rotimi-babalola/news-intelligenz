@@ -258,28 +258,28 @@ async function processExtractJob(
   )
     throw new Error("Extraction job is missing its publication");
   const { publicationId, publisher } = payload;
-  await prisma.$transaction(async (tx) => {
-    const publication = await tx.publication.findUnique({
-      where: { id: publicationId },
-    });
-    if (!publication) throw new Error("Publication for job no longer exists");
-    const fetched = await fetchArticle(publication.originalUrl);
-    if (!fetched.ok) {
-      if (isPermanentFailure(fetched.reason)) {
-        await recordExtractionFailure(tx, publicationId, fetched.reason);
-        return;
-      }
-      throw new Error(fetched.reason);
-    }
-    const text = extractArticleText(fetched.html);
-    if (!text) {
-      await recordExtractionFailure(
-        tx,
-        publicationId,
-        "No article text found; kept original link",
-      );
+  const publication = await prisma.publication.findUnique({
+    where: { id: publicationId },
+  });
+  if (!publication) throw new Error("Publication for job no longer exists");
+  const fetched = await fetchArticle(publication.originalUrl);
+  if (!fetched.ok) {
+    if (isPermanentFailure(fetched.reason)) {
+      await recordExtractionFailure(prisma, publicationId, fetched.reason);
       return;
     }
+    throw new Error(fetched.reason);
+  }
+  const text = extractArticleText(fetched.html);
+  if (!text) {
+    await recordExtractionFailure(
+      prisma,
+      publicationId,
+      "No article text found; kept original link",
+    );
+    return;
+  }
+  await prisma.$transaction(async (tx) => {
     await storeExtractedText(tx, {
       publicationId,
       publisher,
@@ -303,7 +303,7 @@ function isPermanentFailure(reason: string): boolean {
 export async function drainJobs(
   prisma: PrismaClient,
   workerId: string,
-  filter: { runId?: string } = {},
+  filter: { runId?: string; jobId?: string } = {},
   fetchArticle: ArticleFetcher = fetchArticleHtml,
 ) {
   const outcome = { succeeded: 0, retrying: 0, exhausted: 0 };

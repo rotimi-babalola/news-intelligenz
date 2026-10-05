@@ -73,9 +73,9 @@ The identity evidence for publications. The composite primary key
 
 ## publication_versions
 
-One row per distinct extracted article text under a publication. Identical
-text never creates a new row (unique per-publication text hash); changed text
-appends a higher `versionNo` and preserves prior rows. The redirect-resolved
+One row per successive change in extracted article text under a publication.
+Text matching the latest version creates no row; a later return to earlier text
+does create a new version. The redirect-resolved
 final URL is recorded per version and learned as a `url` identifier.
 
 | Field           | Column           | Type                         | Null | Default  | Notes                                      |
@@ -84,7 +84,7 @@ final URL is recorded per version and learned as a `url` identifier.
 | `publicationId` | `publication_id` | uuid, FK → `publications.id` | no   | —        |                                            |
 | `versionNo`     | `version_no`     | integer                      | no   | —        | 1-based, unique per publication            |
 | `text`          | `text`           | text                         | no   | —        | Fetched article text, never a feed excerpt |
-| `textHash`      | `text_hash`      | text                         | no   | —        | SHA-256 of `text`, unique per publication  |
+| `textHash`      | `text_hash`      | text                         | no   | —        | SHA-256 of `text`                          |
 | `finalUrl`      | `final_url`      | text                         | no   | —        | Redirect-resolved article URL              |
 | `fetchedAt`     | `fetched_at`     | timestamptz                  | no   | `now()`  |                                            |
 

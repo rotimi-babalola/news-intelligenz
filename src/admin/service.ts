@@ -77,9 +77,8 @@ export async function retryJob(jobId: string) {
   }
 }
 
-// Operator-driven re-extract: ensure a pending extraction job for one
-// publication (attached to its latest discovery run for the run FK) and
-// drain it inline. Safe to repeat: identical text stores no new version.
+// Operator-driven re-extract: add a fresh job to its latest discovery run so
+// earlier job attempts remain available, then drain only that job.
 export async function reextractPublication(
   publicationId: string,
   fetchArticle: ArticleFetcher = fetchArticleHtml,
@@ -100,51 +99,20 @@ export async function reextractPublication(
     const candidate = await prisma.candidate.findFirst({
       where: { runId: run.id, publicationId },
     });
-    const key = dedupeKey(run.id, candidate?.itemIndex ?? null, EXTRACT_TEXT);
-    const existing = await prisma.processingJob.findUnique({
-      where: { dedupeKey: key },
-    });
-    // A live claim belongs to a running worker; don't steal it.
-    if (!existing || existing.status !== "claimed") {
-      const reset = {
-        status: "pending" as const,
-        attempts: 0,
-        nextAttemptAt: new Date(),
-        lastError: null,
-        claimedAt: null,
-        claimedBy: null,
-        leaseExpiresAt: null,
+    const jobId = randomUUID();
+    await prisma.processingJob.create({
+      data: {
+        id: jobId,
+        dedupeKey: `${dedupeKey(run.id, candidate?.itemIndex ?? null, EXTRACT_TEXT)}:manual:${jobId}`,
+        sourceKind: run.sourceKind,
+        sourceKey: run.feedId,
+        runId: run.id,
         itemIndex: candidate?.itemIndex ?? null,
+        operation: EXTRACT_TEXT,
         payload: { publicationId, publisher: publication.publisher },
-      };
-      // A re-extract starts a new attempt lifecycle on the same job row, so
-      // prior attempt records go with it; otherwise the next claim collides
-      // with the old attempt numbers.
-      await prisma.$transaction(async (tx) => {
-        if (existing) {
-          await tx.processingJob.update({
-            where: { id: existing.id },
-            data: reset,
-          });
-          await tx.jobAttempt.deleteMany({
-            where: { jobId: existing.id },
-          });
-        } else {
-          await tx.processingJob.create({
-            data: {
-              id: randomUUID(),
-              dedupeKey: key,
-              sourceKind: run.sourceKind,
-              sourceKey: run.feedId,
-              runId: run.id,
-              ...reset,
-              operation: EXTRACT_TEXT,
-            },
-          });
-        }
-      });
-    }
-    await drainJobs(prisma, "admin-reextract", { runId: run.id }, fetchArticle);
+      },
+    });
+    await drainJobs(prisma, "admin-reextract", { jobId }, fetchArticle);
     await finalizeRunIfSettled(prisma, run.id, run.error);
   } catch (error) {
     console.error(

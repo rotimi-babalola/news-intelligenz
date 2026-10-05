@@ -103,7 +103,6 @@ model PublicationVersion {
   fetchedAt     DateTime    @map("fetched_at") @default(now()) @db.Timestamptz(6)
 
   @@unique([publicationId, versionNo])
-  @@unique([publicationId, textHash])
   @@map("publication_versions")
 }
 

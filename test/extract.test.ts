@@ -97,6 +97,33 @@ test("fetch follows bounded redirects and rechecks permission per hop", async ()
   assert.equal(loop.ok, false);
 });
 
+test("default fetch leaves redirects for the permission guard", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (_url, init) => {
+    calls++;
+    return init?.redirect === "manual"
+      ? new Response(null, {
+          status: 302,
+          headers: { location: "http://127.0.0.1/private" },
+        })
+      : new Response("secret", {
+          headers: { "content-type": "text/html" },
+        });
+  };
+  try {
+    const result = await fetchArticleHtml(
+      "https://a.example/start",
+      undefined,
+      new Set(["a.example"]),
+    );
+    assert.equal(result.ok, false);
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("fetch preserves link on failure or unsupported formats", async () => {
   const allowed = new Set(["a.example"]);
   for (const [name, handler] of [
