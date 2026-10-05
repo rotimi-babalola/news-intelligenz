@@ -18,6 +18,21 @@ export function runTone(status: string): "success" | "destructive" | "warning" {
   return "warning";
 }
 
+export function jobTone(
+  status: string,
+): "secondary" | "success" | "destructive" | "warning" {
+  switch (status) {
+    case "exhausted":
+      return "destructive";
+    case "retrying":
+      return "warning";
+    case "succeeded":
+      return "success";
+    default:
+      return "secondary";
+  }
+}
+
 export function parsePage(raw?: string | string[]): number {
   const value = Array.isArray(raw) ? raw[0] : raw;
   const n = Number.parseInt(value ?? "", 10);

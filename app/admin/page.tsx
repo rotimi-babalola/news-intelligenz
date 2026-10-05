@@ -16,6 +16,7 @@ import { Pager } from "./_components/pager";
 import { TableCard } from "./_components/table-card";
 import {
   formatDate,
+  jobTone,
   paginate,
   parsePage,
   runTone,
@@ -110,8 +111,8 @@ export default async function AdminPage({
     {
       icon: Cpu,
       label: "Jobs needing attention",
-      value: String(attention.length),
-      hint: `Pending ${counts.pending} · Exhausted ${counts.exhausted}`,
+      value: String(counts.pending + counts.retrying + counts.exhausted),
+      hint: `Pending ${counts.pending} · Retrying ${counts.retrying} · Exhausted ${counts.exhausted}`,
     },
   ];
 
@@ -576,7 +577,7 @@ export default async function AdminPage({
                 {jobs.rows.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-4 py-8 text-center">
-                      No retrying or exhausted jobs.
+                      No pending, retrying, or exhausted jobs.
                     </td>
                   </tr>
                 )}
@@ -585,20 +586,14 @@ export default async function AdminPage({
                     <td className="px-4 py-3">
                       <span className="font-medium">{j.sourceKey}</span>
                       <span className="block text-xs text-stone-400">
-                        {j.sourceKind} · Run {j.runId}
+                        {j.operation} · {j.sourceKind} · Run {j.runId}
                         {j.itemIndex === null
                           ? ""
                           : ` · Item ${j.itemIndex + 1}`}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge
-                        variant={
-                          j.status === "exhausted" ? "destructive" : "warning"
-                        }
-                      >
-                        {j.status}
-                      </Badge>
+                      <Badge variant={jobTone(j.status)}>{j.status}</Badge>
                       <span className="mt-1 block text-xs whitespace-nowrap tabular-nums text-stone-500">
                         Attempt {j.attempts}/{j.maxAttempts} · Next{" "}
                         {formatDate(j.nextAttemptAt)}

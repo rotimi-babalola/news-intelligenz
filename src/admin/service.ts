@@ -17,15 +17,16 @@ export async function getAdminOverview(runParam?: string) {
       listRuns(prisma),
     ]);
     const selectedRun = runParam ?? runs[0]?.id ?? "";
-    const [candidates, discoveries, counts, retrying, exhausted] =
+    const [candidates, discoveries, counts, pending, retrying, exhausted] =
       await Promise.all([
         listCandidatesByRun(prisma, selectedRun),
         listDiscoveriesByRun(prisma, selectedRun),
         jobCounts(prisma),
+        listJobs(prisma, "pending"),
         listJobs(prisma, "retrying"),
         listJobs(prisma, "exhausted"),
       ]);
-    const attention = [...retrying, ...exhausted]
+    const attention = [...pending, ...retrying, ...exhausted]
       .sort((a, b) => a.nextAttemptAt.getTime() - b.nextAttemptAt.getTime())
       .slice(0, 100);
     return {

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   formatDate,
+  jobTone,
   paginate,
   parsePage,
   runTone,
@@ -67,6 +68,14 @@ test("runTone maps run statuses to badge variants", () => {
   assert.equal(runTone("pending"), "warning");
   assert.equal(runTone("retrying"), "warning");
   assert.equal(runTone("exhausted"), "warning");
+});
+
+test("jobTone maps job states to badge variants", () => {
+  assert.equal(jobTone("pending"), "secondary");
+  assert.equal(jobTone("claimed"), "secondary");
+  assert.equal(jobTone("retrying"), "warning");
+  assert.equal(jobTone("exhausted"), "destructive");
+  assert.equal(jobTone("succeeded"), "success");
 });
 
 test("formatDate renders compact UTC timestamps", () => {
