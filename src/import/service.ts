@@ -43,11 +43,13 @@ import {
 } from "./candidate.repository";
 import {
   searchAllowedDomains,
+  assessRelevance,
   toSearchCandidates,
   type SearchProvider,
   type SearchResult,
 } from "../search";
 import { upsertDiscovery } from "./discovery.repository";
+import { getReview, upsertReview } from "./relevance.repository";
 import {
   findPublicationIdsByKeys,
   upsertIdentifier,
@@ -200,24 +202,98 @@ export async function collectSearchIntake(
         metadata: { ...metadata, publisher },
         errors,
       });
+      // Relevance gate: the agent records its assessment and only accepted
+      // candidates enter shared processing. Uncertain candidates stay
+      // excluded (no publication, no discovery) until reviewed.
       if (!errors.length) {
-        await enqueueJob(tx, {
-          source: searchSource(query, domains, provider),
+        const assessment = assessRelevance(candidate.headline, query);
+        await upsertReview(tx, {
           runId,
           itemIndex: index,
-          operation: RESOLVE_PUBLICATION,
-          payload: {
-            itemIndex: index,
-            publisher,
-            searchQuery: query,
-            provider,
-            rank: candidate.rank,
-          },
+          decision: assessment.decision,
+          reason: assessment.reason,
+          decidedBy: "agent",
         });
+        if (assessment.decision === "accepted") {
+          await enqueueJob(tx, {
+            source: searchSource(query, domains, provider),
+            runId,
+            itemIndex: index,
+            operation: RESOLVE_PUBLICATION,
+            payload: {
+              itemIndex: index,
+              publisher,
+              searchQuery: query,
+              provider,
+              rank: candidate.rank,
+            },
+          });
+        }
       }
     }
     return { runId, parseError: null, settled: false };
   });
+}
+
+// Operator relevance review: accept routes an excluded candidate into shared
+// processing (idempotent when already resolved); reject keeps it excluded
+// but inspectable via its candidate and decision rows. A rejection cannot
+// retract an already resolved publication.
+export async function reviewSearchCandidate(
+  prisma: PrismaClient,
+  runId: string,
+  itemIndex: number,
+  decision: "accepted" | "rejected",
+  reason: string,
+  fetchArticle: ArticleFetcher = fetchArticleHtml,
+) {
+  if (!reason.trim()) throw new Error("A review reason is required");
+  const run = await findRunOrThrow(prisma, runId);
+  if (run.sourceKind !== "search_query")
+    throw new Error("Only search candidates can be relevance-reviewed");
+  const candidate = await getCandidate(prisma, runId, itemIndex);
+  if (!candidate) throw new Error("Candidate no longer exists");
+  if ((candidate.errors as unknown[]).length)
+    throw new Error("Invalid candidates stay excluded and cannot be reviewed");
+  const metadata = candidate.metadata as {
+    publisher: string;
+    query: string;
+    provider: SearchProvider;
+    rank: number;
+  };
+  await prisma.$transaction(async (tx) => {
+    await upsertReview(tx, {
+      runId,
+      itemIndex,
+      decision,
+      reason: reason.trim(),
+      decidedBy: "operator",
+    });
+    if (decision === "accepted") {
+      await enqueueJob(tx, {
+        source: searchSource(
+          metadata.query,
+          [...searchAllowedDomains],
+          metadata.provider,
+        ),
+        runId,
+        itemIndex,
+        operation: RESOLVE_PUBLICATION,
+        payload: {
+          itemIndex,
+          publisher: metadata.publisher,
+          searchQuery: metadata.query,
+          provider: metadata.provider,
+          rank: metadata.rank,
+        },
+      });
+    }
+  });
+  if (decision === "accepted") {
+    await drainJobs(prisma, `review:${runId}:${itemIndex}`, { runId }, fetchArticle);
+    await finalizeRunIfSettled(prisma, runId, run.error);
+  }
+  return getReview(prisma, runId, itemIndex);
 }
 
 export async function collectSearch(

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  assessRelevance,
   filterSearchResults,
   isAllowedSearchHost,
   isAllowedSearchUrl,
@@ -114,4 +115,19 @@ test("provenance mapping captures query/provider/rank and flags off-domain", () 
   assert.equal(valid?.language, "de");
   assert.deepEqual(invalid?.errors, ["URL outside allowed search domains"]);
   assert.deepEqual(untitled?.errors, ["Missing headline"]);
+});
+
+test("relevance assessment accepts query-term overlap with reasons", () => {
+  const accepted = assessRelevance(
+    "Schule braucht mehr Personal",
+    "Bildung Schule Ausbildung Deutschland",
+  );
+  assert.equal(accepted.decision, "accepted");
+  assert.match(accepted.reason, /schule/);
+  const uncertain = assessRelevance(
+    "Kabinett beschließt Tankrabatt",
+    "Bildung Schule Ausbildung Deutschland",
+  );
+  assert.equal(uncertain.decision, "uncertain");
+  assert.equal(uncertain.reason, "No query term overlap");
 });

@@ -14,14 +14,14 @@ const exaOnlyUrl = "https://www.tagesschau.de/exa-only-100.html";
 const tavilyOnlyUrl = "https://www.deutschlandfunk.de/tavily-only-100.html";
 
 const exaResults: SearchResult[] = [
-  { url: sharedUrl, title: "Shared headline", rank: 1 },
-  { url: exaOnlyUrl, title: "Exa only headline", rank: 2 },
+  { url: sharedUrl, title: "Bildung und Schule im Fokus", rank: 1 },
+  { url: exaOnlyUrl, title: "Schule braucht mehr Lehrkräfte", rank: 2 },
   { url: "https://example.org/off-domain.html", title: "Off domain", rank: 3 },
 ];
 
 const tavilyResults: SearchResult[] = [
-  { url: sharedUrl, title: "Shared headline", rank: 1 },
-  { url: tavilyOnlyUrl, title: "Tavily only headline", rank: 2 },
+  { url: sharedUrl, title: "Bildung und Schule im Fokus", rank: 1 },
+  { url: tavilyOnlyUrl, title: "Ausbildung und Schule im Wandel", rank: 2 },
 ];
 
 const query = "Bildung Schule Ausbildung Deutschland";
@@ -76,7 +76,7 @@ test("search runs persist provenance and converge with RSS on one publication", 
       // publication with three discovery encounters, not three publications.
       const rssXml =
         `<rss><channel><language>de</language>` +
-        `<item><title>Shared headline</title><link>${sharedUrl}</link>` +
+        `<item><title>Bildung und Schule im Fokus</title><link>${sharedUrl}</link>` +
         `<guid>shared-article-100</guid></item></channel></rss>`;
       await collect(prisma, "rss-dlf", rssXml, {
         id: "deutschlandfunk-nachrichten",

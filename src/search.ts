@@ -131,3 +131,32 @@ export function publisherForSearchUrl(raw: string): string | null {
 export function filterSearchResults(results: SearchResult[]): SearchResult[] {
   return results.filter((result) => isAllowedSearchUrl(result.url));
 }
+
+export type RelevanceAssessment = {
+  decision: "accepted" | "uncertain";
+  reason: string;
+};
+
+// ponytail: naive query-term overlap, no stemming or synonyms; upgrade to a
+// relevance model when the trial shows this misroutes real results.
+// Agent relevance assessment: a valid candidate is accepted when its headline
+// shares at least one significant query term, otherwise held as uncertain.
+export function assessRelevance(
+  headline: string,
+  query: string,
+): RelevanceAssessment {
+  const terms = new Set(
+    query
+      .toLowerCase()
+      .split(/[^a-zäöüß]+/u)
+      .filter((term) => term.length > 3),
+  );
+  const lowered = headline.toLowerCase();
+  const matched = [...terms].filter((term) => lowered.includes(term));
+  if (matched.length)
+    return {
+      decision: "accepted",
+      reason: `Matched query terms: ${matched.sort().join(", ")}`,
+    };
+  return { decision: "uncertain", reason: "No query term overlap" };
+}
