@@ -3,6 +3,15 @@ import { readFile } from "node:fs/promises";
 import type { PrismaClient } from "../generated/prisma/client";
 import { parseFeed, type Candidate } from "../feed";
 import {
+  extractArticleText,
+  fetchArticleHtml,
+  type FetchResult,
+} from "../extract";
+import {
+  recordExtractionFailure,
+  storeExtractedText,
+} from "../extract/repository";
+import {
   canonicalArticleUrl,
   normalizeIdentifierValue,
   normalizePublisher,
@@ -14,6 +23,7 @@ import {
   enqueueJob,
   failJob,
   feedSource,
+  requeueStaleClaims,
   type ClaimedJob,
 } from "../jobs";
 import {
@@ -54,6 +64,9 @@ export type FeedResult = {
 };
 
 export const RESOLVE_PUBLICATION = "resolve_publication";
+export const EXTRACT_TEXT = "extract_publication_text";
+
+export type ArticleFetcher = (url: string) => Promise<FetchResult>;
 
 type Intake = {
   runId: string;
@@ -116,7 +129,11 @@ export async function collectIntake(
           runId,
           itemIndex: index,
           operation: RESOLVE_PUBLICATION,
-          payload: { itemIndex: index, publisher: feed.publisher },
+          payload: {
+            itemIndex: index,
+            publisher: feed.publisher,
+            feedId: feed.id,
+          },
         });
       }
     }
@@ -131,13 +148,19 @@ export async function collectIntake(
 export async function processJob(
   prisma: PrismaClient,
   job: ClaimedJob,
+  fetchArticle: ArticleFetcher = fetchArticleHtml,
 ): Promise<void> {
+  if (job.operation === EXTRACT_TEXT) {
+    await processExtractJob(prisma, job, fetchArticle);
+    return;
+  }
   if (job.operation !== RESOLVE_PUBLICATION || job.itemIndex === null)
     throw new Error(`Unknown job operation: ${job.operation}`);
-  const payload = job.payload as { publisher?: unknown };
+  const payload = job.payload as { publisher?: unknown; feedId?: unknown };
   const rawPublisher = payload.publisher;
   if (typeof rawPublisher !== "string")
     throw new Error("Publication job is missing its publisher");
+  const feedId = typeof payload.feedId === "string" ? payload.feedId : null;
   await prisma.$transaction(async (tx) => {
     const candidate = await getCandidate(tx, job.runId, job.itemIndex!);
     if (!candidate) throw new Error("Candidate for job no longer exists");
@@ -200,6 +223,13 @@ export async function processJob(
           await upsertIdentifier(tx, { publisher, kind, value }, publicationId);
         }
         await upsertDiscovery(tx, job.runId, publicationId);
+        await enqueueJob(tx, {
+          source: feedSource(feedId ?? job.runId),
+          runId: job.runId,
+          itemIndex: job.itemIndex!,
+          operation: EXTRACT_TEXT,
+          payload: { publicationId, publisher },
+        });
       }
     }
     await updateCandidateResult(tx, job.runId, job.itemIndex!, {
@@ -209,31 +239,105 @@ export async function processJob(
   });
 }
 
+// One extract pass: fetch the directly linked article, store changed text as
+// a new version, keep the original link on any failure. Permanent failures
+// (permissions, blocked targets, unsupported formats, thin pages) record the
+// fallback and succeed; transient fetch errors throw so the job backs off.
+async function processExtractJob(
+  prisma: PrismaClient,
+  job: ClaimedJob,
+  fetchArticle: ArticleFetcher,
+): Promise<void> {
+  const payload = job.payload as {
+    publicationId?: unknown;
+    publisher?: unknown;
+  };
+  if (
+    typeof payload.publicationId !== "string" ||
+    typeof payload.publisher !== "string"
+  )
+    throw new Error("Extraction job is missing its publication");
+  const { publicationId, publisher } = payload;
+  const publication = await prisma.publication.findUnique({
+    where: { id: publicationId },
+  });
+  if (!publication) throw new Error("Publication for job no longer exists");
+  const fetched = await fetchArticle(publication.originalUrl);
+  if (!fetched.ok) {
+    if (isPermanentFailure(fetched.reason)) {
+      await recordExtractionFailure(prisma, publicationId, fetched.reason);
+      return;
+    }
+    throw new Error(fetched.reason);
+  }
+  const text = extractArticleText(fetched.html);
+  if (!text) {
+    await recordExtractionFailure(
+      prisma,
+      publicationId,
+      "No article text found; kept original link",
+    );
+    return;
+  }
+  await prisma.$transaction(async (tx) => {
+    await storeExtractedText(tx, {
+      publicationId,
+      publisher,
+      finalUrl: fetched.finalUrl,
+      text,
+    });
+  });
+}
+
+function isPermanentFailure(reason: string): boolean {
+  return (
+    reason.includes("not permitted") ||
+    reason.includes("Blocked") ||
+    reason.includes("Unsupported")
+  );
+}
+
 // A worker pass: claim ready jobs one at a time until none remain claimable
 // now. One job's failure is recorded on that job and never stops the rest,
 // so independent sources keep moving while a failing source backs off.
 export async function drainJobs(
   prisma: PrismaClient,
   workerId: string,
-  filter: { runId?: string } = {},
+  filter: { runId?: string; jobId?: string } = {},
+  fetchArticle: ArticleFetcher = fetchArticleHtml,
 ) {
   const outcome = { succeeded: 0, retrying: 0, exhausted: 0 };
   for (;;) {
     const job = await claimNextJob(prisma, workerId, undefined, filter);
     if (!job) return outcome;
     try {
-      await processJob(prisma, job);
+      await processJob(prisma, job, fetchArticle);
       await completeJob(prisma, job, workerId);
       outcome.succeeded++;
     } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Job processing failed";
       const { exhausted } = await failJob(
         prisma,
         job,
         workerId,
         error instanceof Error ? error : new Error("Job processing failed"),
       );
-      if (exhausted) outcome.exhausted++;
-      else outcome.retrying++;
+      if (exhausted) {
+        outcome.exhausted++;
+        // An exhausted extraction still leaves a visible metadata-only
+        // fallback: record the failure on the publication itself.
+        if (job.operation === EXTRACT_TEXT) {
+          const payload = job.payload as { publicationId?: unknown };
+          if (typeof payload.publicationId === "string") {
+            await recordExtractionFailure(
+              prisma,
+              payload.publicationId,
+              message,
+            ).catch(() => {});
+          }
+        }
+      } else outcome.retrying++;
     }
   }
 }
@@ -265,11 +369,40 @@ export async function collect(
   runId: string,
   xml: string,
   feed: Feed = configuredFeed,
+  fetchArticle: ArticleFetcher = fetchArticleHtml,
 ) {
   const intake = await collectIntake(prisma, runId, xml, feed);
   if (intake.settled) return findRunOrThrow(prisma, runId);
-  await drainJobs(prisma, `collect:${runId}`, { runId });
+  await drainJobs(prisma, `collect:${runId}`, { runId }, fetchArticle);
   return finalizeRunIfSettled(prisma, runId, intake.parseError);
+}
+
+// Standalone worker pass without new intake: recover stale claims, drain
+// ready jobs (optionally for one run), and settle finished runs. This is the
+// entry point for out-of-band retries and the future scheduler.
+export async function drainOpenJobs(
+  prisma: PrismaClient,
+  workerId: string,
+  runId?: string,
+  fetchArticle: ArticleFetcher = fetchArticleHtml,
+) {
+  await requeueStaleClaims(prisma);
+  const outcome = await drainJobs(
+    prisma,
+    workerId,
+    runId ? { runId } : {},
+    fetchArticle,
+  );
+  const targets = runId
+    ? [await findRunOrThrow(prisma, runId)]
+    : await prisma.run.findMany({ where: { completedAt: null } });
+  const settled: string[] = [];
+  for (const target of targets) {
+    const before = target.completedAt;
+    const run = await finalizeRunIfSettled(prisma, target.id, target.error);
+    if (!before && run.completedAt) settled.push(run.id);
+  }
+  return { outcome, settled };
 }
 
 export async function collectFixtureRun(prisma: PrismaClient, runId: string) {
@@ -309,6 +442,7 @@ export async function collectAll(
   runPrefix: string,
   fetchXml: (url: string) => Promise<string> = fetchFeedXml,
   feeds: Feed[] = publicNewsFeeds,
+  fetchArticle: ArticleFetcher = fetchArticleHtml,
 ): Promise<FeedResult[]> {
   if (!runPrefix.trim() || runPrefix.length > 100)
     throw new Error("Run prefix must contain 1–100 characters");
@@ -330,7 +464,7 @@ export async function collectAll(
     }
     try {
       const xml = await fetchXml(feed.url);
-      const run = await collect(prisma, runId, xml, feed);
+      const run = await collect(prisma, runId, xml, feed, fetchArticle);
       // collect() never returns a "running" run; error presence marks failure.
       const status = run.error ? "failed" : "completed";
       results.push({

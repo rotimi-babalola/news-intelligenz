@@ -1,0 +1,1 @@
+DROP INDEX "publication_versions_publication_id_text_hash_key";

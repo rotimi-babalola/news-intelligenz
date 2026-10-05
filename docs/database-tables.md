@@ -4,7 +4,8 @@ The schema is owned by Prisma: `prisma/schema.prisma` is the source of truth,
 `prisma/migrations` holds the versioned history, and the typed client is
 generated into `src/generated/prisma`. Model fields use camelCase; `@@map` and
 `@map` map them to snake_case tables and columns in PostgreSQL. All dates are
-`timestamptz`. No article text or feed descriptions are stored anywhere.
+`timestamptz`. Feed excerpts (RSS descriptions) are never stored; retained
+article text always comes from fetching the directly linked resource.
 
 One collection run writes its intake (run, candidates, processing jobs)
 inside a single transaction guarded by the session-level advisory lock
@@ -53,7 +54,8 @@ publications) reject the candidate instead of merging.
 | `originalUrl`         | `original_url`         | text                  | no   | —               | Exact source link                                                   |
 | `publishedAt`         | `published_at`         | timestamptz           | yes  | —               | Null when the feed gives no usable date                             |
 | `language`            | `language`             | `Language`            | no   | —               | `de` or `en`; BCP-47 tags normalize to the primary subtag           |
-| `contentAvailability` | `content_availability` | `ContentAvailability` | no   | `metadata_only` | Always `metadata_only` in this slice; no text is retained           |
+| `contentAvailability` | `content_availability` | `ContentAvailability` | no   | `metadata_only` | `full_text` once an extraction stores a version                     |
+| `extractionError`     | `extraction_error`     | text                  | yes  | —               | Latest extraction failure; null after a successful extraction       |
 | `firstDiscoveredAt`   | `first_discovered_at`  | timestamptz           | no   | `now()`         | Set on creation only                                                |
 | `lastDiscoveredAt`    | `last_discovered_at`   | timestamptz           | no   | `now()`         | Bumped on every rediscovery                                         |
 
@@ -68,6 +70,23 @@ The identity evidence for publications. The composite primary key
 | `kind`          | `kind`           | `IdentifierKind`             | no   | —       | `url` or `guid`                                       |
 | `value`         | `value`          | text, PK                     | no   | —       | Exact URL or feed `guid`                              |
 | `publicationId` | `publication_id` | uuid, FK → `publications.id` | no   | —       |                                                       |
+
+## publication_versions
+
+One row per successive change in extracted article text under a publication.
+Text matching the latest version creates no row; a later return to earlier text
+does create a new version. The redirect-resolved
+final URL is recorded per version and learned as a `url` identifier.
+
+| Field           | Column           | Type                         | Null | Default  | Notes                                      |
+| --------------- | ---------------- | ---------------------------- | ---- | -------- | ------------------------------------------ |
+| `id`            | `id`             | uuid, PK                     | no   | `uuid()` |                                            |
+| `publicationId` | `publication_id` | uuid, FK → `publications.id` | no   | —        |                                            |
+| `versionNo`     | `version_no`     | integer                      | no   | —        | 1-based, unique per publication            |
+| `text`          | `text`           | text                         | no   | —        | Fetched article text, never a feed excerpt |
+| `textHash`      | `text_hash`      | text                         | no   | —        | SHA-256 of `text`                          |
+| `finalUrl`      | `final_url`      | text                         | no   | —        | Redirect-resolved article URL              |
+| `fetchedAt`     | `fetched_at`     | timestamptz                  | no   | `now()`  |                                            |
 
 ## candidates
 
@@ -141,7 +160,7 @@ and error. Survives worker restarts alongside the job row.
 
 ## What is deliberately absent
 
-There is no table for article text, feed descriptions, users, or
+There is no table for feed descriptions, users, or
 relevance decisions in this slice — those belong to later tickets. Publication
 identity uses exact identifiers only; there is no headline matching, redirect
 resolution, or cross-publisher merging.

@@ -68,7 +68,16 @@ test("collectAll shares identity across feeds and isolates failures", async () =
         if (fetchUrl === "https://example.org/bad.rss") return malformed;
         throw new Error("boom: connection refused");
       };
-      const results = await collectAll(prisma, "it", fetchXml, feeds);
+      const results = await collectAll(
+        prisma,
+        "it",
+        fetchXml,
+        feeds,
+        async () => ({
+          ok: false as const,
+          reason: "Unsupported format: test stub holds no article",
+        }),
+      );
       assert.deepEqual(
         results.map((r) => ({
           feedId: r.feedId,

@@ -16,3 +16,5 @@ export const feedUrlSchema = z
   .optional();
 
 export const jobIdSchema = z.string().uuid();
+
+export const publicationIdSchema = z.string().uuid();

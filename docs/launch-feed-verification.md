@@ -33,22 +33,23 @@ consent from Deutschlandradio, with no explicit metadata exception. The
 [tagesschau RSS directory](https://www.tagesschau.de/infoservices/rssfeeds)
 (rechecked 22 September 2026, HTTP 200) permits use of content only for
 private, non-commercial purposes and forbids publication except for offers
-explicitly under a CC licence. Article text retention is therefore **not
-permitted** on the current terms for either publisher; only feed metadata
-(headline, published timestamp, exact original URL, and the feed's `guid`) is
-persisted, matching this project's metadata-only record. The definitive
-distinction:
+explicitly under a CC licence. On 5 October 2026, the operator confirmed that
+this project is private and non-commercial and approved local extraction and
+retention of fetched article text from the nine configured news-feed hosts.
+This records the project's operating decision, without claiming a right to
+republish that text. The current behavior is:
 
-- Live metadata persistence is **enabled** for all nine public-news feeds,
-  retaining only headline, dates, URL and `guid`.
-- Full-text retention remains **disabled** for all nine feeds, pending
-  resolution of the consent and non-commercial-use restrictions above.
+- RSS intake persists only headline, dates, URL and `guid` for all nine feeds;
+  it does not retain feed excerpts or encoded content.
+- Fetched article text is stored as versions for links on the nine configured
+  news-feed hosts when extraction succeeds. Redirects to other hosts and
+  unsupported formats retain metadata and the original link only.
 - All Bundestag RSS endpoints remain **disabled** (see the
   [feed catalog](phase-1-feed-catalog.md)); the synthetic Bundestag fixture
   stays a deterministic parser and persistence test, as does the synthetic
   tagesschau RDF fixture (`fixtures/tagesschau-rdf.xml`).
 
-No environment flag bypasses the full-text restriction. The admin page labels
+Custom feed hosts are not added to the article-text allowlist. The admin page labels
 fixture inputs as "Synthetic Bundestag fixture" and live inputs by feed. Live
 feed inputs change between snapshots, so reusing a run ID against a changed
 feed is rejected as a different input; identical-input replay is demonstrated

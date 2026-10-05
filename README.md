@@ -4,7 +4,7 @@ News Intelligenz aims to help immigrants living in Germany understand the countr
 
 ## Project status
 
-Phase 1 design is confirmed and its implementation is tracked in [GitHub issues labelled Phase 1](https://github.com/rotimi-babalola/news-intelligenz/issues?q=is%3Aissue%20label%3A%22Phase%201%22). The first local slice collects the nine public-news RSS feeds (tagesschau all updates plus eight Deutschlandfunk feeds, metadata only) and a synthetic fixture into PostgreSQL and provides a read-only inspection page. Full-text retention remains disabled pending the feeds' usage terms; see the [feed verification report](docs/launch-feed-verification.md).
+Phase 1 design is confirmed and its implementation is tracked in [GitHub issues labelled Phase 1](https://github.com/rotimi-babalola/news-intelligenz/issues?q=is%3Aissue%20label%3A%22Phase%201%22). The local app collects nine public-news RSS feeds (tagesschau all updates plus eight Deutschlandfunk feeds) and a synthetic fixture into PostgreSQL. For this private, non-commercial project, it also fetches and stores article text from the configured news hosts when extraction succeeds. Other hosts retain metadata and links only; see the [feed verification report](docs/launch-feed-verification.md).
 
 The confirmed [DIP architecture amendment](docs/dip-design-notes.md) replaces Bundestag RSS with parliamentary proceedings and steps. The planned behavior below reflects the amendment; DIP is not implemented yet.
 
@@ -52,8 +52,8 @@ HTTP 400 with the details, while collection failures surface as HTTP 500.
 Each run appears alongside the others and the
 page labels each input. Select a run to inspect its
 candidates, validation errors and discovery history. The page shows up to 100
-records per section; all records remain in PostgreSQL. No article text or feed
-descriptions are retained. The app is bound to `127.0.0.1` and refuses
+records per section; all records remain in PostgreSQL. Extracted article text is
+versioned; feed descriptions are never retained. The app is bound to `127.0.0.1` and refuses
 non-local hosts; deployed
 authentication and hosting belong to later tickets.
 
@@ -78,8 +78,8 @@ a live feed that changed between snapshots is a different input, so use a fresh
 run ID per live collect. Candidate counts count feed entries; discovery counts
 count distinct publications per feed/run. Publication identity uses
 publisher-scoped GUIDs or exact original URLs, without headline matching.
-Conflicting identity evidence rejects the candidate for inspection. Redirect
-resolution and extraction are later work.
+Conflicting identity evidence rejects the candidate for inspection. Permitted
+article text is fetched and versioned, and resolved URLs become identity evidence.
 
 Stop the admin with Ctrl-C. `docker compose down` stops PostgreSQL while keeping
 its named volume; `docker compose up -d --wait` restores access to the saved data.
@@ -131,7 +131,8 @@ All valid items from configured feeds are eligible without relevance filtering. 
 - Measure source contributions, extraction outcomes, search relevance and resource usage. Explore free tiers first and pause affected providers when allowances run out.
 
 The nine launch feeds' metadata formats are verified and live metadata collection is
-enabled; full-text retention remains unresolved pending the feeds' usage terms.
+enabled; private, non-commercial full-text retention is enabled for the configured
+news hosts. Other hosts remain metadata-only.
 Node.js 24 and Prisma with PostgreSQL are selected for the local runtime.
 Search provider and hosting selections remain future work.
 DIP authentication, permissions, limits, and live synchronization behavior require verification before enabling collection.

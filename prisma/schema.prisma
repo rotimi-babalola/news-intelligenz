@@ -69,9 +69,11 @@ model Publication {
   publishedAt        DateTime?           @map("published_at") @db.Timestamptz(6)
   language           Language
   contentAvailability ContentAvailability @map("content_availability") @default(metadata_only)
+  extractionError String? @map("extraction_error") @db.Text
   firstDiscoveredAt  DateTime            @map("first_discovered_at") @default(now()) @db.Timestamptz(6)
   lastDiscoveredAt   DateTime            @map("last_discovered_at") @default(now()) @db.Timestamptz(6)
   identifiers        PublicationIdentifier[]
+  versions           PublicationVersion[]
   candidates         Candidate[]
   discoveries        Discovery[]
 
@@ -87,6 +89,21 @@ model PublicationIdentifier {
 
   @@id([publisher, kind, value])
   @@map("publication_identifiers")
+}
+
+model PublicationVersion {
+  id            String      @id @default(uuid()) @db.Uuid
+  publicationId String      @map("publication_id") @db.Uuid
+  publication   Publication @relation(fields: [publicationId], references: [id])
+  versionNo     Int         @map("version_no")
+  // Always fetched article text; feed excerpts are never stored here.
+  text          String      @db.Text
+  textHash      String      @map("text_hash") @db.Text
+  finalUrl      String      @map("final_url") @db.Text
+  fetchedAt     DateTime    @map("fetched_at") @default(now()) @db.Timestamptz(6)
+
+  @@unique([publicationId, versionNo])
+  @@map("publication_versions")
 }
 
 model Candidate {
