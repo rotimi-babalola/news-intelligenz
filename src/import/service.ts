@@ -24,6 +24,7 @@ import {
   failJob,
   feedSource,
   requeueStaleClaims,
+  searchSource,
   type ClaimedJob,
 } from "../jobs";
 import {
@@ -40,6 +41,12 @@ import {
   listCandidatesForTally,
   updateCandidateResult,
 } from "./candidate.repository";
+import {
+  searchAllowedDomains,
+  toSearchCandidates,
+  type SearchProvider,
+  type SearchResult,
+} from "../search";
 import { upsertDiscovery } from "./discovery.repository";
 import {
   findPublicationIdsByKeys,
@@ -139,6 +146,98 @@ export async function collectIntake(
     }
     return { runId, parseError, settled: false };
   });
+}
+
+// Search discovery handoff: same durable shape as feed intake (run,
+// candidates, one resolve job per allowlisted candidate) with
+// query/provider/rank provenance on the run scope, candidate metadata and
+// job payload. Identity resolution reuses processJob unchanged: the
+// RSS-consistent publisher label lets search discoveries converge onto
+// feed-discovered publications instead of forking duplicates.
+export async function collectSearchIntake(
+  prisma: PrismaClient,
+  runId: string,
+  query: string,
+  provider: SearchProvider,
+  results: SearchResult[],
+): Promise<Intake> {
+  if (!runId.trim() || runId.length > 200)
+    throw new Error("Run ID must contain 1–200 characters");
+  if (!query.trim()) throw new Error("Search query must not be empty");
+  const candidates = toSearchCandidates(results, query, provider);
+  const hash = createHash("sha256")
+    .update(JSON.stringify({ query, provider, urls: results.map((r) => r.url) }))
+    .digest("hex");
+  const domains = [...searchAllowedDomains];
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+    const previous = await findRun(tx, runId);
+    if (previous) {
+      if (previous.inputHash !== hash || previous.feedId !== query)
+        throw new Error(
+          "Run ID already belongs to a different input; use a new run ID",
+        );
+      return {
+        runId: previous.id,
+        parseError: previous.error,
+        settled: previous.completedAt !== null,
+      };
+    }
+    await createRun(tx, {
+      id: runId,
+      feedId: query,
+      sourceKind: "search_query",
+      sourceScope: { domains, provider, query },
+      inputHash: hash,
+      status: "running",
+      error: null,
+    });
+    for (const [index, candidate] of candidates.entries()) {
+      const { errors, publisher, ...metadata } = candidate;
+      await createCandidate(tx, {
+        runId,
+        itemIndex: index,
+        metadata: { ...metadata, publisher },
+        errors,
+      });
+      if (!errors.length) {
+        await enqueueJob(tx, {
+          source: searchSource(query, domains, provider),
+          runId,
+          itemIndex: index,
+          operation: RESOLVE_PUBLICATION,
+          payload: {
+            itemIndex: index,
+            publisher,
+            searchQuery: query,
+            provider,
+            rank: candidate.rank,
+          },
+        });
+      }
+    }
+    return { runId, parseError: null, settled: false };
+  });
+}
+
+export async function collectSearch(
+  prisma: PrismaClient,
+  runId: string,
+  query: string,
+  provider: SearchProvider,
+  results: SearchResult[],
+  fetchArticle: ArticleFetcher = fetchArticleHtml,
+) {
+  const intake = await collectSearchIntake(
+    prisma,
+    runId,
+    query,
+    provider,
+    results,
+  );
+  if (intake.settled) return findRunOrThrow(prisma, runId);
+  await drainJobs(prisma, `collect:${runId}`, { runId }, fetchArticle);
+  return finalizeRunIfSettled(prisma, runId, intake.parseError);
 }
 
 // Commit boundary: one candidate's publication, identifiers, discovery

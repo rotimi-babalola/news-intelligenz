@@ -44,11 +44,87 @@ export function isAllowedSearchUrl(raw: string): boolean {
   return isAllowedSearchHost(url.hostname);
 }
 
+export type SearchProvider = "exa" | "tavily";
+
 export type SearchResult = {
   url: string;
   title: string;
   rank: number;
 };
+
+export type SearchCandidate = {
+  headline: string;
+  originalUrl: string;
+  sourceId: string;
+  language: string;
+  publishedAt: string | null;
+  sourceDate: string;
+  query: string;
+  provider: SearchProvider;
+  rank: number;
+  publisher: string;
+  errors: string[];
+};
+
+// Provenance mapping for one provider response: allowlist enforcement plus
+// query/provider/rank capture. Shape matches the feed Candidate fields that
+// processJob reads, with search provenance alongside.
+export function toSearchCandidates(
+  results: SearchResult[],
+  query: string,
+  provider: SearchProvider,
+): SearchCandidate[] {
+  return results.map((result) => {
+    const errors: string[] = [];
+    const headline = result.title;
+    const originalUrl = result.url.trim();
+    if (!headline.trim()) errors.push("Missing headline");
+    if (headline.length > 2000) errors.push("Headline exceeds 2000 characters");
+    const publisher = publisherForSearchUrl(originalUrl);
+    if (!isAllowedSearchUrl(originalUrl))
+      errors.push("URL outside allowed search domains");
+    else if (!publisher) errors.push("Invalid HTTP(S) original URL");
+    return {
+      headline,
+      originalUrl,
+      sourceId: "",
+      language: "de",
+      publishedAt: null,
+      sourceDate: "",
+      query,
+      provider,
+      rank: result.rank,
+      publisher: publisher ?? "",
+      errors,
+    };
+  });
+}
+
+// RSS-consistent publisher labels so search discoveries resolve onto the
+// same publisher-scoped identity as feed discoveries instead of forking on
+// hostname. Unknown hosts fall back to the raw hostname.
+export function publisherForSearchHost(host: string): string {
+  const normalized = host.trim().toLowerCase();
+  if (
+    normalized === "tagesschau.de" ||
+    normalized.endsWith(".tagesschau.de")
+  )
+    return "tagesschau (ARD)";
+  if (
+    normalized === "deutschlandfunk.de" ||
+    normalized.endsWith(".deutschlandfunk.de")
+  )
+    return "Deutschlandfunk";
+  return normalized;
+}
+
+export function publisherForSearchUrl(raw: string): string | null {
+  try {
+    return publisherForSearchHost(new URL(raw.trim()).hostname);
+  } catch {
+    return null;
+  }
+}
 
 // Allowlist applies to both provider results and redirect-resolved
 // destinations, so callers pass the final URL through the same check.

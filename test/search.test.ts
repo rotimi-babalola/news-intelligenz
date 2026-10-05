@@ -4,8 +4,10 @@ import {
   filterSearchResults,
   isAllowedSearchHost,
   isAllowedSearchUrl,
+  publisherForSearchHost,
   searchAllowedDomains,
   searchQueries,
+  toSearchCandidates,
 } from "../src/search.js";
 
 test("six fixed German queries cover the required subjects", () => {
@@ -78,4 +80,38 @@ test("filter keeps only allowlisted results including resolved destinations", ()
       "https://www.deutschlandfunk.de/politik-100.html",
     ],
   );
+});
+
+test("search hosts map to RSS publisher labels for shared identity", () => {
+  assert.equal(publisherForSearchHost("www.tagesschau.de"), "tagesschau (ARD)");
+  assert.equal(publisherForSearchHost("tagesschau.de"), "tagesschau (ARD)");
+  assert.equal(
+    publisherForSearchHost("www.deutschlandfunk.de"),
+    "Deutschlandfunk",
+  );
+  assert.equal(publisherForSearchHost("example.org"), "example.org");
+});
+
+test("provenance mapping captures query/provider/rank and flags off-domain", () => {
+  const [valid, invalid, untitled] = toSearchCandidates(
+    [
+      {
+        url: "https://www.deutschlandfunk.de/politik-100.html",
+        title: "Headline",
+        rank: 2,
+      },
+      { url: "https://example.org/c.html", title: "Other", rank: 1 },
+      { url: "https://www.tagesschau.de/a.html", title: "  ", rank: 3 },
+    ],
+    "Bildung Schule Ausbildung Deutschland",
+    "exa",
+  );
+  assert.deepEqual(valid?.errors, []);
+  assert.equal(valid?.query, "Bildung Schule Ausbildung Deutschland");
+  assert.equal(valid?.provider, "exa");
+  assert.equal(valid?.rank, 2);
+  assert.equal(valid?.publisher, "Deutschlandfunk");
+  assert.equal(valid?.language, "de");
+  assert.deepEqual(invalid?.errors, ["URL outside allowed search domains"]);
+  assert.deepEqual(untitled?.errors, ["Missing headline"]);
 });
