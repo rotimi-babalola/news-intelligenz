@@ -1,12 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import type { Prisma, PrismaClient } from "../generated/prisma/client";
+import type { PrismaClient } from "../generated/prisma/client";
 import { parseFeed, type Candidate } from "../feed";
-import {
-  extractArticleText,
-  fetchArticleHtml,
-  type FetchResult,
-} from "../extract";
+import { extractArticleText, fetchArticleHtml } from "../extract";
 import {
   recordExtractionFailure,
   storeExtractedText,
@@ -31,7 +27,6 @@ import {
 } from "../jobs";
 import {
   configuredFeed,
-  customFeed,
   fetchFeedXml,
   fixtureFeed,
   publicNewsFeeds,
@@ -50,7 +45,7 @@ import {
   type SearchProvider,
   type SearchResult,
 } from "../search";
-import { fetchProviderResults, type ProviderFetch } from "../search-providers";
+import { fetchProviderResults } from "../search-providers";
 import { upsertDiscovery } from "./discovery.repository";
 import { getReview, upsertReview } from "./relevance.repository";
 import {
@@ -65,26 +60,31 @@ import {
   findRun,
   findRunOrThrow,
 } from "./run.repository";
+import {
+  countProviderCallsSince,
+  isPermanentFailure,
+  monthStartUtc,
+  providerBudget,
+  recordFeedFailure,
+  summarizeFeed,
+} from "./util";
+import type {
+  ArticleFetcher,
+  FeedResult,
+  Intake,
+  SearchCollectionOptions,
+  SearchCollectionResult,
+} from "./types";
 
-export type FeedResult = {
-  feedId: string;
-  runId: string;
-  status: "completed" | "failed";
-  valid: number;
-  invalid: number;
-  error?: string;
-};
+export type {
+  ArticleFetcher,
+  FeedResult,
+  SearchCollectionOptions,
+  SearchCollectionResult,
+} from "./types";
 
 export const RESOLVE_PUBLICATION = "resolve_publication";
 export const EXTRACT_TEXT = "extract_publication_text";
-
-export type ArticleFetcher = (url: string) => Promise<FetchResult>;
-
-type Intake = {
-  runId: string;
-  parseError: string | null;
-  settled: boolean;
-};
 
 // Durable discovery handoff: the run, its candidates and one processing job
 // per parse-valid candidate commit in a single transaction. Publication,
@@ -322,64 +322,6 @@ export async function reviewSearchCandidate(
   }
   return getReview(prisma, runId, itemIndex);
 }
-
-export function providerApiKey(provider: SearchProvider): string {
-  return (
-    process.env[provider === "exa" ? "EXA_API_KEY" : "TAVILY_API_KEY"] ?? ""
-  );
-}
-
-function providerBudget(provider: SearchProvider, override?: number): number {
-  if (override !== undefined) return override;
-  const raw =
-    process.env[
-      provider === "exa"
-        ? "SEARCH_EXA_MONTHLY_CALL_BUDGET"
-        : "SEARCH_TAVILY_MONTHLY_CALL_BUDGET"
-    ];
-  const parsed = raw ? Number(raw) : NaN;
-  // Default 186 covers six daily queries for a 31-day month.
-  return Number.isFinite(parsed) && (parsed as number) >= 0
-    ? Math.floor(parsed as number)
-    : 186;
-}
-
-export function monthStartUtc(now: Date): Date {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-}
-
-// Count reserved calls, including failed requests that may have spent allowance.
-export async function countProviderCallsSince(
-  prisma: PrismaClient | Prisma.TransactionClient,
-  provider: SearchProvider,
-  since: Date,
-) {
-  return prisma.searchProviderCall.count({
-    where: {
-      startedAt: { gte: since },
-      provider,
-    },
-  });
-}
-
-export type SearchCollectionOptions = {
-  apiKey: string;
-  monthlyCallBudget?: number;
-  limit?: number;
-  now?: Date;
-  fetchFn?: ProviderFetch;
-  fetchArticle?: ArticleFetcher;
-};
-
-export type SearchCollectionResult =
-  | {
-      status: "completed";
-      runId: string;
-      valid: number;
-      invalid: number;
-      usage: { calls: number; costDollars?: number };
-    }
-  | { status: "paused"; runId: string; reason: string };
 
 // Live search collection with budget enforcement: an exhausted provider is
 // paused with a visible reason while RSS and DIP collection continue
@@ -643,14 +585,6 @@ async function processExtractJob(
   });
 }
 
-function isPermanentFailure(reason: string): boolean {
-  return (
-    reason.includes("not permitted") ||
-    reason.includes("Blocked") ||
-    reason.includes("Unsupported")
-  );
-}
-
 // A worker pass: claim ready jobs one at a time until none remain claimable
 // now. One job's failure is recorded on that job and never stops the rest,
 // so independent sources keep moving while a failing source backs off.
@@ -764,33 +698,6 @@ export async function collectFixtureRun(prisma: PrismaClient, runId: string) {
   return collect(prisma, runId, xml, fixtureFeed);
 }
 
-async function recordFeedFailure(
-  prisma: PrismaClient,
-  runId: string,
-  feed: Feed,
-  message: string,
-) {
-  const inputHash = createHash("sha256")
-    .update(`fetch-failure:${feed.id}:${feed.url}`)
-    .digest("hex");
-  return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
-    const previous = await findRun(tx, runId);
-    if (previous) return previous;
-    return createRun(tx, {
-      id: runId,
-      feedId: feed.id,
-      sourceKind: "news_feed",
-      inputHash,
-      status: "failed",
-      completedAt: new Date(),
-      validCount: 0,
-      invalidCount: 0,
-      error: message,
-    });
-  });
-}
-
 export async function collectAll(
   prisma: PrismaClient,
   runPrefix: string,
@@ -848,22 +755,6 @@ export async function collectAll(
     }
   }
   return results;
-}
-
-export function summarizeFeed(feed: Feed, candidates: Candidate[], limit = 3) {
-  const valid = candidates.filter((c) => !c.errors.length).length;
-  return {
-    feed: feed.id,
-    publisher: feed.publisher,
-    url: feed.url,
-    entries: candidates.length,
-    valid,
-    invalid: candidates.length - valid,
-    languages: [...new Set(candidates.map((c) => c.language))],
-    firstHeadlines: candidates
-      .slice(0, limit)
-      .map((c) => ({ headline: c.headline, url: c.originalUrl })),
-  };
 }
 
 export async function verifyFeed(
