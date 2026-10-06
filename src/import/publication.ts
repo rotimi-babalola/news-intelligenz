@@ -5,27 +5,14 @@ import {
   normalizeIdentifierValue,
   normalizePublisher,
 } from "../identity";
-import { enqueueJob, type SourceRef } from "../jobs";
+import { enqueueJob } from "../jobs";
+import type {
+  PublicationResolution,
+  PublicationResolutionInput,
+} from "./types";
 
 export const RESOLVE_PUBLICATION = "resolve_publication";
 export const EXTRACT_TEXT = "extract_publication_text";
-
-export type PublicationResolutionInput = {
-  runId: string;
-  itemIndex: number;
-  headline: string;
-  originalUrl: string;
-  sourceId: string;
-  language: string;
-  publishedAt: string | null;
-  rawPublisher: string;
-  source: SourceRef;
-};
-
-export type PublicationResolution = {
-  publicationId: string | null;
-  errors: string[];
-};
 
 // Single seam for publication identity: publisher-scoped URL/guid matching,
 // publication + identifier + discovery writes, and extraction handoff share
