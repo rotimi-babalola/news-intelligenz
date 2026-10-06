@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "../generated/prisma/client";
 import { fetchArticleHtml } from "../extract";
 import {
   drainJobs,
@@ -106,6 +107,8 @@ export async function reextractPublication(
         dedupeKey: `${dedupeKey(run.id, candidate?.itemIndex ?? null, EXTRACT_TEXT)}:manual:${jobId}`,
         sourceKind: run.sourceKind,
         sourceKey: run.feedId,
+        sourceScope: (run.sourceScope ?? undefined) as
+          Prisma.InputJsonValue | undefined,
         runId: run.id,
         itemIndex: candidate?.itemIndex ?? null,
         operation: EXTRACT_TEXT,

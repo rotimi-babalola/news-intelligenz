@@ -104,6 +104,8 @@ test("interrupted workers resume without duplicating committed work", async () =
         id: stored.id,
         dedupeKey: stored.dedupeKey,
         sourceKind: stored.sourceKind,
+        sourceKey: stored.sourceKey,
+        sourceScope: stored.sourceScope,
         runId: stored.runId,
         itemIndex: stored.itemIndex,
         operation: stored.operation,

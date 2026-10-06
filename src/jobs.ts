@@ -126,6 +126,8 @@ export type ClaimedJob = {
   id: string;
   dedupeKey: string;
   sourceKind: SourceKind;
+  sourceKey: string;
+  sourceScope: unknown;
   runId: string;
   itemIndex: number | null;
   operation: string;
@@ -172,7 +174,8 @@ export async function claimNextJob(
       LIMIT 1
       FOR UPDATE SKIP LOCKED
     )
-    RETURNING id, dedupe_key AS "dedupeKey", source_kind AS "sourceKind", run_id AS "runId",
+    RETURNING id, dedupe_key AS "dedupeKey", source_kind AS "sourceKind", source_key AS "sourceKey",
+      source_scope AS "sourceScope", run_id AS "runId",
       item_index AS "itemIndex", operation, payload, attempts, max_attempts AS "maxAttempts"`,
     ...params,
   )) as ClaimedJob[];
