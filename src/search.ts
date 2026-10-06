@@ -155,7 +155,9 @@ export function assessRelevance(
       .filter((term) => term.length > 3),
   );
   const lowered = headline.toLowerCase();
-  const matched = [...terms].filter((term) => lowered.includes(term));
+  const matched = [...terms].filter(
+    (term) => term !== "deutschland" && lowered.includes(term),
+  );
   if (matched.length)
     return {
       decision: "accepted",

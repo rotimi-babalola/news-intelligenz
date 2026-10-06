@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import type { PrismaClient } from "../generated/prisma/client";
+import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { parseFeed, type Candidate } from "../feed";
 import {
   extractArticleText,
@@ -20,10 +20,12 @@ import {
   claimNextJob,
   completeJob,
   countOpenJobs,
+  dedupeKey,
   enqueueJob,
   failJob,
   feedSource,
   requeueStaleClaims,
+  retryExhausted,
   searchSource,
   type ClaimedJob,
 } from "../jobs";
@@ -265,6 +267,21 @@ export async function reviewSearchCandidate(
     rank: number;
   };
   await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+    const current = await getCandidate(tx, runId, itemIndex);
+    if (decision === "rejected") {
+      if (current && !current.publicationId) {
+        const job = await tx.processingJob.findUnique({
+          where: {
+            dedupeKey: dedupeKey(runId, itemIndex, RESOLVE_PUBLICATION),
+          },
+        });
+        if (job && ["pending", "claimed", "retrying"].includes(job.status))
+          throw new Error(
+            "Cannot reject while publication resolution is pending",
+          );
+      }
+    }
     await upsertReview(tx, {
       runId,
       itemIndex,
@@ -273,7 +290,7 @@ export async function reviewSearchCandidate(
       decidedBy: "operator",
     });
     if (decision === "accepted") {
-      await enqueueJob(tx, {
+      const job = await enqueueJob(tx, {
         source: searchSource(
           metadata.query,
           [...searchAllowedDomains],
@@ -290,6 +307,8 @@ export async function reviewSearchCandidate(
           rank: metadata.rank,
         },
       });
+      if (!current?.publicationId && job.status === "exhausted")
+        await retryExhausted(tx, job.id);
     }
   });
   if (decision === "accepted") {
@@ -329,19 +348,16 @@ export function monthStartUtc(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 }
 
-// Usage measure for the free allowance: one provider Search call per run, so
-// counting this month's search runs per provider is the spend meter. No
-// payment method is attached; the collector stops itself before an overage.
+// Count reserved calls, including failed requests that may have spent allowance.
 export async function countProviderCallsSince(
-  prisma: PrismaClient,
+  prisma: PrismaClient | Prisma.TransactionClient,
   provider: SearchProvider,
   since: Date,
 ) {
-  return prisma.run.count({
+  return prisma.searchProviderCall.count({
     where: {
-      sourceKind: "search_query",
       startedAt: { gte: since },
-      sourceScope: { path: ["provider"], equals: provider },
+      provider,
     },
   });
 }
@@ -378,12 +394,53 @@ export async function collectSearchQuery(
 ): Promise<SearchCollectionResult> {
   const now = options.now ?? new Date();
   const budget = providerBudget(provider, options.monthlyCallBudget);
-  const used = await countProviderCallsSince(
-    prisma,
-    provider,
-    monthStartUtc(now),
-  );
-  if (used >= budget)
+  const previous = await findRun(prisma, runId);
+  if (previous) {
+    if (
+      previous.sourceKind !== "search_query" ||
+      previous.feedId !== query ||
+      (previous.sourceScope as { provider?: string } | null)?.provider !==
+        provider
+    )
+      throw new Error("Run ID already belongs to a different input");
+    if (!previous.completedAt) {
+      await drainJobs(
+        prisma,
+        `collect:${runId}`,
+        { runId },
+        options.fetchArticle,
+      );
+    }
+    const run = previous.completedAt
+      ? previous
+      : await finalizeRunIfSettled(prisma, runId, previous.error);
+    return {
+      status: "completed",
+      runId,
+      valid: run.validCount,
+      invalid: run.invalidCount,
+      usage: { calls: 0 },
+    };
+  }
+  if (!options.apiKey.trim()) throw new Error(`${provider} API key is missing`);
+  const used = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135422, hashtext(${provider}))`;
+    if (await tx.searchProviderCall.findUnique({ where: { runId } }))
+      throw new Error(
+        "Provider call already attempted for this run ID; use a new run ID",
+      );
+    const count = await countProviderCallsSince(
+      tx,
+      provider,
+      monthStartUtc(now),
+    );
+    if (count >= budget) return count;
+    await tx.searchProviderCall.create({
+      data: { runId, provider, startedAt: now },
+    });
+    return null;
+  });
+  if (used !== null)
     return {
       status: "paused",
       runId,
@@ -456,6 +513,11 @@ export async function processJob(
   await prisma.$transaction(async (tx) => {
     const candidate = await getCandidate(tx, job.runId, job.itemIndex!);
     if (!candidate) throw new Error("Candidate for job no longer exists");
+    if (job.sourceKind === "search_query") {
+      const review = await getReview(tx, job.runId, job.itemIndex!);
+      if (review?.decision !== "accepted")
+        throw new Error("Search candidate is not accepted for publication");
+    }
     const errors = [...(candidate.errors as string[])];
     const metadata = candidate.metadata as {
       headline: string;

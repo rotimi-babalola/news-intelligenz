@@ -125,6 +125,7 @@ function qualifiedTable(table: string): string {
 export type ClaimedJob = {
   id: string;
   dedupeKey: string;
+  sourceKind: SourceKind;
   runId: string;
   itemIndex: number | null;
   operation: string;
@@ -171,7 +172,7 @@ export async function claimNextJob(
       LIMIT 1
       FOR UPDATE SKIP LOCKED
     )
-    RETURNING id, dedupe_key AS "dedupeKey", run_id AS "runId",
+    RETURNING id, dedupe_key AS "dedupeKey", source_kind AS "sourceKind", run_id AS "runId",
       item_index AS "itemIndex", operation, payload, attempts, max_attempts AS "maxAttempts"`,
     ...params,
   )) as ClaimedJob[];
@@ -252,7 +253,10 @@ export async function requeueStaleClaims(prisma: PrismaClient) {
   });
 }
 
-export async function retryExhausted(prisma: PrismaClient, jobId: string) {
+export async function retryExhausted(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  jobId: string,
+) {
   const job = await prisma.processingJob.findUniqueOrThrow({
     where: { id: jobId, status: "exhausted" },
   });

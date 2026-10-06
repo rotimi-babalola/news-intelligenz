@@ -4,7 +4,13 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { test } from "node:test";
 import pg from "pg";
-import { collectSearch, reviewSearchCandidate } from "../src/import/service.js";
+import {
+  collectSearch,
+  collectSearchIntake,
+  drainJobs,
+  reviewSearchCandidate,
+} from "../src/import/service.js";
+import { retryExhausted } from "../src/jobs.js";
 import type { SearchResult } from "../src/search.js";
 
 const root = process.cwd();
@@ -140,6 +146,78 @@ test("agent accepts matching headlines; uncertain stays out until reviewed", asy
           "reason",
           stubFetchArticle,
         ),
+      );
+
+      await collectSearchIntake(prisma, "search-review-pending", query, "exa", [
+        results[0]!,
+      ]);
+      await assert.rejects(
+        reviewSearchCandidate(
+          prisma,
+          "search-review-pending",
+          0,
+          "rejected",
+          "Changed decision",
+          stubFetchArticle,
+        ),
+        /resolution is pending/,
+      );
+
+      await collectSearchIntake(prisma, "search-review-retry", query, "exa", [
+        results[0]!,
+      ]);
+      const retryJob = await prisma.processingJob.findFirstOrThrow({
+        where: {
+          runId: "search-review-retry",
+          operation: "resolve_publication",
+        },
+      });
+      await prisma.processingJob.update({
+        where: { id: retryJob.id },
+        data: { status: "exhausted", maxAttempts: 1 },
+      });
+      await reviewSearchCandidate(
+        prisma,
+        "search-review-retry",
+        0,
+        "rejected",
+        "Wrong subject",
+        stubFetchArticle,
+      );
+      await retryExhausted(prisma, retryJob.id);
+      await drainJobs(
+        prisma,
+        "rejected-retry",
+        { runId: "search-review-retry" },
+        stubFetchArticle,
+      );
+      assert.equal(
+        (
+          await prisma.candidate.findUniqueOrThrow({
+            where: {
+              runId_itemIndex: { runId: "search-review-retry", itemIndex: 0 },
+            },
+          })
+        ).publicationId,
+        null,
+      );
+      await prisma.processingJob.update({
+        where: { id: retryJob.id },
+        data: { status: "exhausted" },
+      });
+      await reviewSearchCandidate(
+        prisma,
+        "search-review-retry",
+        0,
+        "accepted",
+        "Confirmed relevant",
+        stubFetchArticle,
+      );
+      assert.equal(
+        await prisma.discovery.count({
+          where: { runId: "search-review-retry" },
+        }),
+        1,
       );
     } finally {
       await prisma.$disconnect();

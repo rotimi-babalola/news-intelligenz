@@ -152,6 +152,16 @@ model RelevanceReview {
   @@map("relevance_reviews")
 }
 
+model SearchProviderCall {
+  id        String   @id @default(uuid()) @db.Uuid
+  runId     String   @unique @map("run_id") @db.Text
+  provider  String   @db.Text
+  startedAt DateTime @map("started_at") @default(now()) @db.Timestamptz(6)
+
+  @@index([provider, startedAt])
+  @@map("search_provider_calls")
+}
+
 model ProcessingJob {
   id             String     @id @default(uuid()) @db.Uuid
   dedupeKey      String     @unique @map("dedupe_key") @db.Text

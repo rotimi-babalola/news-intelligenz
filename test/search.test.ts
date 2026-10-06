@@ -128,4 +128,11 @@ test("relevance assessment accepts query-term overlap with reasons", () => {
   );
   assert.equal(uncertain.decision, "uncertain");
   assert.equal(uncertain.reason, "No query term overlap");
+  assert.equal(
+    assessRelevance(
+      "Deutschland gewinnt Fußball-WM",
+      "Bildung Schule Ausbildung Deutschland",
+    ).decision,
+    "uncertain",
+  );
 });

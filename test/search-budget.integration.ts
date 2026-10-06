@@ -13,8 +13,10 @@ const stubFetchArticle = async () => ({
   reason: "Unsupported format: test stub holds no article",
 });
 
-const stubProviderFetch = (async () =>
-  new Response(
+let providerCalls = 0;
+const stubProviderFetch = (async () => {
+  providerCalls++;
+  return new Response(
     JSON.stringify({
       results: [
         {
@@ -24,7 +26,8 @@ const stubProviderFetch = (async () =>
       ],
     }),
     { status: 200 },
-  )) as typeof fetch;
+  );
+}) as typeof fetch;
 
 test("exhausted provider pauses while RSS collection continues", async () => {
   const baseUrl = process.env.DATABASE_URL!;
@@ -58,6 +61,22 @@ test("exhausted provider pauses while RSS collection continues", async () => {
       assert.equal(first.status, "completed");
       assert.equal(first.status === "completed" && first.valid, 1);
       assert.equal(first.status === "completed" && first.usage.calls, 1);
+      assert.equal(providerCalls, 1);
+
+      const replay = await collectSearchQuery(
+        prisma,
+        "search-budget-exa-1",
+        "Bildung Schule Ausbildung Deutschland",
+        "exa",
+        {
+          apiKey: "test-exa-key",
+          monthlyCallBudget: 1,
+          fetchFn: stubProviderFetch,
+        },
+      );
+      assert.equal(replay.status, "completed");
+      assert.equal(replay.status === "completed" && replay.usage.calls, 0);
+      assert.equal(providerCalls, 1);
 
       // Budget spent: the provider pauses with a visible reason, no new run.
       const paused = await collectSearchQuery(
@@ -98,6 +117,58 @@ test("exhausted provider pauses while RSS collection continues", async () => {
         },
       );
       assert.equal(other.status, "completed");
+
+      await assert.rejects(
+        collectSearchQuery(
+          prisma,
+          "search-budget-tavily-failed",
+          "Bildung Schule Ausbildung Deutschland",
+          "tavily",
+          {
+            apiKey: "test-tavily-key",
+            monthlyCallBudget: 2,
+            fetchFn: (async () =>
+              new Response("{}", { status: 500 })) as typeof fetch,
+          },
+        ),
+        /HTTP 500/,
+      );
+      const afterFailure = await collectSearchQuery(
+        prisma,
+        "search-budget-tavily-after-failure",
+        "Bildung Schule Ausbildung Deutschland",
+        "tavily",
+        {
+          apiKey: "test-tavily-key",
+          monthlyCallBudget: 2,
+          fetchFn: stubProviderFetch,
+        },
+      );
+      assert.equal(afterFailure.status, "paused");
+
+      const concurrent = await Promise.all(
+        [
+          "search-budget-tavily-concurrent-1",
+          "search-budget-tavily-concurrent-2",
+        ].map((runId) =>
+          collectSearchQuery(
+            prisma,
+            runId,
+            "Bildung Schule Ausbildung Deutschland",
+            "tavily",
+            {
+              apiKey: "test-tavily-key",
+              monthlyCallBudget: 3,
+              fetchFn: stubProviderFetch,
+              fetchArticle: stubFetchArticle,
+            },
+          ),
+        ),
+      );
+      assert.deepEqual(concurrent.map((result) => result.status).sort(), [
+        "completed",
+        "paused",
+      ]);
 
       // Independent RSS work continues alongside the paused provider.
       const rss = await collect(
