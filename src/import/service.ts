@@ -456,7 +456,7 @@ export async function processJob(
       headline: string;
       originalUrl: string;
       sourceId: string;
-      language: string;
+      language: "de" | "en";
       publishedAt: string | null;
     };
     let publicationId: string | null = null;

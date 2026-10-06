@@ -45,7 +45,7 @@ export type PublicationResolutionInput = {
   headline: string;
   originalUrl: string;
   sourceId: string;
-  language: string;
+  language: "de" | "en";
   publishedAt: string | null;
   rawPublisher: string;
   source: SourceRef;

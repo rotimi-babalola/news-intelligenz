@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Prisma } from "../generated/prisma/client";
+import type { IdentifierKind, Prisma } from "../generated/prisma/client";
 import {
   canonicalArticleUrl,
   normalizeIdentifierValue,
@@ -33,7 +33,7 @@ export async function resolvePublication(
   const keys = [
     urlKey ? { kind: "url" as const, value: urlKey } : null,
     guidKey ? { kind: "guid" as const, value: guidKey } : null,
-  ].filter((k): k is { kind: "url" | "guid"; value: string } => k !== null);
+  ].filter((k): k is { kind: IdentifierKind; value: string } => k !== null);
   const matches = keys.length
     ? await tx.publicationIdentifier.findMany({
         where: { publisher, OR: keys },
@@ -57,12 +57,12 @@ export async function resolvePublication(
       headline: input.headline,
       originalUrl: input.originalUrl,
       publishedAt: input.publishedAt,
-      language: input.language as "de" | "en",
+      language: input.language,
     },
     update: {
       headline: input.headline,
       publishedAt: input.publishedAt,
-      language: input.language as "de" | "en",
+      language: input.language,
       lastDiscoveredAt: new Date(),
     },
   });
