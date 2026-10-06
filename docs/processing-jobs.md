@@ -43,3 +43,13 @@ The local admin `#jobs` section shows pending (including claimed),
 retrying and exhausted counts plus the retrying/exhausted rows with their
 last errors. Retrying jobs resume on their own; each exhausted row has a
 Retry button that resets its budget and immediately reprocesses its run.
+
+## Service layout
+
+`src/import/service.ts` holds only the service operations (intake,
+review, job processing, collection, verification) plus the job-operation
+constants. Shared helpers live in `src/import/util.ts`, shared types in
+`src/import/types.ts` (re-exported from the service so existing imports
+keep working). Future services follow the same split: `service.ts`
+orchestrates repositories and jobs; anything reusable or purely
+descriptive moves to `util.ts` / `types.ts`.
