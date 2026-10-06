@@ -4,10 +4,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { test } from "node:test";
 import pg from "pg";
-import {
-  collectSearch,
-  reviewSearchCandidate,
-} from "../src/import/service.js";
+import { collectSearch, reviewSearchCandidate } from "../src/import/service.js";
 import type { SearchResult } from "../src/search.js";
 
 const root = process.cwd();

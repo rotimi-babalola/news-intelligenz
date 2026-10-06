@@ -78,12 +78,18 @@ test("search runs persist provenance and converge with RSS on one publication", 
         `<rss><channel><language>de</language>` +
         `<item><title>Bildung und Schule im Fokus</title><link>${sharedUrl}</link>` +
         `<guid>shared-article-100</guid></item></channel></rss>`;
-      await collect(prisma, "rss-dlf", rssXml, {
-        id: "deutschlandfunk-nachrichten",
-        publisher: "Deutschlandfunk",
-        url: "https://www.deutschlandfunk.de/nachrichten-100.rss",
-        defaultLanguage: "de",
-      }, stubFetchArticle);
+      await collect(
+        prisma,
+        "rss-dlf",
+        rssXml,
+        {
+          id: "deutschlandfunk-nachrichten",
+          publisher: "Deutschlandfunk",
+          url: "https://www.deutschlandfunk.de/nachrichten-100.rss",
+          defaultLanguage: "de",
+        },
+        stubFetchArticle,
+      );
 
       assert.equal(await prisma.publication.count(), 3);
       const shared = await prisma.publication.findFirstOrThrow({

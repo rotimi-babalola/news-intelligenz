@@ -15,7 +15,9 @@ export function upsertReview(
   },
 ) {
   return client.relevanceReview.upsert({
-    where: { runId_itemIndex: { runId: data.runId, itemIndex: data.itemIndex } },
+    where: {
+      runId_itemIndex: { runId: data.runId, itemIndex: data.itemIndex },
+    },
     create: data,
     update: {
       decision: data.decision,

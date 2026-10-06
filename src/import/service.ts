@@ -48,6 +48,7 @@ import {
   type SearchProvider,
   type SearchResult,
 } from "../search";
+import { fetchProviderResults, type ProviderFetch } from "../search-providers";
 import { upsertDiscovery } from "./discovery.repository";
 import { getReview, upsertReview } from "./relevance.repository";
 import {
@@ -168,7 +169,9 @@ export async function collectSearchIntake(
   if (!query.trim()) throw new Error("Search query must not be empty");
   const candidates = toSearchCandidates(results, query, provider);
   const hash = createHash("sha256")
-    .update(JSON.stringify({ query, provider, urls: results.map((r) => r.url) }))
+    .update(
+      JSON.stringify({ query, provider, urls: results.map((r) => r.url) }),
+    )
     .digest("hex");
   const domains = [...searchAllowedDomains];
   return prisma.$transaction(async (tx) => {
@@ -290,10 +293,124 @@ export async function reviewSearchCandidate(
     }
   });
   if (decision === "accepted") {
-    await drainJobs(prisma, `review:${runId}:${itemIndex}`, { runId }, fetchArticle);
+    await drainJobs(
+      prisma,
+      `review:${runId}:${itemIndex}`,
+      { runId },
+      fetchArticle,
+    );
     await finalizeRunIfSettled(prisma, runId, run.error);
   }
   return getReview(prisma, runId, itemIndex);
+}
+
+export function providerApiKey(provider: SearchProvider): string {
+  return (
+    process.env[provider === "exa" ? "EXA_API_KEY" : "TAVILY_API_KEY"] ?? ""
+  );
+}
+
+function providerBudget(provider: SearchProvider, override?: number): number {
+  if (override !== undefined) return override;
+  const raw =
+    process.env[
+      provider === "exa"
+        ? "SEARCH_EXA_MONTHLY_CALL_BUDGET"
+        : "SEARCH_TAVILY_MONTHLY_CALL_BUDGET"
+    ];
+  const parsed = raw ? Number(raw) : NaN;
+  // Default 186 covers six daily queries for a 31-day month.
+  return Number.isFinite(parsed) && (parsed as number) >= 0
+    ? Math.floor(parsed as number)
+    : 186;
+}
+
+export function monthStartUtc(now: Date): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+// Usage measure for the free allowance: one provider Search call per run, so
+// counting this month's search runs per provider is the spend meter. No
+// payment method is attached; the collector stops itself before an overage.
+export async function countProviderCallsSince(
+  prisma: PrismaClient,
+  provider: SearchProvider,
+  since: Date,
+) {
+  return prisma.run.count({
+    where: {
+      sourceKind: "search_query",
+      startedAt: { gte: since },
+      sourceScope: { path: ["provider"], equals: provider },
+    },
+  });
+}
+
+export type SearchCollectionOptions = {
+  apiKey: string;
+  monthlyCallBudget?: number;
+  limit?: number;
+  now?: Date;
+  fetchFn?: ProviderFetch;
+  fetchArticle?: ArticleFetcher;
+};
+
+export type SearchCollectionResult =
+  | {
+      status: "completed";
+      runId: string;
+      valid: number;
+      invalid: number;
+      usage: { calls: number; costDollars?: number };
+    }
+  | { status: "paused"; runId: string; reason: string };
+
+// Live search collection with budget enforcement: an exhausted provider is
+// paused with a visible reason while RSS and DIP collection continue
+// independently. Never attaches payment or charges; it only spends the
+// configured free-allowance call budget.
+export async function collectSearchQuery(
+  prisma: PrismaClient,
+  runId: string,
+  query: string,
+  provider: SearchProvider,
+  options: SearchCollectionOptions,
+): Promise<SearchCollectionResult> {
+  const now = options.now ?? new Date();
+  const budget = providerBudget(provider, options.monthlyCallBudget);
+  const used = await countProviderCallsSince(
+    prisma,
+    provider,
+    monthStartUtc(now),
+  );
+  if (used >= budget)
+    return {
+      status: "paused",
+      runId,
+      reason:
+        `Monthly ${provider} call budget exhausted ` +
+        `(${used}/${budget} calls); provider paused, RSS collection continues`,
+    };
+  const fetched = await fetchProviderResults(provider, query, {
+    apiKey: options.apiKey,
+    limit: options.limit,
+    fetchFn: options.fetchFn,
+  });
+  const run = await collectSearch(
+    prisma,
+    runId,
+    query,
+    provider,
+    fetched.results,
+    options.fetchArticle ?? fetchArticleHtml,
+  );
+  return {
+    status: "completed",
+    runId,
+    valid: run.validCount,
+    invalid: run.invalidCount,
+    usage: fetched.usage,
+  };
 }
 
 export async function collectSearch(

@@ -156,14 +156,14 @@ accepted candidates enqueue publication resolution. Uncertain candidates stay
 excluded until the operator records `accepted` (routes into processing) or
 `rejected` (stays excluded but inspectable). RSS candidates never get a row.
 
-| Field       | Column        | Type                 | Null | Default | Notes                                    |
-| ----------- | ------------- | -------------------- | ---- | ------- | ---------------------------------------- |
-| `runId`     | `run_id`      | text, PK             | no   | —       |                                          |
-| `itemIndex` | `item_index`  | integer, PK          | no   | —       | Candidate position                       |
-| `decision`  | `decision`    | `RelevanceDecision`  | no   | —       | `accepted`, `uncertain`, or `rejected`   |
-| `reason`    | `reason`      | text                 | no   | —       | Assessment or review justification       |
-| `decidedBy` | `decided_by`  | text                 | no   | —       | `agent` or `operator`                    |
-| `decidedAt` | `decided_at`  | timestamptz          | no   | `now()` |                                          |
+| Field       | Column       | Type                | Null | Default | Notes                                  |
+| ----------- | ------------ | ------------------- | ---- | ------- | -------------------------------------- |
+| `runId`     | `run_id`     | text, PK            | no   | —       |                                        |
+| `itemIndex` | `item_index` | integer, PK         | no   | —       | Candidate position                     |
+| `decision`  | `decision`   | `RelevanceDecision` | no   | —       | `accepted`, `uncertain`, or `rejected` |
+| `reason`    | `reason`     | text                | no   | —       | Assessment or review justification     |
+| `decidedBy` | `decided_by` | text                | no   | —       | `agent` or `operator`                  |
+| `decidedAt` | `decided_at` | timestamptz         | no   | `now()` |                                        |
 
 ## Enums
 

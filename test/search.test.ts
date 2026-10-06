@@ -29,10 +29,10 @@ test("six fixed German queries cover the required subjects", () => {
 });
 
 test("launch allowlist holds only tagesschau and deutschlandfunk", () => {
-  assert.deepEqual([...searchAllowedDomains], [
-    "tagesschau.de",
-    "deutschlandfunk.de",
-  ]);
+  assert.deepEqual(
+    [...searchAllowedDomains],
+    ["tagesschau.de", "deutschlandfunk.de"],
+  );
 });
 
 test("allowlist accepts subdomains and rejects other hosts", () => {
@@ -44,9 +44,7 @@ test("allowlist accepts subdomains and rejects other hosts", () => {
 });
 
 test("result URLs require http(s) on an allowed host", () => {
-  assert.ok(
-    isAllowedSearchUrl("https://www.tagesschau.de/inland/a-100.html"),
-  );
+  assert.ok(isAllowedSearchUrl("https://www.tagesschau.de/inland/a-100.html"));
   assert.ok(
     isAllowedSearchUrl("https://www.deutschlandfunk.de/politik-100.html"),
   );

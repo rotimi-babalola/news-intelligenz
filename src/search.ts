@@ -15,9 +15,15 @@ export const searchQueries: SearchQuery[] = [
   { subject: "politics", query: "Bundesregierung Gesetz Bundestag" },
   { subject: "employment", query: "Beschäftigung Wirtschaft Deutschland" },
   { subject: "housing", query: "Wohnen Miete Wohnungsbau Deutschland" },
-  { subject: "healthcare", query: "Gesundheit Pflege Krankenkasse Deutschland" },
+  {
+    subject: "healthcare",
+    query: "Gesundheit Pflege Krankenkasse Deutschland",
+  },
   { subject: "education", query: "Bildung Schule Ausbildung Deutschland" },
-  { subject: "immigration", query: "Einwanderung Asyl Zuwanderung Deutschland" },
+  {
+    subject: "immigration",
+    query: "Einwanderung Asyl Zuwanderung Deutschland",
+  },
 ];
 
 export const searchAllowedDomains = [
@@ -105,10 +111,7 @@ export function toSearchCandidates(
 // hostname. Unknown hosts fall back to the raw hostname.
 export function publisherForSearchHost(host: string): string {
   const normalized = host.trim().toLowerCase();
-  if (
-    normalized === "tagesschau.de" ||
-    normalized.endsWith(".tagesschau.de")
-  )
+  if (normalized === "tagesschau.de" || normalized.endsWith(".tagesschau.de"))
     return "tagesschau (ARD)";
   if (
     normalized === "deutschlandfunk.de" ||
