@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { PrismaClient } from "../generated/prisma/client";
 import { parseFeed, type Candidate } from "../feed";
@@ -8,10 +8,10 @@ import {
   storeExtractedText,
 } from "../extract/repository";
 import {
-  canonicalArticleUrl,
-  normalizeIdentifierValue,
-  normalizePublisher,
-} from "../identity";
+  EXTRACT_TEXT,
+  RESOLVE_PUBLICATION,
+  resolvePublication,
+} from "./publication";
 import {
   claimNextJob,
   completeJob,
@@ -46,14 +46,7 @@ import {
   type SearchResult,
 } from "../search";
 import { fetchProviderResults } from "../search-providers";
-import { upsertDiscovery } from "./discovery.repository";
 import { getReview, upsertReview } from "./relevance.repository";
-import {
-  findPublicationIdsByKeys,
-  upsertIdentifier,
-  upsertPublication,
-  type IdentityKey,
-} from "./publication.repository";
 import {
   createRun,
   finalizeRun,
@@ -83,8 +76,7 @@ export type {
   SearchCollectionResult,
 } from "./types";
 
-export const RESOLVE_PUBLICATION = "resolve_publication";
-export const EXTRACT_TEXT = "extract_publication_text";
+export { EXTRACT_TEXT, RESOLVE_PUBLICATION } from "./publication";
 
 // Durable discovery handoff: the run, its candidates and one processing job
 // per parse-valid candidate commit in a single transaction. Publication,
@@ -447,11 +439,10 @@ export async function processJob(
   }
   if (job.operation !== RESOLVE_PUBLICATION || job.itemIndex === null)
     throw new Error(`Unknown job operation: ${job.operation}`);
-  const payload = job.payload as { publisher?: unknown; feedId?: unknown };
+  const payload = job.payload as { publisher?: unknown };
   const rawPublisher = payload.publisher;
   if (typeof rawPublisher !== "string")
     throw new Error("Publication job is missing its publisher");
-  const feedId = typeof payload.feedId === "string" ? payload.feedId : null;
   await prisma.$transaction(async (tx) => {
     const candidate = await getCandidate(tx, job.runId, job.itemIndex!);
     if (!candidate) throw new Error("Candidate for job no longer exists");
@@ -465,7 +456,7 @@ export async function processJob(
       headline: string;
       originalUrl: string;
       sourceId: string;
-      language: string;
+      language: "de" | "en";
       publishedAt: string | null;
     };
     let publicationId: string | null = null;
@@ -475,58 +466,23 @@ export async function processJob(
       const language = metadata.language;
       if (language !== "de" && language !== "en")
         throw new Error(`Unexpected candidate language: ${language}`);
-      // Identity scope is the normalized publisher; URL aliases resolve to
-      // one canonical key while the raw original URL stays on the row.
-      const publisher = normalizePublisher(rawPublisher);
-      // Serialize resolution per publisher: two workers resolving the same
-      // article concurrently would both miss, then both insert, and the
-      // loser's identifier upsert would silently keep its orphan publication.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${publisher}))`;
-      const urlKey = canonicalArticleUrl(metadata.originalUrl);
-      const guidKey = normalizeIdentifierValue(metadata.sourceId);
-      const keys = [
-        urlKey ? { kind: "url" as const, value: urlKey } : null,
-        guidKey ? { kind: "guid" as const, value: guidKey } : null,
-      ].filter((k): k is IdentityKey => k !== null);
-      const matches = keys.length
-        ? await findPublicationIdsByKeys(tx, publisher, keys)
-        : [];
-      const identities = new Set(matches.map((m) => m.publicationId));
-      if (identities.size > 1)
-        errors.push(
-          "Conflicting publication identities; manual inspection required",
-        );
-      else {
-        publicationId = [...identities][0] ?? randomUUID();
-        await upsertPublication(
-          tx,
-          {
-            id: publicationId,
-            publisher,
-            headline: metadata.headline,
-            originalUrl: metadata.originalUrl,
-            publishedAt: metadata.publishedAt,
-            language,
-          },
-          {
-            headline: metadata.headline,
-            publishedAt: metadata.publishedAt,
-            language,
-            lastDiscoveredAt: new Date(),
-          },
-        );
-        for (const { kind, value } of keys) {
-          await upsertIdentifier(tx, { publisher, kind, value }, publicationId);
-        }
-        await upsertDiscovery(tx, job.runId, publicationId);
-        await enqueueJob(tx, {
-          source: feedSource(feedId ?? job.runId),
-          runId: job.runId,
-          itemIndex: job.itemIndex!,
-          operation: EXTRACT_TEXT,
-          payload: { publicationId, publisher },
-        });
-      }
+      const resolved = await resolvePublication(tx, {
+        runId: job.runId,
+        itemIndex: job.itemIndex!,
+        headline: metadata.headline,
+        originalUrl: metadata.originalUrl,
+        sourceId: metadata.sourceId,
+        language,
+        publishedAt: metadata.publishedAt,
+        rawPublisher,
+        source: {
+          kind: job.sourceKind,
+          key: job.sourceKey,
+          ...(job.sourceScope == null ? {} : { scope: job.sourceScope }),
+        },
+      });
+      publicationId = resolved.publicationId;
+      errors.push(...resolved.errors);
     }
     await updateCandidateResult(tx, job.runId, job.itemIndex!, {
       errors,

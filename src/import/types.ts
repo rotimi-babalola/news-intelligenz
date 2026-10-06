@@ -1,4 +1,5 @@
 import type { FetchResult } from "../extract";
+import type { SourceRef } from "../jobs";
 import type { SearchProvider } from "../search";
 import type { ProviderFetch } from "../search-providers";
 
@@ -37,3 +38,20 @@ export type SearchCollectionResult =
       usage: { calls: number; costDollars?: number };
     }
   | { status: "paused"; runId: string; reason: string };
+
+export type PublicationResolutionInput = {
+  runId: string;
+  itemIndex: number;
+  headline: string;
+  originalUrl: string;
+  sourceId: string;
+  language: "de" | "en";
+  publishedAt: string | null;
+  rawPublisher: string;
+  source: SourceRef;
+};
+
+export type PublicationResolution = {
+  publicationId: string | null;
+  errors: string[];
+};
