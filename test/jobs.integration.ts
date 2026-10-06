@@ -103,6 +103,7 @@ test("interrupted workers resume without duplicating committed work", async () =
       await processJob(prisma, {
         id: stored.id,
         dedupeKey: stored.dedupeKey,
+        sourceKind: stored.sourceKind,
         runId: stored.runId,
         itemIndex: stored.itemIndex,
         operation: stored.operation,

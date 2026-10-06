@@ -148,7 +148,26 @@ Durable per-attempt state: one row per (`job_id`, `attempt_no`), opened at
 claim and closed with the outcome (`succeeded`, `retrying`, `exhausted`)
 and error. Survives worker restarts alongside the job row.
 
+## relevance_reviews
+
+Agent and operator relevance decisions for search candidates: one row per
+(run, candidate). The agent records `accepted` or `uncertain` at intake; only
+accepted candidates enqueue publication resolution. Uncertain candidates stay
+excluded until the operator records `accepted` (routes into processing) or
+`rejected` (stays excluded but inspectable). RSS candidates never get a row.
+
+| Field       | Column       | Type                | Null | Default | Notes                                  |
+| ----------- | ------------ | ------------------- | ---- | ------- | -------------------------------------- |
+| `runId`     | `run_id`     | text, PK            | no   | —       |                                        |
+| `itemIndex` | `item_index` | integer, PK         | no   | —       | Candidate position                     |
+| `decision`  | `decision`   | `RelevanceDecision` | no   | —       | `accepted`, `uncertain`, or `rejected` |
+| `reason`    | `reason`     | text                | no   | —       | Assessment or review justification     |
+| `decidedBy` | `decided_by` | text                | no   | —       | `agent` or `operator`                  |
+| `decidedAt` | `decided_at` | timestamptz         | no   | `now()` |                                        |
+
 ## Enums
+
+- `RelevanceDecision`: `accepted`, `uncertain`, `rejected`.
 
 - `RunStatus`: `running`, `completed`, `failed`.
 - `Language`: `de`, `en`.
@@ -160,7 +179,6 @@ and error. Survives worker restarts alongside the job row.
 
 ## What is deliberately absent
 
-There is no table for feed descriptions, users, or
-relevance decisions in this slice — those belong to later tickets. Publication
+There is no table for feed descriptions or users. Publication
 identity uses exact identifiers only; there is no headline matching, redirect
 resolution, or cross-publisher merging.

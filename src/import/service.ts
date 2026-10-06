@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import type { PrismaClient } from "../generated/prisma/client";
+import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { parseFeed, type Candidate } from "../feed";
 import {
   extractArticleText,
@@ -20,10 +20,13 @@ import {
   claimNextJob,
   completeJob,
   countOpenJobs,
+  dedupeKey,
   enqueueJob,
   failJob,
   feedSource,
   requeueStaleClaims,
+  retryExhausted,
+  searchSource,
   type ClaimedJob,
 } from "../jobs";
 import {
@@ -40,7 +43,16 @@ import {
   listCandidatesForTally,
   updateCandidateResult,
 } from "./candidate.repository";
+import {
+  searchAllowedDomains,
+  assessRelevance,
+  toSearchCandidates,
+  type SearchProvider,
+  type SearchResult,
+} from "../search";
+import { fetchProviderResults, type ProviderFetch } from "../search-providers";
 import { upsertDiscovery } from "./discovery.repository";
+import { getReview, upsertReview } from "./relevance.repository";
 import {
   findPublicationIdsByKeys,
   upsertIdentifier,
@@ -141,6 +153,343 @@ export async function collectIntake(
   });
 }
 
+// Search discovery handoff: same durable shape as feed intake (run,
+// candidates, one resolve job per allowlisted candidate) with
+// query/provider/rank provenance on the run scope, candidate metadata and
+// job payload. Identity resolution reuses processJob unchanged: the
+// RSS-consistent publisher label lets search discoveries converge onto
+// feed-discovered publications instead of forking duplicates.
+export async function collectSearchIntake(
+  prisma: PrismaClient,
+  runId: string,
+  query: string,
+  provider: SearchProvider,
+  results: SearchResult[],
+): Promise<Intake> {
+  if (!runId.trim() || runId.length > 200)
+    throw new Error("Run ID must contain 1–200 characters");
+  if (!query.trim()) throw new Error("Search query must not be empty");
+  const candidates = toSearchCandidates(results, query, provider);
+  const hash = createHash("sha256")
+    .update(
+      JSON.stringify({ query, provider, urls: results.map((r) => r.url) }),
+    )
+    .digest("hex");
+  const domains = [...searchAllowedDomains];
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+    const previous = await findRun(tx, runId);
+    if (previous) {
+      if (previous.inputHash !== hash || previous.feedId !== query)
+        throw new Error(
+          "Run ID already belongs to a different input; use a new run ID",
+        );
+      return {
+        runId: previous.id,
+        parseError: previous.error,
+        settled: previous.completedAt !== null,
+      };
+    }
+    await createRun(tx, {
+      id: runId,
+      feedId: query,
+      sourceKind: "search_query",
+      sourceScope: { domains, provider, query },
+      inputHash: hash,
+      status: "running",
+      error: null,
+    });
+    for (const [index, candidate] of candidates.entries()) {
+      const { errors, publisher, ...metadata } = candidate;
+      await createCandidate(tx, {
+        runId,
+        itemIndex: index,
+        metadata: { ...metadata, publisher },
+        errors,
+      });
+      // Relevance gate: the agent records its assessment and only accepted
+      // candidates enter shared processing. Uncertain candidates stay
+      // excluded (no publication, no discovery) until reviewed.
+      if (!errors.length) {
+        const assessment = assessRelevance(candidate.headline, query);
+        await upsertReview(tx, {
+          runId,
+          itemIndex: index,
+          decision: assessment.decision,
+          reason: assessment.reason,
+          decidedBy: "agent",
+        });
+        if (assessment.decision === "accepted") {
+          await enqueueJob(tx, {
+            source: searchSource(query, domains, provider),
+            runId,
+            itemIndex: index,
+            operation: RESOLVE_PUBLICATION,
+            payload: {
+              itemIndex: index,
+              publisher,
+              searchQuery: query,
+              provider,
+              rank: candidate.rank,
+            },
+          });
+        }
+      }
+    }
+    return { runId, parseError: null, settled: false };
+  });
+}
+
+// Operator relevance review: accept routes an excluded candidate into shared
+// processing (idempotent when already resolved); reject keeps it excluded
+// but inspectable via its candidate and decision rows. A rejection cannot
+// retract an already resolved publication.
+export async function reviewSearchCandidate(
+  prisma: PrismaClient,
+  runId: string,
+  itemIndex: number,
+  decision: "accepted" | "rejected",
+  reason: string,
+  fetchArticle: ArticleFetcher = fetchArticleHtml,
+) {
+  if (!reason.trim()) throw new Error("A review reason is required");
+  const run = await findRunOrThrow(prisma, runId);
+  if (run.sourceKind !== "search_query")
+    throw new Error("Only search candidates can be relevance-reviewed");
+  const candidate = await getCandidate(prisma, runId, itemIndex);
+  if (!candidate) throw new Error("Candidate no longer exists");
+  if ((candidate.errors as unknown[]).length)
+    throw new Error("Invalid candidates stay excluded and cannot be reviewed");
+  const metadata = candidate.metadata as {
+    publisher: string;
+    query: string;
+    provider: SearchProvider;
+    rank: number;
+  };
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+    const current = await getCandidate(tx, runId, itemIndex);
+    if (decision === "rejected") {
+      if (current && !current.publicationId) {
+        const job = await tx.processingJob.findUnique({
+          where: {
+            dedupeKey: dedupeKey(runId, itemIndex, RESOLVE_PUBLICATION),
+          },
+        });
+        if (job && ["pending", "claimed", "retrying"].includes(job.status))
+          throw new Error(
+            "Cannot reject while publication resolution is pending",
+          );
+      }
+    }
+    await upsertReview(tx, {
+      runId,
+      itemIndex,
+      decision,
+      reason: reason.trim(),
+      decidedBy: "operator",
+    });
+    if (decision === "accepted") {
+      const job = await enqueueJob(tx, {
+        source: searchSource(
+          metadata.query,
+          [...searchAllowedDomains],
+          metadata.provider,
+        ),
+        runId,
+        itemIndex,
+        operation: RESOLVE_PUBLICATION,
+        payload: {
+          itemIndex,
+          publisher: metadata.publisher,
+          searchQuery: metadata.query,
+          provider: metadata.provider,
+          rank: metadata.rank,
+        },
+      });
+      if (!current?.publicationId && job.status === "exhausted")
+        await retryExhausted(tx, job.id);
+    }
+  });
+  if (decision === "accepted") {
+    await drainJobs(
+      prisma,
+      `review:${runId}:${itemIndex}`,
+      { runId },
+      fetchArticle,
+    );
+    await finalizeRunIfSettled(prisma, runId, run.error);
+  }
+  return getReview(prisma, runId, itemIndex);
+}
+
+export function providerApiKey(provider: SearchProvider): string {
+  return (
+    process.env[provider === "exa" ? "EXA_API_KEY" : "TAVILY_API_KEY"] ?? ""
+  );
+}
+
+function providerBudget(provider: SearchProvider, override?: number): number {
+  if (override !== undefined) return override;
+  const raw =
+    process.env[
+      provider === "exa"
+        ? "SEARCH_EXA_MONTHLY_CALL_BUDGET"
+        : "SEARCH_TAVILY_MONTHLY_CALL_BUDGET"
+    ];
+  const parsed = raw ? Number(raw) : NaN;
+  // Default 186 covers six daily queries for a 31-day month.
+  return Number.isFinite(parsed) && (parsed as number) >= 0
+    ? Math.floor(parsed as number)
+    : 186;
+}
+
+export function monthStartUtc(now: Date): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+// Count reserved calls, including failed requests that may have spent allowance.
+export async function countProviderCallsSince(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  provider: SearchProvider,
+  since: Date,
+) {
+  return prisma.searchProviderCall.count({
+    where: {
+      startedAt: { gte: since },
+      provider,
+    },
+  });
+}
+
+export type SearchCollectionOptions = {
+  apiKey: string;
+  monthlyCallBudget?: number;
+  limit?: number;
+  now?: Date;
+  fetchFn?: ProviderFetch;
+  fetchArticle?: ArticleFetcher;
+};
+
+export type SearchCollectionResult =
+  | {
+      status: "completed";
+      runId: string;
+      valid: number;
+      invalid: number;
+      usage: { calls: number; costDollars?: number };
+    }
+  | { status: "paused"; runId: string; reason: string };
+
+// Live search collection with budget enforcement: an exhausted provider is
+// paused with a visible reason while RSS and DIP collection continue
+// independently. Never attaches payment or charges; it only spends the
+// configured free-allowance call budget.
+export async function collectSearchQuery(
+  prisma: PrismaClient,
+  runId: string,
+  query: string,
+  provider: SearchProvider,
+  options: SearchCollectionOptions,
+): Promise<SearchCollectionResult> {
+  const now = options.now ?? new Date();
+  const budget = providerBudget(provider, options.monthlyCallBudget);
+  const previous = await findRun(prisma, runId);
+  if (previous) {
+    if (
+      previous.sourceKind !== "search_query" ||
+      previous.feedId !== query ||
+      (previous.sourceScope as { provider?: string } | null)?.provider !==
+        provider
+    )
+      throw new Error("Run ID already belongs to a different input");
+    if (!previous.completedAt) {
+      await drainJobs(
+        prisma,
+        `collect:${runId}`,
+        { runId },
+        options.fetchArticle,
+      );
+    }
+    const run = previous.completedAt
+      ? previous
+      : await finalizeRunIfSettled(prisma, runId, previous.error);
+    return {
+      status: "completed",
+      runId,
+      valid: run.validCount,
+      invalid: run.invalidCount,
+      usage: { calls: 0 },
+    };
+  }
+  if (!options.apiKey.trim()) throw new Error(`${provider} API key is missing`);
+  const used = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135422, hashtext(${provider}))`;
+    if (await tx.searchProviderCall.findUnique({ where: { runId } }))
+      throw new Error(
+        "Provider call already attempted for this run ID; use a new run ID",
+      );
+    const count = await countProviderCallsSince(
+      tx,
+      provider,
+      monthStartUtc(now),
+    );
+    if (count >= budget) return count;
+    await tx.searchProviderCall.create({
+      data: { runId, provider, startedAt: now },
+    });
+    return null;
+  });
+  if (used !== null)
+    return {
+      status: "paused",
+      runId,
+      reason:
+        `Monthly ${provider} call budget exhausted ` +
+        `(${used}/${budget} calls); provider paused, RSS collection continues`,
+    };
+  const fetched = await fetchProviderResults(provider, query, {
+    apiKey: options.apiKey,
+    limit: options.limit,
+    fetchFn: options.fetchFn,
+  });
+  const run = await collectSearch(
+    prisma,
+    runId,
+    query,
+    provider,
+    fetched.results,
+    options.fetchArticle ?? fetchArticleHtml,
+  );
+  return {
+    status: "completed",
+    runId,
+    valid: run.validCount,
+    invalid: run.invalidCount,
+    usage: fetched.usage,
+  };
+}
+
+export async function collectSearch(
+  prisma: PrismaClient,
+  runId: string,
+  query: string,
+  provider: SearchProvider,
+  results: SearchResult[],
+  fetchArticle: ArticleFetcher = fetchArticleHtml,
+) {
+  const intake = await collectSearchIntake(
+    prisma,
+    runId,
+    query,
+    provider,
+    results,
+  );
+  if (intake.settled) return findRunOrThrow(prisma, runId);
+  await drainJobs(prisma, `collect:${runId}`, { runId }, fetchArticle);
+  return finalizeRunIfSettled(prisma, runId, intake.parseError);
+}
+
 // Commit boundary: one candidate's publication, identifiers, discovery
 // encounter and candidate link commit together. Every write is an idempotent
 // upsert keyed by identity or (run, publication), so a retried job never
@@ -164,6 +513,11 @@ export async function processJob(
   await prisma.$transaction(async (tx) => {
     const candidate = await getCandidate(tx, job.runId, job.itemIndex!);
     if (!candidate) throw new Error("Candidate for job no longer exists");
+    if (job.sourceKind === "search_query") {
+      const review = await getReview(tx, job.runId, job.itemIndex!);
+      if (review?.decision !== "accepted")
+        throw new Error("Search candidate is not accepted for publication");
+    }
     const errors = [...(candidate.errors as string[])];
     const metadata = candidate.metadata as {
       headline: string;
