@@ -552,7 +552,10 @@ export async function drainJobs(
 ) {
   const outcome = { succeeded: 0, retrying: 0, exhausted: 0 };
   for (;;) {
-    const job = await claimNextJob(prisma, workerId, undefined, filter);
+    const job = await claimNextJob(prisma, workerId, undefined, {
+      ...filter,
+      excludeSourceKind: "dip_endpoint",
+    });
     if (!job) return outcome;
     try {
       await processJob(prisma, job, fetchArticle);

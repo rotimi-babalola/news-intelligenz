@@ -8,6 +8,7 @@ import {
 } from "../src/dip/jobs.js";
 import { collectVorgang } from "../src/dip/vorgang.js";
 import { collectSteps, type FetchStepPage } from "../src/dip/steps.js";
+import { drainJobs } from "../src/import/service.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 
 const NOW = new Date("2026-10-20T12:00:00+02:00");
@@ -80,6 +81,11 @@ test("collection enqueues embedding jobs without holding the checkpoint", async 
   assert.deepEqual(await jobCounts(prisma), {
     [`${EMBED_PROCEEDING}:pending`]: 2,
   });
+  await drainJobs(prisma, "news-worker");
+  assert.deepEqual(await jobCounts(prisma), {
+    [`${EMBED_PROCEEDING}:pending`]: 2,
+  });
+  assert.equal(await prisma.jobAttempt.count(), 0);
   const checkpoint = await prisma.dipCheckpoint.findUniqueOrThrow({
     where: {
       endpoint_electoralTerm: { endpoint: "/vorgang", electoralTerm: 21 },

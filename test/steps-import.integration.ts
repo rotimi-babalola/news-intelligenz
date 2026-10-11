@@ -77,7 +77,7 @@ test("steps import with parent links, institutions, and document references", as
     c2: { documents: [], next: "c2" },
   });
   const result = await collectSteps(prisma, {
-    runId: "dip-steps-1",
+    runId: " dip-steps-1 ",
     electoralTerm: 21,
     fetchPage,
   });
@@ -85,6 +85,7 @@ test("steps import with parent links, institutions, and document references", as
     { valid: result.valid, invalid: result.invalid, stored: result.stored },
     { valid: 2, invalid: 0, stored: 2 },
   );
+  assert.equal(result.runId, "dip-steps-1");
   assert.equal(
     (
       await prisma.proceedingStep.findUniqueOrThrow({
@@ -243,6 +244,49 @@ test("backfilled parents leave distinct candidate traces", async () => {
   await prisma.$disconnect();
 });
 
+test("backfills across pages keep distinct jobs and fetch outside the intake lock", async () => {
+  const prisma = await isolatedDatabase();
+  const result = await collectSteps(prisma, {
+    runId: "dip-steps-paged-backfill",
+    electoralTerm: 21,
+    followStoredParents: true,
+    fetchPage: fakeSteps({
+      start: { documents: [step("701400", "340135")], next: "p2" },
+      p2: { documents: [step("701401", "340136")], next: "end" },
+      end: { documents: [], next: "end" },
+    }).fetchPage,
+    fetchVorgang: async (id) => {
+      // This would wait on the collector's own lock until its transaction times out.
+      await prisma.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+      return {
+        id,
+        typ: "Vorgang",
+        vorgangstyp: "Kleine Anfrage",
+        wahlperiode: 21,
+        titel: `Titel ${id}`,
+        aktualisiert: "2026-10-09T13:24:22+02:00",
+      };
+    },
+  });
+  assert.equal(result.backfilled, 2);
+  assert.deepEqual(
+    (
+      await prisma.candidate.findMany({
+        where: { runId: "dip-steps-paged-backfill", itemIndex: { lt: 0 } },
+        orderBy: { itemIndex: "asc" },
+      })
+    ).map((candidate) => candidate.itemIndex),
+    [-2, -1],
+  );
+  assert.equal(
+    await prisma.processingJob.count({
+      where: { operation: "embed_proceeding" },
+    }),
+    2,
+  );
+  await prisma.$disconnect();
+});
+
 test("changed steps version and update refs; replay adds nothing", async () => {
   const prisma = await isolatedDatabase();
   await prisma.proceeding.create({ data: proceeding("340135") });
@@ -285,6 +329,34 @@ test("changed steps version and update refs; replay adds nothing", async () => {
       })
     ).documentNumber,
     "21/1002",
+  );
+  const changedIssuer = {
+    ...changedFundstelle,
+    fundstelle: {
+      ...(changedFundstelle["fundstelle"] as Record<string, unknown>),
+      herausgeber: "BR",
+    },
+  };
+  const metadataChange = await collectSteps(prisma, {
+    runId: "dip-steps-v3",
+    electoralTerm: 21,
+    fetchPage: pages([changedIssuer]),
+  });
+  assert.equal(metadataChange.versionsAdded, 1);
+  const snapshots = await prisma.proceedingStepVersion.findMany({
+    where: { stepApiId: "701400" },
+    orderBy: { versionNo: "asc" },
+  });
+  assert.equal(snapshots.length, 3);
+  assert.equal(
+    (snapshots[0]?.snapshot as { fundstelle: { herausgeber: string } })
+      .fundstelle.herausgeber,
+    "BT",
+  );
+  assert.equal(
+    (snapshots[2]?.snapshot as { fundstelle: { herausgeber: string } })
+      .fundstelle.herausgeber,
+    "BR",
   );
   await prisma.$disconnect();
 });

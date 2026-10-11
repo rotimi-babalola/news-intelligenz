@@ -1,6 +1,4 @@
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
-import { createRun, finalizeRun, findRun } from "../import/run.repository";
-import { runIdSchema } from "../validation";
 import {
   countProceedingsByTerm,
   createProceeding,
@@ -9,22 +7,17 @@ import {
   latestProceedingVersion,
   updateProceeding,
   upsertDipCandidate,
-  upsertDipCheckpoint,
   upsertParliamentaryDiscovery,
 } from "./repository";
 import { enqueueProceedingEmbedding } from "./jobs";
+import { collectDipPages } from "./collect";
 import type {
   CollectVorgangOptions,
   CollectVorgangResult,
   FetchVorgangPage,
   StoredDoc,
 } from "./types";
-import {
-  contentHash,
-  isUniqueViolation,
-  scopeInputHash,
-  toStored,
-} from "./util";
+import { contentHash, isUniqueViolation, toStored } from "./util";
 
 export type {
   CollectVorgangOptions,
@@ -173,77 +166,17 @@ export async function collectVorgang(
   prisma: PrismaClient,
   options: CollectVorgangOptions,
 ): Promise<CollectVorgangResult> {
-  const runId = runIdSchema.parse(options.runId);
-  const hash = scopeInputHash(VORGANG_ENDPOINT, options);
-  const scope: Record<string, unknown> = {
-    electoralTerm: options.electoralTerm,
-  };
-  if (options.updatedFrom)
-    scope.aktualisiertStart = options.updatedFrom.toISOString();
-  if (options.updatedTo)
-    scope.aktualisiertEnd = options.updatedTo.toISOString();
-  if (options.proceedingCap !== undefined)
-    scope.proceedingCap = options.proceedingCap;
-
-  const replayed = await prisma.$transaction(async (tx) => {
-    // Serialize concurrent same-run imports; per-page work below stays small.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
-    const previous = await findRun(tx, runId);
-    if (previous) {
-      if (previous.inputHash !== hash || previous.feedId !== VORGANG_ENDPOINT)
-        throw new Error(
-          "Run ID already belongs to a different input; use a new run ID",
-        );
-      if (previous.status === "completed" && previous.completedAt !== null)
-        return previous;
-    } else {
-      await createRun(tx, {
-        id: runId,
-        feedId: VORGANG_ENDPOINT,
-        sourceKind: "dip_endpoint",
-        sourceScope: scope as Prisma.InputJsonValue,
-        inputHash: hash,
-        status: "running",
-      });
-    }
-    return null;
-  });
-  if (replayed)
-    return {
-      runId,
-      status: "completed",
-      valid: replayed.validCount,
-      invalid: replayed.invalidCount,
-      stored: 0,
-      versionsAdded: 0,
-      capped: 0,
-      replayed: true,
-    };
-
-  let cursor: string | undefined;
-  let valid = 0;
-  let invalid = 0;
-  let stored = 0;
-  let versionsAdded = 0;
-  let capped = 0;
-  let itemIndex = 0;
-  let maxObserved: Date | null = null;
-  try {
-    for (;;) {
-      const page = await options.fetchPage({
-        wahlperiode: options.electoralTerm,
-        aktualisiertStart: options.updatedFrom?.toISOString(),
-        aktualisiertEnd: options.updatedTo?.toISOString(),
-        cursor,
-      });
+  const { backfilled: _backfilled, ...result } = await collectDipPages(
+    prisma,
+    VORGANG_ENDPOINT,
+    options,
+    async (documents, firstIndex, runId) => {
       const storedDocs: StoredDoc[] = [];
       const invalidDocs: { index: number; error: string; id: string | null }[] =
         [];
-      for (const input of page.documents) {
-        const converted = toStored(input, itemIndex);
-        itemIndex += 1;
+      for (const [offset, input] of documents.entries()) {
+        const converted = toStored(input, firstIndex + offset);
         if ("error" in converted) {
-          invalid += 1;
           invalidDocs.push({
             index: converted.index,
             error: converted.error,
@@ -253,7 +186,6 @@ export async function collectVorgang(
                 : null,
           });
         } else {
-          valid += 1;
           storedDocs.push(converted);
         }
       }
@@ -275,57 +207,22 @@ export async function collectVorgang(
           options.proceedingCap,
         );
       });
-      versionsAdded += counts.versionsAdded;
-      capped += counts.capped;
-      stored += storedDocs.length - counts.capped;
+      let maxObserved: Date | null = null;
       for (const { doc } of storedDocs) {
         const observed = new Date(doc.aktualisiert);
         if (!maxObserved || observed > maxObserved) maxObserved = observed;
       }
-      // Pagination ends when the cursor stops changing.
-      if (!page.cursor || page.cursor === cursor) break;
-      cursor = page.cursor;
-    }
-  } catch (error) {
-    await prisma.$transaction(async (tx) => {
-      await finalizeRun(tx, runId, {
-        status: "failed",
-        validCount: valid,
-        invalidCount: invalid,
-        completedAt: new Date(),
-        error:
-          error instanceof Error ? error.message.slice(0, 2000) : "unknown",
-      });
-    });
-    throw error;
-  }
-  await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
-    await finalizeRun(tx, runId, {
-      status: "completed",
-      validCount: valid,
-      invalidCount: invalid,
-      completedAt: new Date(),
-      error: null,
-    });
-    // Checkpoint advances only after all pages are durably stored.
-    await upsertDipCheckpoint(
-      tx,
-      VORGANG_ENDPOINT,
-      options.electoralTerm,
-      options.updatedTo ?? maxObserved,
-    );
-  });
-  return {
-    runId,
-    status: "completed",
-    valid,
-    invalid,
-    stored,
-    versionsAdded,
-    capped,
-    replayed: false,
-  };
+      return {
+        valid: storedDocs.length,
+        invalid: invalidDocs.length,
+        stored: storedDocs.length - counts.capped,
+        backfilled: 0,
+        ...counts,
+        maxObserved,
+      };
+    },
+  );
+  return result;
 }
 
 // Live page fetcher for operational use (tests inject fakes). Sends explicit

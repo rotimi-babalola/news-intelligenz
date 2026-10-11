@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { stepContentHash, toStoredStep } from "../src/dip/util.js";
 
 const dir = path.join("fixtures", "dip");
 
@@ -65,4 +66,24 @@ test("step fixtures link parents, keep doc refs on the step, and cap display act
   for (const doc of page.documents)
     if (!ids.has(String(doc["vorgang_id"]))) crossTerm++;
   assert.ok(crossTerm > 0, "fixture must include steps outside the parent set");
+});
+
+test("step content changes when extra document metadata changes", async () => {
+  const original = (await load("vorgangsposition-page1.json")).documents[0];
+  assert.ok(original);
+  const changed = {
+    ...original,
+    fundstelle: {
+      ...(original["fundstelle"] as Record<string, unknown>),
+      herausgeber: "Changed issuer",
+    },
+  };
+  const first = toStoredStep(original, 0);
+  const second = toStoredStep(changed, 0);
+  assert.ok(!("error" in first));
+  assert.ok(!("error" in second));
+  assert.notEqual(
+    stepContentHash(first.doc, first.raw, first.fundstelleRest),
+    stepContentHash(second.doc, second.raw, second.fundstelleRest),
+  );
 });

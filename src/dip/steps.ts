@@ -1,6 +1,4 @@
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
-import { createRun, finalizeRun, findRun } from "../import/run.repository";
-import { runIdSchema } from "../validation";
 import {
   createStep,
   createStepVersion,
@@ -10,20 +8,20 @@ import {
   latestStepVersion,
   updateStep,
   upsertDipCandidate,
-  upsertDipCheckpoint,
   upsertDocumentReference,
   upsertParliamentaryDiscovery,
 } from "./repository";
 import { enqueueDocumentProcessing, enqueueStepEmbedding } from "./jobs";
+import { collectDipPages } from "./collect";
 import type {
   CollectStepsOptions,
   CollectStepsResult,
+  StoredDoc,
   StoredStep,
 } from "./types";
 import {
   isHotDocument,
   isUniqueViolation,
-  scopeInputHash,
   stepContentHash,
   toStored,
   toStoredStep,
@@ -54,7 +52,7 @@ async function storeStepsPage(
   parent: {
     followStored: boolean;
     cap: number | undefined;
-    fetchVorgang: CollectStepsOptions["fetchVorgang"];
+    fetched: ReadonlyMap<string, StoredDoc>;
     electoralTerm: number;
     now: Date;
   },
@@ -62,19 +60,12 @@ async function storeStepsPage(
   let versionsAdded = 0;
   let capped = 0;
   let backfilled = 0;
-  // Backfilled parents never appeared in page order, so they take negative
-  // candidate indexes that cannot collide with paged documents or each other.
-  let backfillIndex = -1;
   for (const { doc, raw, fundstelleRest, index } of steps) {
     const candidateMeta = { endpoint: STEPS_ENDPOINT, id: doc.id };
     let skipForCap = false;
     if (parent.followStored && !(await findProceeding(tx, doc.vorgang_id))) {
-      const fetched = await parent.fetchVorgang?.(doc.vorgang_id);
-      const converted =
-        fetched !== undefined && fetched !== null
-          ? toStored(fetched, backfillIndex--)
-          : null;
-      if (converted && !("error" in converted)) {
+      const converted = parent.fetched.get(doc.vorgang_id);
+      if (converted) {
         const outcome = await storeProceedingPage(
           tx,
           runId,
@@ -82,7 +73,7 @@ async function storeStepsPage(
           parent.cap,
         );
         versionsAdded += outcome.versionsAdded;
-        backfilled += 1;
+        if (outcome.capped === 0) backfilled += 1;
         skipForCap = outcome.capped > 0;
       }
     }
@@ -91,7 +82,8 @@ async function storeStepsPage(
       await upsertDipCandidate(tx, runId, index, candidateMeta, []);
       continue;
     }
-    const hash = stepContentHash(doc, raw);
+    const fundstelle = { ...doc.fundstelle, ...fundstelleRest };
+    const hash = stepContentHash(doc, raw, fundstelleRest);
     const sourceUpdatedAt = new Date(doc.aktualisiert);
     const documentDate = new Date(doc.datum);
     const data = {
@@ -116,7 +108,11 @@ async function storeStepsPage(
         stepApiId: doc.id,
         versionNo: 1,
         contentHash: hash,
-        snapshot: { ...data, metadata: raw } as Prisma.InputJsonValue,
+        snapshot: {
+          ...data,
+          metadata: raw,
+          fundstelle,
+        } as Prisma.InputJsonValue,
         sourceUpdatedAt,
         runId,
       });
@@ -131,7 +127,11 @@ async function storeStepsPage(
           stepApiId: doc.id,
           versionNo,
           contentHash: hash,
-          snapshot: { ...data, metadata: raw } as Prisma.InputJsonValue,
+          snapshot: {
+            ...data,
+            metadata: raw,
+            fundstelle,
+          } as Prisma.InputJsonValue,
           sourceUpdatedAt,
           runId,
         });
@@ -197,81 +197,18 @@ export async function collectSteps(
   prisma: PrismaClient,
   options: CollectStepsOptions,
 ): Promise<CollectStepsResult> {
-  const runId = runIdSchema.parse(options.runId);
-  const hash = scopeInputHash(STEPS_ENDPOINT, options);
-  const scope: Record<string, unknown> = {
-    electoralTerm: options.electoralTerm,
-  };
-  if (options.updatedFrom)
-    scope.aktualisiertStart = options.updatedFrom.toISOString();
-  if (options.updatedTo)
-    scope.aktualisiertEnd = options.updatedTo.toISOString();
-  if (options.proceedingCap !== undefined)
-    scope.proceedingCap = options.proceedingCap;
-  if (options.followStoredParents !== undefined)
-    scope.followStoredParents = options.followStoredParents;
-
-  const replayed = await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
-    const previous = await findRun(tx, runId);
-    if (previous) {
-      if (previous.inputHash !== hash || previous.feedId !== STEPS_ENDPOINT)
-        throw new Error(
-          "Run ID already belongs to a different input; use a new run ID",
-        );
-      if (previous.status === "completed" && previous.completedAt !== null)
-        return previous;
-    } else {
-      await createRun(tx, {
-        id: runId,
-        feedId: STEPS_ENDPOINT,
-        sourceKind: "dip_endpoint",
-        sourceScope: scope as Prisma.InputJsonValue,
-        inputHash: hash,
-        status: "running",
-      });
-    }
-    return null;
-  });
-  if (replayed)
-    return {
-      runId,
-      status: "completed",
-      valid: replayed.validCount,
-      invalid: replayed.invalidCount,
-      stored: 0,
-      versionsAdded: 0,
-      capped: 0,
-      backfilled: 0,
-      replayed: true,
-    };
-
-  let cursor: string | undefined;
   const now = options.now ?? new Date();
-  let valid = 0;
-  let invalid = 0;
-  let stored = 0;
-  let versionsAdded = 0;
-  let capped = 0;
-  let backfilled = 0;
-  let itemIndex = 0;
-  let maxObserved: Date | null = null;
-  try {
-    for (;;) {
-      const page = await options.fetchPage({
-        wahlperiode: options.electoralTerm,
-        aktualisiertStart: options.updatedFrom?.toISOString(),
-        aktualisiertEnd: options.updatedTo?.toISOString(),
-        cursor,
-      });
+  return collectDipPages(
+    prisma,
+    STEPS_ENDPOINT,
+    options,
+    async (documents, firstIndex, runId) => {
       const kept: StoredStep[] = [];
       const invalidDocs: { index: number; error: string; id: string | null }[] =
         [];
-      for (const input of page.documents) {
-        const converted = toStoredStep(input, itemIndex);
-        itemIndex += 1;
+      for (const [offset, input] of documents.entries()) {
+        const converted = toStoredStep(input, firstIndex + offset);
         if ("error" in converted) {
-          invalid += 1;
           invalidDocs.push({
             index: converted.index,
             error: converted.error,
@@ -281,8 +218,26 @@ export async function collectSteps(
                 : null,
           });
         } else {
-          valid += 1;
           kept.push(converted);
+        }
+      }
+      const fetchedParents = new Map<string, StoredDoc>();
+      if (options.followStoredParents && options.fetchVorgang) {
+        const missing = new Map<string, number>();
+        for (const { doc, index } of kept)
+          if (!missing.has(doc.vorgang_id))
+            missing.set(doc.vorgang_id, -index - 1);
+        const existing = await prisma.proceeding.findMany({
+          where: { apiId: { in: [...missing.keys()] } },
+          select: { apiId: true },
+        });
+        for (const { apiId } of existing) missing.delete(apiId);
+        for (const [apiId, index] of missing) {
+          const fetched = await options.fetchVorgang(apiId);
+          if (fetched === null) continue;
+          const converted = toStored(fetched, index);
+          if (!("error" in converted) && converted.doc.id === apiId)
+            fetchedParents.set(apiId, converted);
         }
       }
       const counts = await prisma.$transaction(async (tx) => {
@@ -299,64 +254,25 @@ export async function collectSteps(
         return storeStepsPage(tx, runId, kept, {
           followStored: options.followStoredParents ?? false,
           cap: options.proceedingCap,
-          fetchVorgang: options.fetchVorgang,
+          fetched: fetchedParents,
           electoralTerm: options.electoralTerm,
           now,
         });
       });
-      versionsAdded += counts.versionsAdded;
-      capped += counts.capped;
-      backfilled += counts.backfilled;
-      stored += kept.length - counts.capped;
+      let maxObserved: Date | null = null;
       for (const { doc } of kept) {
         const observed = new Date(doc.aktualisiert);
         if (!maxObserved || observed > maxObserved) maxObserved = observed;
       }
-      // Pagination ends when the cursor stops changing.
-      if (!page.cursor || page.cursor === cursor) break;
-      cursor = page.cursor;
-    }
-  } catch (error) {
-    await prisma.$transaction(async (tx) => {
-      await finalizeRun(tx, runId, {
-        status: "failed",
-        validCount: valid,
-        invalidCount: invalid,
-        completedAt: new Date(),
-        error:
-          error instanceof Error ? error.message.slice(0, 2000) : "unknown",
-      });
-    });
-    throw error;
-  }
-  await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
-    await finalizeRun(tx, runId, {
-      status: "completed",
-      validCount: valid,
-      invalidCount: invalid,
-      completedAt: new Date(),
-      error: null,
-    });
-    // Checkpoint advances only after all pages are durably stored.
-    await upsertDipCheckpoint(
-      tx,
-      STEPS_ENDPOINT,
-      options.electoralTerm,
-      options.updatedTo ?? maxObserved,
-    );
-  });
-  return {
-    runId,
-    status: "completed",
-    valid,
-    invalid,
-    stored,
-    versionsAdded,
-    capped,
-    backfilled,
-    replayed: false,
-  };
+      return {
+        valid: kept.length,
+        invalid: invalidDocs.length,
+        stored: kept.length - counts.capped,
+        ...counts,
+        maxObserved,
+      };
+    },
+  );
 }
 
 // Live page fetcher for operational use (tests inject fakes). Single-item

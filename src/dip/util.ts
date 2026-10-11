@@ -195,7 +195,11 @@ export function toStoredStep(
   return { doc, raw: rest, fundstelleRest, index };
 }
 
-export function stepContentHash(doc: Step, rest: Record<string, unknown>) {
+export function stepContentHash(
+  doc: Step,
+  rest: Record<string, unknown>,
+  fundstelleRest: Record<string, unknown>,
+) {
   return createHash("sha256")
     .update(
       JSON.stringify({
@@ -211,7 +215,7 @@ export function stepContentHash(doc: Step, rest: Record<string, unknown>) {
         vorgang_id: doc.vorgang_id,
         datum: doc.datum,
         aktualisiert: doc.aktualisiert,
-        fundstelle: doc.fundstelle,
+        fundstelle: { ...doc.fundstelle, ...fundstelleRest },
         aktivitaet_anzahl: doc.aktivitaet_anzahl,
         rest,
       }),

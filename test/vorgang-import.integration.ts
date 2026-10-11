@@ -38,11 +38,12 @@ test("multi-page import stores records once and advances the checkpoint", async 
     c2: { documents: [doc("3")], next: "c2" },
   });
   const result = await collectVorgang(prisma, {
-    runId: "dip-vorgang-1",
+    runId: " dip-vorgang-1 ",
     electoralTerm: 21,
     fetchPage,
   });
   assert.equal(result.status, "completed");
+  assert.equal(result.runId, "dip-vorgang-1");
   assert.deepEqual(
     { valid: result.valid, invalid: result.invalid, stored: result.stored },
     { valid: 3, invalid: 0, stored: 3 },
