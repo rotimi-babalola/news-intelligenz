@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { pickCheckpointTarget } from "../src/dip/collect.js";
 import { resolveSyncWindow, SYNC_OVERLAP_MS } from "../src/dip/sync.js";
 
 test("null checkpoint imports baseline without a start filter", () => {
@@ -31,4 +32,16 @@ test("window bounds serialize with explicit timezone offsets", () => {
   // times.
   assert.match(window.start?.toISOString() ?? "", /Z$/);
   assert.match(window.end.toISOString(), /Z$/);
+});
+
+test("checkpoint target never moves backward", () => {
+  const current = new Date("2026-10-12T07:00:00.000Z");
+  const newer = new Date("2026-10-13T00:00:00.000Z");
+  const older = new Date("2026-10-10T00:00:00.000Z");
+  assert.equal(pickCheckpointTarget(null, null), null);
+  assert.deepEqual(pickCheckpointTarget(null, newer), newer);
+  assert.deepEqual(pickCheckpointTarget(current, null), current);
+  assert.deepEqual(pickCheckpointTarget(current, newer), newer);
+  assert.deepEqual(pickCheckpointTarget(current, older), current);
+  assert.deepEqual(pickCheckpointTarget(current, new Date(current)), current);
 });

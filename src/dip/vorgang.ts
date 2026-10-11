@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
+import { RateLimitedError, parseRetryAfterMs } from "../jobs";
 import {
   countProceedingsByTerm,
   createProceeding,
@@ -10,7 +11,7 @@ import {
   upsertParliamentaryDiscovery,
 } from "./repository";
 import { enqueueProceedingEmbedding } from "./jobs";
-import { collectDipPages } from "./collect";
+import { TerminalPageError, collectDipPages } from "./collect";
 import type {
   CollectVorgangOptions,
   CollectVorgangResult,
@@ -245,8 +246,17 @@ export function liveVorgangFetcher(apiKey: string): FetchVorgangPage {
       `https://search.dip.bundestag.de/api/v1/vorgang?${query}`,
       { headers: { Authorization: `ApiKey ${apiKey}` } },
     );
-    if (!response.ok)
-      throw new Error(`DIP /vorgang responded ${response.status}`);
+    if (response.status === 429)
+      throw new RateLimitedError(
+        "DIP /vorgang responded 429",
+        parseRetryAfterMs(response.headers.get("retry-after")) ?? 60_000,
+      );
+    if (!response.ok) {
+      const message = `DIP /vorgang responded ${response.status}`;
+      if (response.status >= 400 && response.status < 500)
+        throw new TerminalPageError(message);
+      throw new Error(message);
+    }
     const body = (await response.json()) as {
       documents?: unknown[];
       cursor?: string;

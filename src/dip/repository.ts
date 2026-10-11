@@ -78,6 +78,16 @@ export function upsertParliamentaryDiscovery(
   });
 }
 
+export function findDipCheckpoint(
+  client: Client,
+  endpoint: string,
+  electoralTerm: number,
+) {
+  return client.dipCheckpoint.findUnique({
+    where: { endpoint_electoralTerm: { endpoint, electoralTerm } },
+  });
+}
+
 export function upsertDipCheckpoint(
   client: Client,
   endpoint: string,

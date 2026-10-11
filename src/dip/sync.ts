@@ -1,4 +1,5 @@
 import type { PrismaClient } from "../generated/prisma/client";
+import { findDipCheckpoint } from "./repository";
 import { collectSteps } from "./steps";
 import type { FetchStepPage, FetchVorgang } from "./types";
 import { collectVorgang } from "./vorgang";
@@ -34,6 +35,7 @@ export type SyncDipEndpointOptions = {
   now?: Date;
   proceedingCap?: number;
   followStoredParents?: boolean;
+  retryDelayMs?: (attempt: number, error: unknown) => number;
   fetchPage: FetchVorgangPage | FetchStepPage;
   fetchVorgang?: FetchVorgang;
 };
@@ -48,14 +50,11 @@ export async function syncDipEndpoint(
   options: SyncDipEndpointOptions,
 ) {
   const now = options.now ?? new Date();
-  const checkpoint = await prisma.dipCheckpoint.findUnique({
-    where: {
-      endpoint_electoralTerm: {
-        endpoint,
-        electoralTerm: options.electoralTerm,
-      },
-    },
-  });
+  const checkpoint = await findDipCheckpoint(
+    prisma,
+    endpoint,
+    options.electoralTerm,
+  );
   const window = resolveSyncWindow(checkpoint?.updatedThrough ?? null, now);
   const common = {
     runId: options.runId,
@@ -63,6 +62,7 @@ export async function syncDipEndpoint(
     updatedFrom: window.start,
     updatedTo: window.end,
     proceedingCap: options.proceedingCap,
+    retryDelayMs: options.retryDelayMs,
   };
   const result =
     endpoint === "/vorgang"
@@ -84,7 +84,9 @@ export type TermSyncCompleted = {
   endpoint: SyncEndpoint;
   electoralTerm: number;
   window: SyncWindow;
-  result: Awaited<ReturnType<typeof collectVorgang>> | Awaited<ReturnType<typeof collectSteps>>;
+  result:
+    | Awaited<ReturnType<typeof collectVorgang>>
+    | Awaited<ReturnType<typeof collectSteps>>;
 };
 
 export type TermSyncFailure = {
@@ -107,6 +109,7 @@ export type SyncDipTermsOptions = {
   now?: Date;
   proceedingCap?: number;
   followStoredParents?: boolean;
+  retryDelayMs?: (attempt: number, error: unknown) => number;
   fetchVorgangPage: FetchVorgangPage;
   fetchStepPage: FetchStepPage;
   fetchVorgang?: FetchVorgang;
@@ -118,10 +121,8 @@ export async function syncDipTerms(
   prisma: PrismaClient,
   options: SyncDipTermsOptions,
 ): Promise<TermsSyncOutcome> {
-  const endpoints = options.endpoints ?? [
-    "/vorgang",
-    "/vorgangsposition",
-  ] as SyncEndpoint[];
+  const endpoints =
+    options.endpoints ?? (["/vorgang", "/vorgangsposition"] as SyncEndpoint[]);
   const now = options.now ?? new Date();
   const outcome: TermsSyncOutcome = { completed: [], failed: [] };
   for (const electoralTerm of [...new Set(options.terms)]) {
@@ -133,6 +134,7 @@ export async function syncDipTerms(
           now,
           proceedingCap: options.proceedingCap,
           followStoredParents: options.followStoredParents,
+          retryDelayMs: options.retryDelayMs,
           fetchPage:
             endpoint === "/vorgang"
               ? options.fetchVorgangPage
