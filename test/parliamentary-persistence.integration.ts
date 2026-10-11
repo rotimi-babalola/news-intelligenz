@@ -1,30 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { test } from "node:test";
-import pg from "pg";
-
-const root = process.cwd();
-
-async function isolatedDatabase() {
-  const configured = new URL(process.env.DATABASE_URL!);
-  configured.searchParams.delete("schema");
-  const baseUrl = configured.toString();
-  const admin = new pg.Pool({ connectionString: baseUrl });
-  const schema = `test_${randomUUID().replaceAll("-", "")}`;
-  await admin.query(`CREATE SCHEMA ${schema}`);
-  await admin.end();
-  const url = `${baseUrl}?schema=${schema}`;
-  process.env.DATABASE_URL = url;
-  const env = { ...process.env, DATABASE_URL: url };
-  await promisify(execFile)("node_modules/.bin/prisma", ["migrate", "deploy"], {
-    env,
-    cwd: root,
-  });
-  const { database } = await import("../src/db.js");
-  return database();
-}
+import { isolatedDatabase } from "./dip-test-db.js";
 
 const proceeding = (apiId: string) => ({
   apiId,
