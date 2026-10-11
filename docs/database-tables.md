@@ -168,6 +168,29 @@ excluded until the operator records `accepted` (routes into processing) or
 ## Enums
 
 - `RelevanceDecision`: `accepted`, `uncertain`, `rejected`.
+- `ParliamentaryEntity`: `vorgang`, `vorgangsposition`.
+
+## Parliamentary records
+
+DIP proceedings and steps live apart from news publications. Identity is the
+DIP entity type plus its numeric-string API ID (`proceedings.api_id`,
+`proceeding_steps.api_id`); steps link to proceedings through the plain
+`proceeding_steps.proceeding_id` column with no foreign key, so steps whose
+parent has not been observed are retained instead of rejected. Document dates
+(`document_date`), source update timestamps (`source_updated_at`) and
+observation times (`observed_at`) are stored separately. A changed observation
+adds a version row; an unchanged observation adds nothing (and a return to
+earlier text counts as a new version, mirroring publications).
+
+| Table                       | Key                             | Notes                                                                                                                                                                               |
+| --------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `proceedings`               | `api_id`                        | Current proceeding state; `latest_version_no` points at the newest row in `proceeding_versions`                                                                                     |
+| `proceeding_versions`       | (`proceeding_id`, `version_no`) | Observed snapshots with `content_hash`, `snapshot`, `source_updated_at`, `observed_at`, and observing `run_id`                                                                      |
+| `proceeding_steps`          | `api_id`                        | Current step state with `institution` (`BT`/`BR`/`BV`/`EK`); indexed `proceeding_id` parent link                                                                                    |
+| `proceeding_step_versions`  | (`step_id`, `version_no`)       | Observed step snapshots, same shape as proceeding versions                                                                                                                          |
+| `document_references`       | `step_id`                       | Current `fundstelle` per step: `reference_id`, `document_number`, `pdf_url`, `document_date`, plus the denormalized parent `proceeding_id`; history lives in step version snapshots |
+| `parliamentary_discoveries` | (`run_id`, `entity`, `api_id`)  | Distinct encounters; replaying a run reuses the row, a new run adds one                                                                                                             |
+| `dip_checkpoints`           | (`endpoint`, `electoral_term`)  | Durable per-endpoint/scope progress; advances only after all pages of a window are stored                                                                                           |
 
 - `RunStatus`: `running`, `completed`, `failed`.
 - `Language`: `de`, `en`.

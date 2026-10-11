@@ -48,6 +48,11 @@ enum RelevanceDecision {
   rejected
 }
 
+enum ParliamentaryEntity {
+  vorgang
+  vorgangsposition
+}
+
 model Run {
   id           String        @id @db.Text
   feedId       String        @map("feed_id") @db.Text
@@ -63,6 +68,7 @@ model Run {
   candidates   Candidate[]
   discoveries  Discovery[]
   jobs         ProcessingJob[]
+  parliamentaryDiscoveries ParliamentaryDiscovery[]
 
   @@map("runs")
 }
@@ -201,4 +207,124 @@ model JobAttempt {
 
   @@id([jobId, attemptNo])
   @@map("job_attempts")
+}
+
+// Parliamentary records (DIP) live apart from news publications. Identity is
+// the DIP entity type plus its numeric-string API ID; steps link to
+// proceedings through a plain vorgang_id column with no foreign key so steps
+// whose parent has not been observed are retained instead of rejected.
+// Document dates (datum), source update timestamps (aktualisiert) and
+// observation times (observed_at) are stored separately and never conflated.
+model Proceeding {
+  apiId             String   @id @map("api_id") @db.Text
+  title             String   @db.Text
+  proceedingType    String   @map("proceeding_type") @db.Text
+  electoralTerm     Int      @map("electoral_term")
+  deliberationState String?  @map("deliberation_state") @db.Text
+  documentDate      DateTime? @map("document_date") @db.Date
+  sourceUpdatedAt   DateTime @map("source_updated_at") @db.Timestamptz(6)
+  metadata          Json
+  firstObservedAt   DateTime @map("first_observed_at") @default(now()) @db.Timestamptz(6)
+  lastObservedAt    DateTime @map("last_observed_at") @default(now()) @db.Timestamptz(6)
+  latestVersionNo   Int      @map("latest_version_no") @default(0)
+  versions          ProceedingVersion[]
+
+  @@map("proceedings")
+}
+
+model ProceedingVersion {
+  id              String     @id @default(uuid()) @db.Uuid
+  proceedingApiId String     @map("proceeding_id") @db.Text
+  proceeding      Proceeding @relation(fields: [proceedingApiId], references: [apiId])
+  versionNo       Int        @map("version_no")
+  contentHash     String     @map("content_hash") @db.Text
+  snapshot        Json
+  sourceUpdatedAt DateTime   @map("source_updated_at") @db.Timestamptz(6)
+  observedAt      DateTime   @map("observed_at") @default(now()) @db.Timestamptz(6)
+  runId           String?    @map("run_id") @db.Text
+
+  @@unique([proceedingApiId, versionNo])
+  @@map("proceeding_versions")
+}
+
+model ProceedingStep {
+  apiId           String   @id @map("api_id") @db.Text
+  proceedingApiId String   @map("proceeding_id") @db.Text
+  institution     String   @db.Text
+  stepLabel       String   @map("step_label") @db.Text
+  title           String   @db.Text
+  documentType    String   @map("document_type") @db.Text
+  documentDate    DateTime? @map("document_date") @db.Date
+  sourceUpdatedAt DateTime @map("source_updated_at") @db.Timestamptz(6)
+  metadata        Json
+  firstObservedAt DateTime @map("first_observed_at") @default(now()) @db.Timestamptz(6)
+  lastObservedAt  DateTime @map("last_observed_at") @default(now()) @db.Timestamptz(6)
+  latestVersionNo Int      @map("latest_version_no") @default(0)
+  versions        ProceedingStepVersion[]
+  documentReference DocumentReference?
+
+  @@index([proceedingApiId])
+  @@map("proceeding_steps")
+}
+
+model ProceedingStepVersion {
+  id              String         @id @default(uuid()) @db.Uuid
+  stepApiId       String         @map("step_id") @db.Text
+  step            ProceedingStep @relation(fields: [stepApiId], references: [apiId])
+  versionNo       Int            @map("version_no")
+  contentHash     String         @map("content_hash") @db.Text
+  snapshot        Json
+  sourceUpdatedAt DateTime       @map("source_updated_at") @db.Timestamptz(6)
+  observedAt      DateTime       @map("observed_at") @default(now()) @db.Timestamptz(6)
+  runId           String?        @map("run_id") @db.Text
+
+  @@unique([stepApiId, versionNo])
+  @@map("proceeding_step_versions")
+}
+
+// Current document reference per step, from the step's fundstelle. History
+// lives in step version snapshots; the parent link is denormalized here so
+// references resolve without joining through steps.
+model DocumentReference {
+  stepApiId       String         @id @map("step_id") @db.Text
+  step            ProceedingStep @relation(fields: [stepApiId], references: [apiId])
+  proceedingApiId String         @map("proceeding_id") @db.Text
+  referenceId     String         @map("reference_id") @db.Text
+  documentNumber  String         @map("document_number") @db.Text
+  pdfUrl          String         @map("pdf_url") @db.Text
+  documentDate    DateTime?      @map("document_date") @db.Date
+  metadata        Json
+  observedAt      DateTime       @map("observed_at") @default(now()) @db.Timestamptz(6)
+
+  @@index([proceedingApiId])
+  @@index([referenceId])
+  @@map("document_references")
+}
+
+// Distinct encounters between runs and parliamentary records: one row per
+// (run, entity, apiId). Replaying a run reuses the row; a new run records a
+// new encounter without duplicating the record or its versions.
+model ParliamentaryDiscovery {
+  runId        String              @map("run_id") @db.Text
+  run          Run                 @relation(fields: [runId], references: [id])
+  entity       ParliamentaryEntity
+  apiId        String              @map("api_id") @db.Text
+  discoveredAt DateTime            @map("discovered_at") @default(now()) @db.Timestamptz(6)
+
+  @@id([runId, entity, apiId])
+  @@index([entity, apiId])
+  @@map("parliamentary_discoveries")
+}
+
+// Durable per-endpoint/scope progress for DIP collection. The checkpoint
+// advances only after all pages of a window are stored; embedding and PDF
+// jobs never hold it open.
+model DipCheckpoint {
+  endpoint       String    @db.Text
+  electoralTerm  Int       @map("electoral_term")
+  updatedThrough DateTime? @map("updated_through") @db.Timestamptz(6)
+  updatedAt      DateTime  @map("updated_at") @updatedAt @db.Timestamptz(6)
+
+  @@id([endpoint, electoralTerm])
+  @@map("dip_checkpoints")
 }
