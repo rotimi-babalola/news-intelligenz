@@ -1,0 +1,15 @@
+{
+  "cursor": "CURSOR_PAGE2",
+  "documents": [
+    {
+      "aktualisiert": "2026-10-09T12:58:00+02:00",
+      "datum": "2026-10-09",
+      "id": "340100",
+      "titel": "Nachträglich erfasster Vorgang der Vorseite",
+      "typ": "Vorgang",
+      "vorgangstyp": "Kleine Anfrage",
+      "wahlperiode": 21
+    }
+  ],
+  "numFound": 18781
+}

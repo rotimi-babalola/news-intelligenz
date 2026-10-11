@@ -143,7 +143,11 @@ export async function claimNextJob(
   prisma: PrismaClient,
   workerId: string,
   leaseMs: number = LEASE_MS_DEFAULT,
-  filter: { runId?: string; jobId?: string } = {},
+  filter: {
+    runId?: string;
+    jobId?: string;
+    excludeSourceKind?: SourceKind;
+  } = {},
 ): Promise<ClaimedJob | null> {
   const params: unknown[] = [workerId, leaseMs / 1000];
   let filterClause = "";
@@ -154,6 +158,10 @@ export async function claimNextJob(
   if (filter.jobId) {
     params.push(filter.jobId);
     filterClause += ` AND id = $${params.length}`;
+  }
+  if (filter.excludeSourceKind) {
+    params.push(filter.excludeSourceKind);
+    filterClause += ` AND source_kind <> $${params.length}`;
   }
   const jobsTable = qualifiedTable("processing_jobs");
   const rows = (await prisma.$queryRawUnsafe(
