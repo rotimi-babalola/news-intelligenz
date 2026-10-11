@@ -55,3 +55,12 @@ Status: contract + live behavior verified against OpenAPI v1.5 and minimal probe
 - `vorgang-page2-terminal.json` — repeats `cursor: CURSOR_PAGE2` (pagination end = cursor stops changing).
 - `vorgangsposition-page1.json` — BR step with full `fundstelle`, BT step, cross-term step (`vorgang_id` outside the filtered term), missing-parent step (`vorgang_id` `999999`), and a 4-entry `aktivitaet_anzeige` with `aktivitaet_anzahl: 6` (display cap).
 - `test/dip-fixtures.test.ts` pins these invariants so regressions fail loudly.
+
+## Sync verification limits (slices 1–5)
+
+- Window bounds serialize with explicit offsets (`toISOString`, `Z`). Inclusivity of `f.aktualisiert.start/end` at the API boundary is unverified live; the six-hour overlap compensates, it does not prove inclusivity.
+- Indexing delay is unresolved: the overlap is a recovery policy, not a capture guarantee. Updates delayed past the overlap stay gaps, exposed as failed runs and recoverable through operator backfill windows.
+- Cursor expiry semantics are unverified against the live API. The collector retries transient page failures three times, restarts a mid-pagination window once from the first page with idempotent writes, and otherwise fails loudly without advancing the checkpoint.
+- Live pagination consistency was probed once (two pages, cursor changed until terminal). No standing live-collection monitor exists; later slices keep building against `fixtures/dip/` until the unresolved items above clear.
+- Step and document updates scan independently of parent proceeding timestamps; independently fetched endpoints never claim an atomic snapshot, and checkpoints never move backward across overlapping runs or backfills.
+- Absence from incremental results and unexplained 404s never delete retained records (pinned by tests).

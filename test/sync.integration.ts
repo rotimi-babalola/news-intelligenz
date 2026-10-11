@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { TerminalPageError } from "../src/dip/collect.js";
+import { collectAll } from "../src/import/service.js";
+import type { Feed } from "../src/sources.js";
 import { listDipGaps } from "../src/dip/repository.js";
 import {
   syncDipEndpoint,
@@ -522,5 +524,157 @@ test("absent records and unexplained 404s never delete retained state", async ()
   });
   assert.equal(retained.proceedingApiId, "999999");
   assert.equal(await prisma.proceeding.count(), 1);
+  await prisma.$disconnect();
+});
+
+function proceedingStep(id: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    typ: "Vorgangsposition",
+    vorgangsposition: "Kleine Anfrage",
+    zuordnung: "BT",
+    gang: false,
+    fortsetzung: false,
+    nachtrag: false,
+    vorgangstyp: "Kleine Anfrage",
+    titel: `Titel ${id}`,
+    dokumentart: "Drucksache",
+    vorgang_id: "340161",
+    datum: "2026-10-09",
+    aktualisiert: "2026-10-09T13:24:22+02:00",
+    fundstelle: {
+      id: "29701499",
+      dokumentnummer: "21/1001",
+      datum: "2026-10-09",
+      pdf_url: "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
+    },
+    aktivitaet_anzahl: 0,
+    ...overrides,
+  };
+}
+
+test("step updates are found while the parent proceeding is unchanged", async () => {
+  const prisma = await isolatedDatabase();
+  const parent = proceeding("340161", "2026-10-09T13:24:22+02:00");
+  const onePage =
+    (documents: unknown[]) =>
+    async (params: {
+      cursor?: string;
+    }): Promise<{ documents: unknown[]; cursor: string; numFound: number }> =>
+      params.cursor === undefined
+        ? { documents, cursor: "next", numFound: 0 }
+        : { documents: [], cursor: "next", numFound: 0 };
+  await syncDipTerms(prisma, {
+    terms: [21],
+    runIdFor: (endpoint, term) => `dip-steponly-base-${endpoint}-${term}`,
+    now: new Date("2026-10-10T12:00:00+02:00"),
+    fetchVorgangPage: onePage([parent]),
+    fetchStepPage: onePage([proceedingStep("701499")]),
+  });
+  const outcome = await syncDipTerms(prisma, {
+    terms: [21],
+    runIdFor: (endpoint, term) => `dip-steponly-incr-${endpoint}-${term}`,
+    now: new Date("2026-10-11T07:00:00+02:00"),
+    fetchVorgangPage: onePage([parent]),
+    fetchStepPage: onePage([
+      proceedingStep("701499", {
+        titel: "Aktualisierter Titel",
+        aktualisiert: "2026-10-10T18:00:00+02:00",
+      }),
+    ]),
+  });
+  assert.equal(outcome.failed.length, 0);
+  const vorgangScope = outcome.completed.find((c) => c.endpoint === "/vorgang");
+  const stepsScope = outcome.completed.find(
+    (c) => c.endpoint === "/vorgangsposition",
+  );
+  assert.equal(vorgangScope?.result.versionsAdded, 0);
+  assert.equal(stepsScope?.result.versionsAdded, 1);
+  await prisma.$disconnect();
+});
+
+test("a DIP scope failure coexists with successful public-news collection", async () => {
+  const prisma = await isolatedDatabase();
+  const feeds: Feed[] = [
+    {
+      id: "feed-a",
+      publisher: "Deutschlandfunk",
+      url: "https://example.org/a.rss",
+      defaultLanguage: "de",
+    },
+  ];
+  const results = await collectAll(
+    prisma,
+    "mix",
+    async () =>
+      `<rss><channel><language>de</language>` +
+      `<item><title>Headline</title>` +
+      `<link>https://www.deutschlandfunk.de/x.html</link>` +
+      `<guid>x</guid>` +
+      `<pubDate>Tue, 22 Sep 2026 08:00:00 +0200</pubDate></item>` +
+      `</channel></rss>`,
+    feeds,
+    async () => ({
+      ok: false as const,
+      reason: "Unsupported format: test stub holds no article",
+    }),
+  );
+  assert.equal(results[0]?.status, "completed");
+  await assert.rejects(
+    syncDipEndpoint(prisma, "/vorgangsposition", {
+      runId: "dip-mix-1",
+      electoralTerm: 21,
+      now: new Date("2026-10-11T07:00:00+02:00"),
+      retryDelayMs: () => 0,
+      fetchPage: async () => {
+        throw new Error("DIP /vorgangsposition responded 503");
+      },
+    }),
+    /responded 503/,
+  );
+  // Both outcomes stay inspectable side by side for the #8 scheduler seam.
+  assert.equal(
+    (await prisma.run.findUniqueOrThrow({ where: { id: "mix:feed-a" } }))
+      .status,
+    "completed",
+  );
+  assert.equal(
+    (await prisma.run.findUniqueOrThrow({ where: { id: "dip-mix-1" } })).status,
+    "failed",
+  );
+  assert.ok(
+    (await listDipGaps(prisma)).some((gap) => gap.runId === "dip-mix-1"),
+  );
+  await prisma.$disconnect();
+});
+
+test("local proceeding cap applies through multi-term sync", async () => {
+  const prisma = await isolatedDatabase();
+  const outcome = await syncDipTerms(prisma, {
+    terms: [21],
+    endpoints: ["/vorgang"],
+    runIdFor: (endpoint, term) => `dip-cap-${endpoint}-${term}`,
+    now: new Date("2026-10-11T07:00:00+02:00"),
+    proceedingCap: 1,
+    fetchVorgangPage: async (params) =>
+      params.cursor === undefined
+        ? {
+            documents: [
+              proceeding("1", "2026-10-10T10:00:00+02:00"),
+              proceeding("2", "2026-10-10T11:00:00+02:00"),
+            ],
+            cursor: "c2",
+            numFound: 0,
+          }
+        : { documents: [], cursor: "c2", numFound: 0 },
+    fetchStepPage: async (params) => ({
+      documents: [],
+      cursor: params.cursor ?? "s2",
+      numFound: 0,
+    }),
+  });
+  assert.equal(outcome.failed.length, 0);
+  assert.equal(outcome.completed[0]?.result.stored, 1);
+  assert.equal(outcome.completed[0]?.result.capped, 1);
   await prisma.$disconnect();
 });
