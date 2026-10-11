@@ -147,20 +147,20 @@ The [DIP criteria](docs/dip-design-notes.md#verification-criteria) add initial i
 
 ## Documentation
 
-| Document                                                                             | Purpose                                                        |
-| ------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| [Phase 1 architecture](docs/phase-1-architecture.md)                                 | Agreed scope, collection flow and operational behaviour        |
-| [Design notes](docs/phase-1-design-notes.md)                                         | Decisions, acceptance criteria and unresolved factual checks   |
-| [DIP amendment](docs/dip-design-notes.md)                                            | Parliamentary collection decisions and verification criteria   |
-| [ADR: local multilingual DIP retrieval](docs/adr/0005-local-multilingual-dip-retrieval.md) | Local embeddings, PostgreSQL vector search and PDF processing |
-| [Feed catalog](docs/phase-1-feed-catalog.md)                                         | Exact launch feed URLs                                         |
-| [Domain glossary](CONTEXT.md)                                                        | Shared terminology for publications, versions and discoveries  |
-| [ADR: publication versions](docs/adr/0001-preserve-publication-versions.md)          | Why historical article text is retained                        |
-| [ADR: PostgreSQL storage and jobs](docs/adr/0002-postgresql-for-storage-and-jobs.md) | Why persistent data and durable jobs share a database          |
-| [ADR: local runtime](docs/adr/0003-local-runtime-and-database-access.md)             | Node.js 24 and Prisma with PostgreSQL 17                       |
-| [Launch feed verification](docs/launch-feed-verification.md)                         | First live feed, terms and retention distinction               |
-| [Database tables](docs/database-tables.md)                                           | Collection schema: runs, publications, candidates, discoveries |
-| [Issue #1 QA plan](docs/issue-1-qa-plan.md)                                          | Manual end-to-end checks: import URL, inspect DB, review admin |
+| Document                                                                                   | Purpose                                                        |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| [Phase 1 architecture](docs/phase-1-architecture.md)                                       | Agreed scope, collection flow and operational behaviour        |
+| [Design notes](docs/phase-1-design-notes.md)                                               | Decisions, acceptance criteria and unresolved factual checks   |
+| [DIP amendment](docs/dip-design-notes.md)                                                  | Parliamentary collection decisions and verification criteria   |
+| [ADR: local multilingual DIP retrieval](docs/adr/0005-local-multilingual-dip-retrieval.md) | Local embeddings, PostgreSQL vector search and PDF processing  |
+| [Feed catalog](docs/phase-1-feed-catalog.md)                                               | Exact launch feed URLs                                         |
+| [Domain glossary](CONTEXT.md)                                                              | Shared terminology for publications, versions and discoveries  |
+| [ADR: publication versions](docs/adr/0001-preserve-publication-versions.md)                | Why historical article text is retained                        |
+| [ADR: PostgreSQL storage and jobs](docs/adr/0002-postgresql-for-storage-and-jobs.md)       | Why persistent data and durable jobs share a database          |
+| [ADR: local runtime](docs/adr/0003-local-runtime-and-database-access.md)                   | Node.js 24 and Prisma with PostgreSQL 17                       |
+| [Launch feed verification](docs/launch-feed-verification.md)                               | First live feed, terms and retention distinction               |
+| [Database tables](docs/database-tables.md)                                                 | Collection schema: runs, publications, candidates, discoveries |
+| [Issue #1 QA plan](docs/issue-1-qa-plan.md)                                                | Manual end-to-end checks: import URL, inspect DB, review admin |
 
 ## Implementation roadmap
 
