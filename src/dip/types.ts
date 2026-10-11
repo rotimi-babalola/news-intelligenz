@@ -75,6 +75,8 @@ export type CollectStepsOptions = {
   // outside the local proceeding cap are skipped but counted, never silent.
   followStoredParents?: boolean;
   proceedingCap?: number;
+  // Reference date for the 14-day PDF hot subset; defaults to collection time.
+  now?: Date;
   fetchPage: FetchStepPage;
   fetchVorgang?: FetchVorgang;
 };

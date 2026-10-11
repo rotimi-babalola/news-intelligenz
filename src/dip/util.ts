@@ -98,6 +98,16 @@ export function isUniqueViolation(error: unknown) {
   );
 }
 
+// PDF background set: references whose document date falls in the previous 14
+// days. Older references wait for an on-demand request (later slice); the
+// document date is never a sync filter, only this queue selection.
+const HOT_DOCUMENT_MS = 14 * 24 * 60 * 60 * 1000;
+
+export function isHotDocument(documentDate: Date, now: Date) {
+  const ageMs = now.getTime() - documentDate.getTime();
+  return ageMs >= 0 && ageMs <= HOT_DOCUMENT_MS;
+}
+
 const INSTITUTIONS = new Set(["BT", "BR", "BV", "EK"]);
 
 const fundstelleSchema = z.object({

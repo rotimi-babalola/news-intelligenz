@@ -12,6 +12,7 @@ import {
   upsertDipCheckpoint,
   upsertParliamentaryDiscovery,
 } from "./repository";
+import { enqueueProceedingEmbedding } from "./jobs";
 import type {
   CollectVorgangOptions,
   CollectVorgangResult,
@@ -111,6 +112,15 @@ export async function storeProceedingPage(
         sourceUpdatedAt,
         runId,
       });
+      // Downstream embedding submits here but runs independently; the
+      // checkpoint never waits for it.
+      await enqueueProceedingEmbedding(tx, {
+        runId,
+        itemIndex: index,
+        electoralTerm: doc.wahlperiode,
+        apiId: doc.id,
+        versionNo: 1,
+      });
       versionsAdded += 1;
     } else if (latest && latest.contentHash === hash) {
       await updateProceeding(tx, doc.id, data);
@@ -137,6 +147,13 @@ export async function storeProceedingPage(
       await updateProceeding(tx, doc.id, {
         ...data,
         latestVersionNo: versionNo,
+      });
+      await enqueueProceedingEmbedding(tx, {
+        runId,
+        itemIndex: index,
+        electoralTerm: doc.wahlperiode,
+        apiId: doc.id,
+        versionNo,
       });
       versionsAdded += 1;
     }

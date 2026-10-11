@@ -124,6 +124,10 @@ export function createStepVersion(
   return client.proceedingStepVersion.create({ data });
 }
 
+export function findDocumentReference(client: Client, stepApiId: string) {
+  return client.documentReference.findUnique({ where: { stepApiId } });
+}
+
 export function upsertDocumentReference(
   client: Client,
   data: Prisma.DocumentReferenceUncheckedCreateInput,

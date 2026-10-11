@@ -4,6 +4,7 @@ import { runIdSchema } from "../validation";
 import {
   createStep,
   createStepVersion,
+  findDocumentReference,
   findProceeding,
   findStep,
   latestStepVersion,
@@ -13,12 +14,14 @@ import {
   upsertDocumentReference,
   upsertParliamentaryDiscovery,
 } from "./repository";
+import { enqueueDocumentProcessing, enqueueStepEmbedding } from "./jobs";
 import type {
   CollectStepsOptions,
   CollectStepsResult,
   StoredStep,
 } from "./types";
 import {
+  isHotDocument,
   isUniqueViolation,
   scopeInputHash,
   stepContentHash,
@@ -52,6 +55,8 @@ async function storeStepsPage(
     followStored: boolean;
     cap: number | undefined;
     fetchVorgang: CollectStepsOptions["fetchVorgang"];
+    electoralTerm: number;
+    now: Date;
   },
 ) {
   let versionsAdded = 0;
@@ -102,6 +107,9 @@ async function storeStepsPage(
     };
     const known = await findStep(tx, doc.id);
     const latest = await latestStepVersion(tx, doc.id);
+    // Embed jobs submit only for versions this run creates; unchanged
+    // observations add no work.
+    let embeddedVersion: number | null = null;
     if (!known) {
       await createStep(tx, { apiId: doc.id, ...data, latestVersionNo: 1 });
       await createStepVersion(tx, {
@@ -112,6 +120,7 @@ async function storeStepsPage(
         sourceUpdatedAt,
         runId,
       });
+      embeddedVersion = 1;
       versionsAdded += 1;
     } else if (latest && latest.contentHash === hash) {
       await updateStep(tx, doc.id, data);
@@ -136,19 +145,48 @@ async function storeStepsPage(
         continue;
       }
       await updateStep(tx, doc.id, { ...data, latestVersionNo: versionNo });
+      embeddedVersion = versionNo;
       versionsAdded += 1;
     }
+    if (embeddedVersion !== null) {
+      await enqueueStepEmbedding(tx, {
+        runId,
+        itemIndex: index,
+        electoralTerm: parent.electoralTerm,
+        apiId: doc.id,
+        versionNo: embeddedVersion,
+      });
+    }
     // Document references persist eagerly with the step; PDF bytes are never
-    // fetched here — that queue arrives in a later slice.
+    // fetched here. Only new or changed hot-subset references queue document
+    // work; older references wait for an on-demand request (later slice).
+    const previousRef = await findDocumentReference(tx, doc.id);
+    const refDocumentDate = new Date(doc.fundstelle.datum);
     await upsertDocumentReference(tx, {
       stepApiId: doc.id,
       proceedingApiId: doc.vorgang_id,
       referenceId: doc.fundstelle.id,
       documentNumber: doc.fundstelle.dokumentnummer,
       pdfUrl: doc.fundstelle.pdf_url ?? null,
-      documentDate: new Date(doc.fundstelle.datum),
+      documentDate: refDocumentDate,
       metadata: fundstelleRest as Prisma.InputJsonValue,
     });
+    const refChanged =
+      !previousRef ||
+      previousRef.referenceId !== doc.fundstelle.id ||
+      previousRef.documentNumber !== doc.fundstelle.dokumentnummer ||
+      previousRef.pdfUrl !== (doc.fundstelle.pdf_url ?? null) ||
+      previousRef.documentDate?.getTime() !== refDocumentDate.getTime();
+    if (refChanged && isHotDocument(refDocumentDate, parent.now)) {
+      await enqueueDocumentProcessing(tx, {
+        runId,
+        itemIndex: index,
+        electoralTerm: parent.electoralTerm,
+        stepApiId: doc.id,
+        referenceId: doc.fundstelle.id,
+        pdfUrl: doc.fundstelle.pdf_url ?? null,
+      });
+    }
     await upsertDipCandidate(tx, runId, index, candidateMeta, []);
     await upsertParliamentaryDiscovery(tx, runId, "vorgangsposition", doc.id);
   }
@@ -209,6 +247,7 @@ export async function collectSteps(
     };
 
   let cursor: string | undefined;
+  const now = options.now ?? new Date();
   let valid = 0;
   let invalid = 0;
   let stored = 0;
@@ -261,6 +300,8 @@ export async function collectSteps(
           followStored: options.followStoredParents ?? false,
           cap: options.proceedingCap,
           fetchVorgang: options.fetchVorgang,
+          electoralTerm: options.electoralTerm,
+          now,
         });
       });
       versionsAdded += counts.versionsAdded;
