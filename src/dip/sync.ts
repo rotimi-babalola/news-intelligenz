@@ -34,7 +34,7 @@ export type SyncDipEndpointOptions = {
   now?: Date;
   proceedingCap?: number;
   followStoredParents?: boolean;
-  fetchPage: FetchVorgangPage & FetchStepPage;
+  fetchPage: FetchVorgangPage | FetchStepPage;
   fetchVorgang?: FetchVorgang;
 };
 
@@ -78,4 +78,77 @@ export async function syncDipEndpoint(
           fetchVorgang: options.fetchVorgang,
         });
   return { window, result };
+}
+
+export type TermSyncCompleted = {
+  endpoint: SyncEndpoint;
+  electoralTerm: number;
+  window: SyncWindow;
+  result: Awaited<ReturnType<typeof collectVorgang>> | Awaited<ReturnType<typeof collectSteps>>;
+};
+
+export type TermSyncFailure = {
+  endpoint: SyncEndpoint;
+  electoralTerm: number;
+  error: string;
+};
+
+export type TermsSyncOutcome = {
+  completed: TermSyncCompleted[];
+  failed: TermSyncFailure[];
+};
+
+export type SyncDipTermsOptions = {
+  // Explicit term list only; historical terms are never auto-imported. A term
+  // without a checkpoint gets a baseline import, the rest get overlap scans.
+  terms: number[];
+  endpoints?: SyncEndpoint[];
+  runIdFor: (endpoint: SyncEndpoint, electoralTerm: number) => string;
+  now?: Date;
+  proceedingCap?: number;
+  followStoredParents?: boolean;
+  fetchVorgangPage: FetchVorgangPage;
+  fetchStepPage: FetchStepPage;
+  fetchVorgang?: FetchVorgang;
+};
+
+// Multi-term scan. Every listed scope is attempted even when a sibling fails;
+// failures are reported per scope so one broken term never blocks the rest.
+export async function syncDipTerms(
+  prisma: PrismaClient,
+  options: SyncDipTermsOptions,
+): Promise<TermsSyncOutcome> {
+  const endpoints = options.endpoints ?? [
+    "/vorgang",
+    "/vorgangsposition",
+  ] as SyncEndpoint[];
+  const now = options.now ?? new Date();
+  const outcome: TermsSyncOutcome = { completed: [], failed: [] };
+  for (const electoralTerm of [...new Set(options.terms)]) {
+    for (const endpoint of endpoints) {
+      try {
+        const { window, result } = await syncDipEndpoint(prisma, endpoint, {
+          runId: options.runIdFor(endpoint, electoralTerm),
+          electoralTerm,
+          now,
+          proceedingCap: options.proceedingCap,
+          followStoredParents: options.followStoredParents,
+          fetchPage:
+            endpoint === "/vorgang"
+              ? options.fetchVorgangPage
+              : options.fetchStepPage,
+          fetchVorgang: options.fetchVorgang,
+        });
+        outcome.completed.push({ endpoint, electoralTerm, window, result });
+      } catch (error) {
+        outcome.failed.push({
+          endpoint,
+          electoralTerm,
+          error:
+            error instanceof Error ? error.message.slice(0, 2000) : "unknown",
+        });
+      }
+    }
+  }
+  return outcome;
 }
