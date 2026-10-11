@@ -24,6 +24,9 @@ A parliamentary matter followed across its individual steps, which may have an o
 **Proceeding step (Vorgangsposition)**:
 An individual documented step within a parliamentary proceeding, attributed to a parliamentary institution and providing evidence of the proceeding's development.
 
+**Parliamentary document reference**:
+A reference from a proceeding step to an official document, such as a Drucksache or Plenarprotokoll, with available document identifiers and links.
+
 **Parliamentary record version**:
 A retained state of a proceeding or proceeding step as observed during collection. A changed record may represent a correction or added description rather than a new parliamentary development.
 
@@ -44,3 +47,6 @@ An encounter with a publication, parliamentary proceeding, or proceeding step th
 
 **Relevance review**:
 A manual decision about whether a search candidate with uncertain relevance belongs in the collection. Items from configured RSS feeds do not require relevance review.
+
+**Semantic retrieval**:
+Finding source records by meaning, including across German and English queries, and returning the source material that supports the match.

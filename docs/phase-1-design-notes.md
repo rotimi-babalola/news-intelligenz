@@ -60,7 +60,7 @@ These original criteria remain applicable; the [DIP verification criteria](dip-d
 
 ## Design review status and implementation prerequisites
 
-- All interview decisions are settled or explicitly delegated. The user confirmed the consolidated shared understanding. The design interview is complete; implementation has not begun and remains deferred.
+- The original Phase 1 decisions are supplemented by the accepted DIP retrieval and PDF-processing amendments in [DIP design notes](dip-design-notes.md). Runtime implementation remains pending and is tracked in the linked GitHub issues.
 - Source-specific permission checks and live feed validation remain factual implementation prerequisites, not settled findings. No manual-maintenance commitment has been agreed.
 
 ## Source research (16 September 2026)
