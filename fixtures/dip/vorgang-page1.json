@@ -1,0 +1,40 @@
+{
+  "cursor": "CURSOR_PAGE2",
+  "documents": [
+    {
+      "abstract": "Übernahme von Geschäftsordnungen durch den 21. Deutschen Bundestag.",
+      "aktualisiert": "2026-10-09T16:32:14+02:00",
+      "beratungsstand": "Abgeschlossen",
+      "datum": "2026-10-09",
+      "id": "340161",
+      "initiative": ["Bundesministerium für Wirtschaft und Energie"],
+      "sachgebiet": ["Wirtschaft"],
+      "titel": "Siebte Verordnung über die Freigabe von Vorräten des Erdölbevorratungsverbandes (7. ErdölFrV)",
+      "typ": "Vorgang",
+      "vorgangstyp": "Rechtsverordnung",
+      "wahlperiode": 21
+    },
+    {
+      "aktualisiert": "2026-10-09T13:24:22+02:00",
+      "datum": "2026-10-09",
+      "id": "340135",
+      "initiative": ["Fraktion DIE LINKE"],
+      "titel": "Stärkere Beteiligung deutscher und europäischer Unternehmen im Rahmen der finanziellen Entwicklungszusammenarbeit",
+      "typ": "Vorgang",
+      "vorgangstyp": "Kleine Anfrage",
+      "wahlperiode": 21
+    },
+    {
+      "aktualisiert": "2026-10-09T13:03:11+02:00",
+      "beratungsstand": "Noch nicht beantwortet",
+      "datum": "2026-10-09",
+      "id": "340116",
+      "sachgebiet": ["Migration und Aufenthaltsrecht"],
+      "titel": "Anpassung der unionsrechtlichen Vorgaben für die zulässige Höchstgeschwindigkeit von Kleinkrafträdern",
+      "typ": "Vorgang",
+      "vorgangstyp": "Selbständiger Antrag von Ländern auf Entschließung",
+      "wahlperiode": 21
+    }
+  ],
+  "numFound": 18781
+}

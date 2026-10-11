@@ -1,0 +1,113 @@
+{
+  "cursor": "CURSOR_STEPS_END",
+  "documents": [
+    {
+      "aktivitaet_anzahl": 6,
+      "aktivitaet_anzeige": [
+        { "name": "1. Beratung", "typ": "Aktivität" },
+        { "name": "2. Beratung", "typ": "Aktivität" },
+        { "name": "3. Beratung", "typ": "Aktivität" },
+        { "name": "Abstimmung", "typ": "Aktivität" }
+      ],
+      "aktualisiert": "2026-10-09T16:32:14+02:00",
+      "datum": "2026-10-09",
+      "dokumentart": "Drucksache",
+      "fortsetzung": false,
+      "fundstelle": {
+        "datum": "2026-10-09",
+        "dokumentart": "Drucksache",
+        "dokumentnummer": "583/26",
+        "drucksachetyp": "Verordnung",
+        "herausgeber": "BR",
+        "id": "291522",
+        "pdf_url": "https://dserver.bundestag.de/brd/2026/0583-26.pdf",
+        "urheber": ["Bundesministerium für Wirtschaft und Energie"]
+      },
+      "gang": true,
+      "id": "701425",
+      "nachtrag": false,
+      "titel": "Siebte Verordnung über die Freigabe von Vorräten des Erdölbevorratungsverbandes (7. ErdölFrV)",
+      "typ": "Vorgangsposition",
+      "vorgang_id": "340161",
+      "vorgangsposition": "Verordnung der Bundesregierung",
+      "vorgangstyp": "Rechtsverordnung",
+      "zuordnung": "BR"
+    },
+    {
+      "aktivitaet_anzahl": 0,
+      "aktualisiert": "2026-10-09T13:24:22+02:00",
+      "datum": "2026-10-09",
+      "dokumentart": "Drucksache",
+      "fortsetzung": false,
+      "fundstelle": {
+        "datum": "2026-10-09",
+        "dokumentart": "Drucksache",
+        "dokumentnummer": "21/1001",
+        "herausgeber": "BT",
+        "id": "291500",
+        "pdf_url": "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
+        "urheber": ["Fraktion DIE LINKE"]
+      },
+      "gang": false,
+      "id": "701400",
+      "nachtrag": false,
+      "titel": "Stärkere Beteiligung deutscher und europäischer Unternehmen",
+      "typ": "Vorgangsposition",
+      "vorgang_id": "340135",
+      "vorgangsposition": "Kleine Anfrage",
+      "vorgangstyp": "Kleine Anfrage",
+      "zuordnung": "BT"
+    },
+    {
+      "aktivitaet_anzahl": 1,
+      "aktualisiert": "2026-10-08T10:00:00+02:00",
+      "datum": "2026-10-08",
+      "dokumentart": "Plenarprotokoll",
+      "fortsetzung": false,
+      "fundstelle": {
+        "datum": "2026-10-08",
+        "dokumentart": "Plenarprotokoll",
+        "dokumentnummer": "20/150",
+        "herausgeber": "BT",
+        "id": "291000",
+        "pdf_url": "https://dserver.bundestag.de/btp/20/20150.pdf",
+        "urheber": ["Deutscher Bundestag"]
+      },
+      "gang": true,
+      "id": "701300",
+      "nachtrag": false,
+      "titel": "Cross-term step returned under a term filter",
+      "typ": "Vorgangsposition",
+      "vorgang_id": "99001",
+      "vorgangsposition": "Beratung",
+      "vorgangstyp": "Gesetzgebung",
+      "zuordnung": "BT"
+    },
+    {
+      "aktivitaet_anzahl": 0,
+      "aktualisiert": "2026-10-08T09:00:00+02:00",
+      "datum": "2026-10-08",
+      "dokumentart": "Drucksache",
+      "fortsetzung": false,
+      "fundstelle": {
+        "datum": "2026-10-08",
+        "dokumentart": "Drucksache",
+        "dokumentnummer": "21/9999",
+        "herausgeber": "BT",
+        "id": "290999",
+        "pdf_url": "https://dserver.bundestag.de/btd/21/009/2199990.pdf",
+        "urheber": ["Fraktion DIE LINKE"]
+      },
+      "gang": false,
+      "id": "701299",
+      "nachtrag": false,
+      "titel": "Step whose parent proceeding is absent from the fixture set",
+      "typ": "Vorgangsposition",
+      "vorgang_id": "999999",
+      "vorgangsposition": "Kleine Anfrage",
+      "vorgangstyp": "Kleine Anfrage",
+      "zuordnung": "BT"
+    }
+  ],
+  "numFound": 31471
+}
