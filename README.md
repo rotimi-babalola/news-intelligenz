@@ -107,12 +107,13 @@ back all writes. Durable retry jobs are deferred.
 
 ## Phase 1: news collection
 
-The first deliverable is a fault-tolerant pipeline that collects, validates, processes and stores news with traceable discovery history. It includes an internal admin tool for one operator. English explainers and a reader-facing experience come later.
+The target combines a fault-tolerant collection pipeline with a DIP retrieval API for German and English queries. It includes an internal admin tool for one operator. Generated answers and a reader-facing experience come later.
 
 ### Sources
 
 - **Nine public-news RSS feeds:** Tagesschau all updates and eight Deutschlandfunk feeds. See the [feed catalog](docs/phase-1-feed-catalog.md).
 - **DIP parliamentary activity:** `/vorgang` proceedings and `/vorgangsposition` steps, covering all types and institutions returned for the selected electoral terms. Import the full current term initially; add new terms explicitly and keep previous selections monitored.
+- Local imports cap unique `/vorgang` proceedings at 1,000 across runs, using the first records encountered through cursor pagination; other environments import the full selected scope. The API does not specify ordering, so the local subset is not guaranteed to be the newest.
 - **Targeted search agents:** six fixed German queries covering politics/legislation, employment/economy, housing, healthcare, education and immigration. Initial searches are restricted to `tagesschau.de` and `deutschlandfunk.de`.
 
 All valid items from configured feeds are eligible without relevance filtering. Search results are assessed for relevance to Germany, with uncertain candidates held for manual review. German and English source material is preserved without translation.
@@ -121,7 +122,9 @@ All valid items from configured feeds are eligible without relevance filtering. 
 
 - Collect daily at **07:00 Europe/Berlin**, with six hours of overlap and independent recovery progress for each feed, search query, and DIP endpoint/scope.
 - Store publications, text versions, parliamentary records and their versions, discoveries, processing jobs and review decisions in **PostgreSQL**.
-- Retain DIP metadata, available summaries, steps, and document references. Preserve changed record states separately from articles; defer linked document-text retrieval and automatic links to reporting.
+- Retain DIP metadata, available summaries, steps, and document references. The `vorgang_id` and `fundstelle` fields (`id`, `dokumentnummer`, `pdf_url`, `datum`) come from `/vorgangsposition` and are linked to the parent proceeding. Preserve changed record states separately from articles.
+- Embed proceeding titles/summaries and step text with local Qwen3-Embedding-0.6B through optional Ollama in Compose. Store vectors in PostgreSQL with pgvector and provide a retrieval API that returns latest-version source matches for German and English queries.
+- Fetch PDF bytes independently of DIP collection checkpoints. Background-process references whose document date is within 14 days; on-demand requests return metadata and the original URL immediately and raise processing priority. Extract with PyMuPDF and cache by document ID and byte hash. News-to-proceeding linking remains future work.
 - Extract article text from linked pages where source permissions allow; retain permitted metadata and original links when extraction fails or a format is unsupported.
 - Deduplicate the same publication using identifiers and resolved URLs while keeping different publishers' reporting separate.
 - Preserve changed article text as versions, recheck recently discovered publications and refresh older ones when rediscovered.
@@ -144,24 +147,25 @@ The [DIP criteria](docs/dip-design-notes.md#verification-criteria) add initial i
 
 ## Documentation
 
-| Document                                                                             | Purpose                                                        |
-| ------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| [Phase 1 architecture](docs/phase-1-architecture.md)                                 | Agreed scope, collection flow and operational behaviour        |
-| [Design notes](docs/phase-1-design-notes.md)                                         | Decisions, acceptance criteria and unresolved factual checks   |
-| [DIP amendment](docs/dip-design-notes.md)                                            | Parliamentary collection decisions and verification criteria   |
-| [Feed catalog](docs/phase-1-feed-catalog.md)                                         | Exact launch feed URLs                                         |
-| [Domain glossary](CONTEXT.md)                                                        | Shared terminology for publications, versions and discoveries  |
-| [ADR: publication versions](docs/adr/0001-preserve-publication-versions.md)          | Why historical article text is retained                        |
-| [ADR: PostgreSQL storage and jobs](docs/adr/0002-postgresql-for-storage-and-jobs.md) | Why persistent data and durable jobs share a database          |
-| [ADR: local runtime](docs/adr/0003-local-runtime-and-database-access.md)             | Node.js 24 and Prisma with PostgreSQL 17                       |
-| [Launch feed verification](docs/launch-feed-verification.md)                         | First live feed, terms and retention distinction               |
-| [Database tables](docs/database-tables.md)                                           | Collection schema: runs, publications, candidates, discoveries |
-| [Issue #1 QA plan](docs/issue-1-qa-plan.md)                                          | Manual end-to-end checks: import URL, inspect DB, review admin |
+| Document                                                                                   | Purpose                                                        |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| [Phase 1 architecture](docs/phase-1-architecture.md)                                       | Agreed scope, collection flow and operational behaviour        |
+| [Design notes](docs/phase-1-design-notes.md)                                               | Decisions, acceptance criteria and unresolved factual checks   |
+| [DIP amendment](docs/dip-design-notes.md)                                                  | Parliamentary collection decisions and verification criteria   |
+| [ADR: local multilingual DIP retrieval](docs/adr/0005-local-multilingual-dip-retrieval.md) | Local embeddings, PostgreSQL vector search and PDF processing  |
+| [Feed catalog](docs/phase-1-feed-catalog.md)                                               | Exact launch feed URLs                                         |
+| [Domain glossary](CONTEXT.md)                                                              | Shared terminology for publications, versions and discoveries  |
+| [ADR: publication versions](docs/adr/0001-preserve-publication-versions.md)                | Why historical article text is retained                        |
+| [ADR: PostgreSQL storage and jobs](docs/adr/0002-postgresql-for-storage-and-jobs.md)       | Why persistent data and durable jobs share a database          |
+| [ADR: local runtime](docs/adr/0003-local-runtime-and-database-access.md)                   | Node.js 24 and Prisma with PostgreSQL 17                       |
+| [Launch feed verification](docs/launch-feed-verification.md)                               | First live feed, terms and retention distinction               |
+| [Database tables](docs/database-tables.md)                                                 | Collection schema: runs, publications, candidates, discoveries |
+| [Issue #1 QA plan](docs/issue-1-qa-plan.md)                                                | Manual end-to-end checks: import URL, inspect DB, review admin |
 
 ## Implementation roadmap
 
 Start with [issue #1: collect and inspect one RSS feed locally](https://github.com/rotimi-babalola/news-intelligenz/issues/1), then follow the **Blocked by** references in the [Phase 1 issues](https://github.com/rotimi-babalola/news-intelligenz/issues?q=is%3Aissue%20label%3A%22Phase%201%22). Each issue includes a description and acceptance criteria.
 
-The tickets incorporate the confirmed DIP amendment. [Issue #2](https://github.com/rotimi-babalola/news-intelligenz/issues/2) covers the nine public-news RSS feeds. Parliamentary work proceeds through [DIP import and record versions (#14)](https://github.com/rotimi-babalola/news-intelligenz/issues/14), [incremental synchronization (#15)](https://github.com/rotimi-babalola/news-intelligenz/issues/15), and [parliamentary inspection (#16)](https://github.com/rotimi-babalola/news-intelligenz/issues/16). Scheduling, monitoring, deployment, and acceptance tickets include the corresponding dependencies and verification criteria.
+The tickets incorporate the confirmed DIP collection and retrieval design. [Issue #2](https://github.com/rotimi-babalola/news-intelligenz/issues/2) covers the nine public-news RSS feeds. Parliamentary work proceeds through [DIP import and record versions (#14)](https://github.com/rotimi-babalola/news-intelligenz/issues/14), [incremental synchronization (#15)](https://github.com/rotimi-babalola/news-intelligenz/issues/15), [parliamentary inspection (#16)](https://github.com/rotimi-babalola/news-intelligenz/issues/16), [multilingual retrieval (#32)](https://github.com/rotimi-babalola/news-intelligenz/issues/32), and [lazy DIP PDF processing (#33)](https://github.com/rotimi-babalola/news-intelligenz/issues/33). Scheduling, monitoring, deployment, and acceptance tickets include the corresponding dependencies and verification criteria.
 
-Future phases may add English explainers, coverage of all 16 state parliaments, additional publishers and reader-facing features. Event clustering, embeddings and semantic search are outside Phase 1.
+Future phases may add English explainers, coverage of all 16 state parliaments, additional publishers, news-to-proceeding links and reader-facing features. Generated answers and event clustering remain outside this increment.
