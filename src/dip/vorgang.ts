@@ -44,7 +44,9 @@ export const VORGANG_ENDPOINT = "/vorgang";
 // The API defines no ordering, so the capped set is not newest-first.
 export const LOCAL_PROCEEDING_CAP = 1000;
 
-async function storePage(
+// Shared with step collection for missing-parent backfill: stores one page of
+// validated proceedings idempotently, honoring the local cap.
+export async function storeProceedingPage(
   tx: Prisma.TransactionClient,
   runId: string,
   stored: StoredDoc[],
@@ -249,7 +251,12 @@ export async function collectVorgang(
             [error],
           );
         }
-        return storePage(tx, runId, storedDocs, options.proceedingCap);
+        return storeProceedingPage(
+          tx,
+          runId,
+          storedDocs,
+          options.proceedingCap,
+        );
       });
       versionsAdded += counts.versionsAdded;
       capped += counts.capped;

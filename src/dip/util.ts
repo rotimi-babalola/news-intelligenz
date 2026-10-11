@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import type { StoredDoc, Vorgang } from "./types";
+import type { Step, StoredDoc, StoredStep, Vorgang } from "./types";
 
 // OpenAPI v1.5 required fields for a proceeding; anything else rides along in
 // metadata untouched.
@@ -69,6 +69,7 @@ export function scopeInputHash(
     updatedFrom?: Date;
     updatedTo?: Date;
     proceedingCap?: number;
+    followStoredParents?: boolean;
   },
 ) {
   return createHash("sha256")
@@ -79,6 +80,10 @@ export function scopeInputHash(
         from: options.updatedFrom?.toISOString() ?? null,
         to: options.updatedTo?.toISOString() ?? null,
         cap: options.proceedingCap ?? null,
+        // Only present for step collection; proceeding hashes stay stable.
+        ...(options.followStoredParents === undefined
+          ? {}
+          : { followStoredParents: options.followStoredParents }),
       }),
     )
     .digest("hex");
@@ -91,4 +96,115 @@ export function isUniqueViolation(error: unknown) {
     "code" in error &&
     (error as { code: string }).code === "P2002"
   );
+}
+
+const INSTITUTIONS = new Set(["BT", "BR", "BV", "EK"]);
+
+const fundstelleSchema = z.object({
+  id: z.string().regex(/^\d+$/),
+  dokumentnummer: z.string().min(1),
+  datum: z.string().min(1),
+  pdf_url: z.string().optional(),
+});
+
+const stepSchema = z.object({
+  id: z.string().regex(/^\d+$/),
+  typ: z.literal("Vorgangsposition"),
+  vorgangsposition: z.string().min(1),
+  // Institution labels are closed by the contract; anything else is an
+  // invalid document, retained inspectably rather than stored wrongly.
+  zuordnung: z.string().refine((value) => INSTITUTIONS.has(value), {
+    message: "unknown zuordnung",
+  }),
+  gang: z.boolean(),
+  fortsetzung: z.boolean(),
+  nachtrag: z.boolean(),
+  vorgangstyp: z.string().min(1),
+  titel: z.string().min(1),
+  dokumentart: z.enum(["Drucksache", "Plenarprotokoll"]),
+  vorgang_id: z.string().regex(/^\d+$/),
+  datum: z.string().min(1),
+  aktualisiert: z.string().min(1),
+  fundstelle: fundstelleSchema,
+  aktivitaet_anzahl: z.number().int().min(0),
+});
+
+const STEP_KNOWN_KEYS = new Set([
+  "id",
+  "typ",
+  "vorgangsposition",
+  "zuordnung",
+  "gang",
+  "fortsetzung",
+  "nachtrag",
+  "vorgangstyp",
+  "titel",
+  "dokumentart",
+  "vorgang_id",
+  "datum",
+  "aktualisiert",
+  "fundstelle",
+  "aktivitaet_anzahl",
+]);
+
+const FUNDSTELLE_KNOWN_KEYS = new Set([
+  "id",
+  "dokumentnummer",
+  "datum",
+  "pdf_url",
+]);
+
+export function toStoredStep(
+  input: unknown,
+  index: number,
+): StoredStep | { error: string; index: number } {
+  const parsed = stepSchema.safeParse(input);
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? "invalid", index };
+  const doc: Step = {
+    ...parsed.data,
+    fundstelle: { ...parsed.data.fundstelle },
+  };
+  if (Number.isNaN(Date.parse(doc.aktualisiert)))
+    return { error: "unusable aktualisiert timestamp", index };
+  if (Number.isNaN(Date.parse(doc.datum)))
+    return { error: "unusable datum", index };
+  if (Number.isNaN(Date.parse(doc.fundstelle.datum)))
+    return { error: "unusable fundstelle datum", index };
+  const raw = (input ?? {}) as Record<string, unknown>;
+  const rest: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw))
+    if (!STEP_KNOWN_KEYS.has(key)) rest[key] = value;
+  // aktivitaet_anzeige is display-only (first four) and rides in metadata;
+  // aktivitaet_anzahl is the total and must never be read as coverage.
+  const fundstelleRaw =
+    (raw["fundstelle"] as Record<string, unknown> | undefined) ?? {};
+  const fundstelleRest: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(fundstelleRaw))
+    if (!FUNDSTELLE_KNOWN_KEYS.has(key)) fundstelleRest[key] = value;
+  return { doc, raw: rest, fundstelleRest, index };
+}
+
+export function stepContentHash(doc: Step, rest: Record<string, unknown>) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        id: doc.id,
+        vorgangsposition: doc.vorgangsposition,
+        zuordnung: doc.zuordnung,
+        gang: doc.gang,
+        fortsetzung: doc.fortsetzung,
+        nachtrag: doc.nachtrag,
+        vorgangstyp: doc.vorgangstyp,
+        titel: doc.titel,
+        dokumentart: doc.dokumentart,
+        vorgang_id: doc.vorgang_id,
+        datum: doc.datum,
+        aktualisiert: doc.aktualisiert,
+        fundstelle: doc.fundstelle,
+        aktivitaet_anzahl: doc.aktivitaet_anzahl,
+        rest,
+      }),
+    )
+    .digest("hex");
 }

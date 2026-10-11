@@ -291,7 +291,7 @@ model DocumentReference {
   proceedingApiId String         @map("proceeding_id") @db.Text
   referenceId     String         @map("reference_id") @db.Text
   documentNumber  String         @map("document_number") @db.Text
-  pdfUrl          String         @map("pdf_url") @db.Text
+  pdfUrl          String?        @map("pdf_url") @db.Text
   documentDate    DateTime?      @map("document_date") @db.Date
   metadata        Json
   observedAt      DateTime       @map("observed_at") @default(now()) @db.Timestamptz(6)
