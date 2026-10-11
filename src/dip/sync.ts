@@ -12,7 +12,7 @@ export const SYNC_OVERLAP_MS = 6 * 60 * 60 * 1000;
 export type SyncEndpoint = "/vorgang" | "/vorgangsposition";
 
 export type SyncWindow = {
-  start: Date | undefined;
+  start?: Date | undefined;
   end: Date;
 };
 
@@ -36,6 +36,9 @@ export type SyncDipEndpointOptions = {
   proceedingCap?: number;
   followStoredParents?: boolean;
   retryDelayMs?: (attempt: number, error: unknown) => number;
+  // Operator-selected recovery/backfill window, used verbatim instead of the
+  // checkpoint-derived window. The checkpoint still only moves forward.
+  window?: { start?: Date; end: Date };
   fetchPage: FetchVorgangPage | FetchStepPage;
   fetchVorgang?: FetchVorgang;
 };
@@ -55,7 +58,9 @@ export async function syncDipEndpoint(
     endpoint,
     options.electoralTerm,
   );
-  const window = resolveSyncWindow(checkpoint?.updatedThrough ?? null, now);
+  const window =
+    options.window ??
+    resolveSyncWindow(checkpoint?.updatedThrough ?? null, now);
   const common = {
     runId: options.runId,
     electoralTerm: options.electoralTerm,

@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { TerminalPageError } from "../src/dip/collect.js";
+import { listDipGaps } from "../src/dip/repository.js";
 import {
   syncDipEndpoint,
   syncDipTerms,
   SYNC_OVERLAP_MS,
 } from "../src/dip/sync.js";
 import type { FetchStepPage } from "../src/dip/steps.js";
+import { collectSteps } from "../src/dip/steps.js";
 import { collectVorgang } from "../src/dip/vorgang.js";
 import type { FetchVorgangPage } from "../src/dip/vorgang.js";
 import { isolatedDatabase } from "./dip-test-db.js";
@@ -359,5 +361,166 @@ test("bootstrap baseline hands off to incremental scans without losing updates",
   });
   assert.equal(stored.latestVersionNo, 2);
   assert.equal(stored.title, "Neuer Titel");
+  await prisma.$disconnect();
+});
+
+test("operator backfill replays an older window without moving the checkpoint", async () => {
+  const prisma = await isolatedDatabase();
+  const progress = new Date("2026-10-12T07:00:00+02:00");
+  await syncDipEndpoint(prisma, "/vorgang", {
+    runId: "dip-backfill-base",
+    electoralTerm: 21,
+    now: progress,
+    fetchPage: async (params) =>
+      params.cursor === undefined
+        ? {
+            documents: [proceeding("1", "2026-10-11T10:00:00+02:00")],
+            cursor: "c2",
+            numFound: 0,
+          }
+        : { documents: [], cursor: "c2", numFound: 0 },
+  });
+  const seen: Parameters<FetchVorgangPage>[0][] = [];
+  const start = new Date("2026-10-01T00:00:00+02:00");
+  const end = new Date("2026-10-02T00:00:00+02:00");
+  const backfill = await syncDipEndpoint(prisma, "/vorgang", {
+    runId: "dip-backfill-1",
+    electoralTerm: 21,
+    window: { start, end },
+    fetchPage: async (params) => {
+      seen.push(params);
+      return params.cursor === undefined
+        ? {
+            documents: [
+              {
+                ...proceeding("1", "2026-10-01T10:00:00+02:00"),
+                titel: "Korrigierter Titel",
+              },
+            ],
+            cursor: "c2",
+            numFound: 0,
+          }
+        : { documents: [], cursor: "c2", numFound: 0 };
+    },
+  });
+  // The operator window is used verbatim and its correction is stored, while
+  // successful progress stays at the newer checkpoint.
+  assert.equal(seen[0]?.aktualisiertStart, start.toISOString());
+  assert.equal(seen[0]?.aktualisiertEnd, end.toISOString());
+  assert.equal(backfill.result.versionsAdded, 1);
+  const checkpoint = await prisma.dipCheckpoint.findUniqueOrThrow({
+    where: {
+      endpoint_electoralTerm: { endpoint: "/vorgang", electoralTerm: 21 },
+    },
+  });
+  assert.deepEqual(checkpoint.updatedThrough, progress);
+  await prisma.$disconnect();
+});
+
+test("failed scopes stay listed as gaps with window and error", async () => {
+  const prisma = await isolatedDatabase();
+  const now = new Date("2026-10-11T07:00:00+02:00");
+  await assert.rejects(
+    syncDipEndpoint(prisma, "/vorgang", {
+      runId: "dip-gap-1",
+      electoralTerm: 21,
+      now,
+      retryDelayMs: () => 0,
+      fetchPage: async () => {
+        throw new Error("DIP /vorgang responded 503");
+      },
+    }),
+    /responded 503/,
+  );
+  const gaps = await listDipGaps(prisma);
+  assert.equal(gaps.length, 1);
+  assert.equal(gaps[0]?.runId, "dip-gap-1");
+  assert.equal(gaps[0]?.endpoint, "/vorgang");
+  assert.equal(gaps[0]?.electoralTerm, 21);
+  assert.equal(gaps[0]?.windowStart, null);
+  assert.equal(gaps[0]?.windowEnd?.toISOString(), now.toISOString());
+  assert.match(gaps[0]?.error ?? "", /responded 503/);
+  await prisma.$disconnect();
+});
+
+test("absent records and unexplained 404s never delete retained state", async () => {
+  const prisma = await isolatedDatabase();
+  await syncDipEndpoint(prisma, "/vorgang", {
+    runId: "dip-nodelete-1",
+    electoralTerm: 21,
+    now: new Date("2026-10-10T12:00:00+02:00"),
+    fetchPage: async (params) =>
+      params.cursor === undefined
+        ? {
+            documents: [proceeding("1", "2026-10-10T10:00:00+02:00")],
+            cursor: "c2",
+            numFound: 0,
+          }
+        : { documents: [], cursor: "c2", numFound: 0 },
+  });
+  // An incremental window that no longer contains the record completes while
+  // the retained proceeding and its version stay intact.
+  const swept = await syncDipEndpoint(prisma, "/vorgang", {
+    runId: "dip-nodelete-2",
+    electoralTerm: 21,
+    now: new Date("2026-10-11T07:00:00+02:00"),
+    fetchPage: async (params) => ({
+      documents: [],
+      cursor: params.cursor ?? "c2",
+      numFound: 0,
+    }),
+  });
+  assert.equal(swept.result.status, "completed");
+  assert.ok(await prisma.proceeding.findUnique({ where: { apiId: "1" } }));
+  assert.equal(
+    await prisma.proceedingVersion.count({ where: { proceedingApiId: "1" } }),
+    1,
+  );
+  // A step whose parent answers 404 is retained with its unresolved parent
+  // instead of discarded.
+  const steps = await collectSteps(prisma, {
+    runId: "dip-nodelete-steps",
+    electoralTerm: 21,
+    followStoredParents: true,
+    fetchPage: async (params) => ({
+      documents:
+        params.cursor === undefined
+          ? [
+              {
+                id: "701499",
+                typ: "Vorgangsposition",
+                vorgangsposition: "Kleine Anfrage",
+                zuordnung: "BT",
+                gang: false,
+                fortsetzung: false,
+                nachtrag: false,
+                vorgangstyp: "Kleine Anfrage",
+                titel: "Titel 999999",
+                dokumentart: "Drucksache",
+                vorgang_id: "999999",
+                datum: "2026-10-09",
+                aktualisiert: "2026-10-09T13:24:22+02:00",
+                fundstelle: {
+                  id: "29701499",
+                  dokumentnummer: "21/1001",
+                  datum: "2026-10-09",
+                  pdf_url:
+                    "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
+                },
+                aktivitaet_anzahl: 0,
+              },
+            ]
+          : [],
+      cursor: params.cursor ?? "s2",
+      numFound: 0,
+    }),
+    fetchVorgang: async () => null,
+  });
+  assert.equal(steps.stored, 1);
+  const retained = await prisma.proceedingStep.findUniqueOrThrow({
+    where: { apiId: "701499" },
+  });
+  assert.equal(retained.proceedingApiId, "999999");
+  assert.equal(await prisma.proceeding.count(), 1);
   await prisma.$disconnect();
 });

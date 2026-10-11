@@ -88,6 +88,52 @@ export function findDipCheckpoint(
   });
 }
 
+// Unresolved collection gaps are failed DIP runs: scope window, endpoint,
+// and error stay inspectable until an operator recovers them with a backfill.
+// A later success never rewrites this history; absence from incremental
+// results is never treated as deletion.
+export type DipGap = {
+  runId: string;
+  endpoint: string;
+  electoralTerm: number | null;
+  windowStart: Date | null;
+  windowEnd: Date | null;
+  error: string | null;
+  startedAt: Date;
+};
+
+function asDate(value: unknown): Date | null {
+  if (typeof value !== "string") return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export async function listDipGaps(
+  client: Client,
+  limit = 50,
+): Promise<DipGap[]> {
+  const runs = await client.run.findMany({
+    where: { sourceKind: "dip_endpoint", status: "failed" },
+    orderBy: { startedAt: "desc" },
+    take: limit,
+  });
+  return runs.map((run) => {
+    const scope = (run.sourceScope ?? {}) as Record<string, unknown>;
+    return {
+      runId: run.id,
+      endpoint: run.feedId,
+      electoralTerm:
+        typeof scope["electoralTerm"] === "number"
+          ? scope["electoralTerm"]
+          : null,
+      windowStart: asDate(scope["aktualisiertStart"]),
+      windowEnd: asDate(scope["aktualisiertEnd"]),
+      error: run.error,
+      startedAt: run.startedAt,
+    };
+  });
+}
+
 export function upsertDipCheckpoint(
   client: Client,
   endpoint: string,
