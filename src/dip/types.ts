@@ -17,6 +17,7 @@ export type CollectVorgangOptions = {
   updatedFrom?: Date;
   updatedTo?: Date;
   proceedingCap?: number;
+  retryDelayMs?: (attempt: number, error: unknown) => number;
   fetchPage: FetchVorgangPage;
 };
 
@@ -77,6 +78,7 @@ export type CollectStepsOptions = {
   proceedingCap?: number;
   // Reference date for the 14-day PDF hot subset; defaults to collection time.
   now?: Date;
+  retryDelayMs?: (attempt: number, error: unknown) => number;
   fetchPage: FetchStepPage;
   fetchVorgang?: FetchVorgang;
 };

@@ -141,6 +141,7 @@ test("invalid documents stay inspectable and failed runs keep the checkpoint shu
     collectVorgang(prisma, {
       runId: "dip-vorgang-flaky",
       electoralTerm: 21,
+      retryDelayMs: () => 0,
       fetchPage: flaky,
     }),
     /page lost/,
@@ -172,7 +173,9 @@ test("invalid documents stay inspectable and failed runs keep the checkpoint shu
     where: { runId: "dip-vorgang-flaky", itemIndex: 1 },
   });
   assert.ok((bad.errors as unknown[]).length > 0);
-  assert.equal(attempts, 2);
+  // Transient failures retry 3x per page, then the dead window restarts once:
+  // 1 (first page) + 3 (c2) + 1 (restarted first page) + 3 (c2) = 8.
+  assert.equal(attempts, 8);
   await prisma.$disconnect();
 });
 

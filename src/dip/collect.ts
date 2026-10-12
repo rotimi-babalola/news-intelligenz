@@ -1,9 +1,14 @@
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { createRun, finalizeRun, findRun } from "../import/run.repository";
+import { RateLimitedError, backoffMs } from "../jobs";
 import { runIdSchema } from "../validation";
-import { upsertDipCheckpoint } from "./repository";
+import { findDipCheckpoint, upsertDipCheckpoint } from "./repository";
 import type { FetchVorgangPage } from "./types";
 import { scopeInputHash } from "./util";
+
+// Terminal failures (bad request, unknown cursor semantics aside) never
+// retry: only transient network/5xx/429 errors repeat with bounded backoff.
+export class TerminalPageError extends Error {}
 
 type Options = {
   runId: string;
@@ -12,9 +17,48 @@ type Options = {
   updatedTo?: Date;
   proceedingCap?: number;
   followStoredParents?: boolean;
+  retryDelayMs?: (attempt: number, error: unknown) => number;
   fetchPage: FetchVorgangPage;
 };
 
+// Checkpoints never regress: overlapping runs and explicit backfill windows
+// report older ends without moving successful progress backward. A null
+// target carries no information and leaves existing progress untouched.
+export function pickCheckpointTarget(
+  current: Date | null,
+  target: Date | null,
+): Date | null {
+  if (!target) return current;
+  if (!current || target > current) return target;
+  return current;
+}
+
+const PAGE_FETCH_ATTEMPTS = 3;
+
+function defaultRetryDelayMs(attempt: number, error: unknown) {
+  if (error instanceof RateLimitedError) return error.retryAfterMs;
+  return backoffMs(attempt);
+}
+
+async function fetchPageWithRetry(
+  fetchPage: FetchVorgangPage,
+  params: Parameters<FetchVorgangPage>[0],
+  retryDelayMs: (attempt: number, error: unknown) => number,
+) {
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await fetchPage(params);
+    } catch (error) {
+      attempt += 1;
+      if (error instanceof TerminalPageError) throw error;
+      if (attempt >= PAGE_FETCH_ATTEMPTS) throw error;
+      await new Promise((resolve) =>
+        setTimeout(resolve, retryDelayMs(attempt, error)),
+      );
+    }
+  }
+}
 type PageCounts = {
   valid: number;
   invalid: number;
@@ -95,14 +139,47 @@ export async function collectDipPages(
     capped: 0,
     backfilled: 0,
   };
+  const retryDelayMs = options.retryDelayMs ?? defaultRetryDelayMs;
+  const fetchParams = (cursor: string | undefined) => ({
+    wahlperiode: options.electoralTerm,
+    aktualisiertStart: options.updatedFrom?.toISOString(),
+    aktualisiertEnd: options.updatedTo?.toISOString(),
+    cursor,
+  });
+  const resetTotals = () => {
+    // Flow counts recount the final pass, but versions created before the
+    // failure persist in storage and stay credited to this run.
+    totals.valid = 0;
+    totals.invalid = 0;
+    totals.stored = 0;
+    totals.capped = 0;
+    totals.backfilled = 0;
+  };
+  // An expired cursor surfaces as a mid-pagination failure. Writes are
+  // idempotent (same run ID reuses candidates, discoveries, and versions),
+  // so the window restarts once from the first page instead of resuming a
+  // dead cursor. A first-page failure has no cursor to blame and fails fast.
+  let restarted = false;
   try {
     for (;;) {
-      const page = await options.fetchPage({
-        wahlperiode: options.electoralTerm,
-        aktualisiertStart: options.updatedFrom?.toISOString(),
-        aktualisiertEnd: options.updatedTo?.toISOString(),
-        cursor,
-      });
+      let page;
+      try {
+        page = await fetchPageWithRetry(
+          options.fetchPage,
+          fetchParams(cursor),
+          retryDelayMs,
+        );
+      } catch (error) {
+        if (!restarted && cursor !== undefined) {
+          restarted = true;
+          cursor = undefined;
+          itemIndex = 0;
+          maxObserved = null;
+          resetTotals();
+          continue;
+        }
+        throw error;
+      }
       const counts = await storePage(page.documents, itemIndex, runId);
       itemIndex += page.documents.length;
       totals.valid += counts.valid;
@@ -134,6 +211,9 @@ export async function collectDipPages(
   }
   await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+    await tx.candidate.deleteMany({
+      where: { runId, itemIndex: { gte: itemIndex } },
+    });
     await finalizeRun(tx, runId, {
       status: "completed",
       validCount: totals.valid,
@@ -145,7 +225,11 @@ export async function collectDipPages(
       tx,
       endpoint,
       options.electoralTerm,
-      options.updatedTo ?? maxObserved,
+      pickCheckpointTarget(
+        (await findDipCheckpoint(tx, endpoint, options.electoralTerm))
+          ?.updatedThrough ?? null,
+        options.updatedTo ?? maxObserved,
+      ),
     );
   });
   return { runId, status: "completed" as const, ...totals, replayed: false };

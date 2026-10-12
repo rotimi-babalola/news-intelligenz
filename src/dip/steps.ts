@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
+import { RateLimitedError, parseRetryAfterMs } from "../jobs";
 import {
   createStep,
   createStepVersion,
@@ -12,7 +13,7 @@ import {
   upsertParliamentaryDiscovery,
 } from "./repository";
 import { enqueueDocumentProcessing, enqueueStepEmbedding } from "./jobs";
-import { collectDipPages } from "./collect";
+import { TerminalPageError, collectDipPages } from "./collect";
 import type {
   CollectStepsOptions,
   CollectStepsResult,
@@ -183,6 +184,7 @@ async function storeStepsPage(
         itemIndex: index,
         electoralTerm: parent.electoralTerm,
         stepApiId: doc.id,
+        contentHash: hash,
         referenceId: doc.fundstelle.id,
         pdfUrl: doc.fundstelle.pdf_url ?? null,
       });
@@ -299,8 +301,17 @@ export function liveStepsFetcher(apiKey: string): {
         `https://search.dip.bundestag.de/api/v1/vorgangsposition?${query}`,
         { headers },
       );
-      if (!response.ok)
-        throw new Error(`DIP /vorgangsposition responded ${response.status}`);
+      if (response.status === 429)
+        throw new RateLimitedError(
+          "DIP /vorgangsposition responded 429",
+          parseRetryAfterMs(response.headers.get("retry-after")) ?? 60_000,
+        );
+      if (!response.ok) {
+        const message = `DIP /vorgangsposition responded ${response.status}`;
+        if (response.status >= 400 && response.status < 500)
+          throw new TerminalPageError(message);
+        throw new Error(message);
+      }
       const body = (await response.json()) as {
         documents?: unknown[];
         cursor?: string;
@@ -320,8 +331,17 @@ export function liveStepsFetcher(apiKey: string): {
         { headers },
       );
       if (response.status === 404) return null;
-      if (!response.ok)
-        throw new Error(`DIP /vorgang/${id} responded ${response.status}`);
+      if (response.status === 429)
+        throw new RateLimitedError(
+          `DIP /vorgang/${id} responded 429`,
+          parseRetryAfterMs(response.headers.get("retry-after")) ?? 60_000,
+        );
+      if (!response.ok) {
+        const message = `DIP /vorgang/${id} responded ${response.status}`;
+        if (response.status >= 400 && response.status < 500)
+          throw new TerminalPageError(message);
+        throw new Error(message);
+      }
       return (await response.json()) as unknown;
     },
   };

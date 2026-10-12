@@ -11,6 +11,15 @@ export const EMBED_PROCEEDING = "embed_proceeding";
 export const EMBED_STEP = "embed_step";
 export const PROCESS_DOCUMENT = "process_document";
 
+function dipJobKey(
+  runId: string,
+  operation: string,
+  apiId: string,
+  version: number | string,
+) {
+  return JSON.stringify([runId, operation, apiId, version]);
+}
+
 export function enqueueProceedingEmbedding(
   tx: Prisma.TransactionClient,
   input: {
@@ -25,6 +34,12 @@ export function enqueueProceedingEmbedding(
     source: dipSource("/vorgang", String(input.electoralTerm)),
     runId: input.runId,
     itemIndex: input.itemIndex,
+    dedupeKey: dipJobKey(
+      input.runId,
+      EMBED_PROCEEDING,
+      input.apiId,
+      input.versionNo,
+    ),
     operation: EMBED_PROCEEDING,
     payload: { apiId: input.apiId, versionNo: input.versionNo },
   });
@@ -44,6 +59,7 @@ export function enqueueStepEmbedding(
     source: dipSource("/vorgangsposition", String(input.electoralTerm)),
     runId: input.runId,
     itemIndex: input.itemIndex,
+    dedupeKey: dipJobKey(input.runId, EMBED_STEP, input.apiId, input.versionNo),
     operation: EMBED_STEP,
     payload: { apiId: input.apiId, versionNo: input.versionNo },
   });
@@ -56,6 +72,7 @@ export function enqueueDocumentProcessing(
     itemIndex: number;
     electoralTerm: number;
     stepApiId: string;
+    contentHash: string;
     referenceId: string;
     pdfUrl: string | null;
   },
@@ -64,6 +81,12 @@ export function enqueueDocumentProcessing(
     source: dipSource("/vorgangsposition", String(input.electoralTerm)),
     runId: input.runId,
     itemIndex: input.itemIndex,
+    dedupeKey: dipJobKey(
+      input.runId,
+      PROCESS_DOCUMENT,
+      input.stepApiId,
+      input.contentHash,
+    ),
     operation: PROCESS_DOCUMENT,
     payload: {
       stepApiId: input.stepApiId,
