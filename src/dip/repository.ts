@@ -61,7 +61,7 @@ export function upsertDipCandidate(
   return client.candidate.upsert({
     where: { runId_itemIndex: { runId, itemIndex } },
     create: { runId, itemIndex, metadata, errors },
-    update: {},
+    update: { metadata, errors },
   });
 }
 
@@ -88,10 +88,8 @@ export function findDipCheckpoint(
   });
 }
 
-// Unresolved collection gaps are failed DIP runs: scope window, endpoint,
-// and error stay inspectable until an operator recovers them with a backfill.
-// A later success never rewrites this history; absence from incremental
-// results is never treated as deletion.
+// A failed window remains a gap until a successful window for the same scope
+// covers it. Run history stays intact after recovery.
 export type DipGap = {
   runId: string;
   endpoint: string;
@@ -108,6 +106,15 @@ function asDate(value: unknown): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function scopeKey(endpoint: string, scope: Record<string, unknown>) {
+  return JSON.stringify([
+    endpoint,
+    scope["electoralTerm"],
+    scope["proceedingCap"] ?? null,
+    scope["followStoredParents"] ?? false,
+  ]);
+}
+
 export async function listDipGaps(
   client: Client,
   limit = 50,
@@ -115,9 +122,9 @@ export async function listDipGaps(
   const runs = await client.run.findMany({
     where: { sourceKind: "dip_endpoint", status: "failed" },
     orderBy: { startedAt: "desc" },
-    take: limit,
   });
-  return runs.map((run) => {
+  if (runs.length === 0) return [];
+  const failures = runs.map((run) => {
     const scope = (run.sourceScope ?? {}) as Record<string, unknown>;
     return {
       runId: run.id,
@@ -130,8 +137,45 @@ export async function listDipGaps(
       windowEnd: asDate(scope["aktualisiertEnd"]),
       error: run.error,
       startedAt: run.startedAt,
+      scopeKey: scopeKey(run.feedId, scope),
     };
   });
+  // shortcut: inspect DIP run history in memory; add indexed recovery state
+  // when the number of completed windows makes this admin query expensive.
+  const completed = await client.run.findMany({
+    where: {
+      sourceKind: "dip_endpoint",
+      status: "completed",
+      feedId: { in: [...new Set(failures.map((gap) => gap.endpoint))] },
+    },
+    select: { feedId: true, sourceScope: true },
+  });
+  const windows = new Map<string, { start: Date | null; end: Date | null }[]>();
+  for (const run of completed) {
+    const scope = (run.sourceScope ?? {}) as Record<string, unknown>;
+    const key = scopeKey(run.feedId, scope);
+    const window = {
+      start: asDate(scope["aktualisiertStart"]),
+      end: asDate(scope["aktualisiertEnd"]),
+    };
+    const scoped = windows.get(key) ?? [];
+    scoped.push(window);
+    windows.set(key, scoped);
+  }
+  return failures
+    .filter((gap) => {
+      const successes = windows.get(gap.scopeKey) ?? [];
+      return !successes.some(
+        (success) =>
+          gap.windowEnd &&
+          success.end &&
+          success.end >= gap.windowEnd &&
+          (success.start === null ||
+            (gap.windowStart !== null && success.start <= gap.windowStart)),
+      );
+    })
+    .slice(0, limit)
+    .map(({ scopeKey: _scopeKey, ...gap }) => gap);
 }
 
 export function upsertDipCheckpoint(

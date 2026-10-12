@@ -76,6 +76,7 @@ export type EnqueueSpec = {
   source: SourceRef;
   runId: string;
   itemIndex?: number | null;
+  dedupeKey?: string;
   operation: string;
   payload: Prisma.InputJsonValue;
   maxAttempts?: number;
@@ -85,7 +86,9 @@ export async function enqueueJob(
   tx: Prisma.TransactionClient,
   spec: EnqueueSpec,
 ) {
-  const key = dedupeKey(spec.runId, spec.itemIndex ?? null, spec.operation);
+  const key =
+    spec.dedupeKey ??
+    dedupeKey(spec.runId, spec.itemIndex ?? null, spec.operation);
   return tx.processingJob.upsert({
     where: { dedupeKey: key },
     create: {

@@ -211,6 +211,9 @@ export async function collectDipPages(
   }
   await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+    await tx.candidate.deleteMany({
+      where: { runId, itemIndex: { gte: itemIndex } },
+    });
     await finalizeRun(tx, runId, {
       status: "completed",
       validCount: totals.valid,

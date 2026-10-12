@@ -184,6 +184,7 @@ async function storeStepsPage(
         itemIndex: index,
         electoralTerm: parent.electoralTerm,
         stepApiId: doc.id,
+        contentHash: hash,
         referenceId: doc.fundstelle.id,
         pdfUrl: doc.fundstelle.pdf_url ?? null,
       });

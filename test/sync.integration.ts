@@ -91,6 +91,7 @@ test("sync uses baseline then overlap windows and holds checkpoint on failure", 
       runId: "dip-sync-fail",
       electoralTerm: 21,
       now: new Date("2026-10-12T07:00:00+02:00"),
+      retryDelayMs: () => 0,
       fetchPage: async () => {
         throw new Error("page fetch failed");
       },
@@ -134,6 +135,7 @@ test("multi-term sync baselines new terms and isolates sibling failures", async 
     endpoints: ["/vorgang"],
     runIdFor: (endpoint, term) => `dip-terms-${endpoint}-${term}`,
     now: new Date("2026-10-11T07:00:00+02:00"),
+    retryDelayMs: () => 0,
     fetchVorgangPage,
     fetchStepPage,
   });
@@ -252,6 +254,91 @@ test("mid-pagination failure restarts the window once without duplicating record
         endpoint_electoralTerm: { endpoint: "/vorgang", electoralTerm: 21 },
       },
     }),
+  );
+  await prisma.$disconnect();
+});
+
+test("reordered restart keeps jobs for both observed proceedings", async () => {
+  const prisma = await isolatedDatabase();
+  let restarted = false;
+  const result = await collectVorgang(prisma, {
+    runId: "dip-restart-reordered",
+    electoralTerm: 21,
+    retryDelayMs: () => 0,
+    fetchPage: async (params) => {
+      if (params.cursor === undefined)
+        return {
+          documents: [
+            proceeding(restarted ? "2" : "1", "2026-10-10T10:00:00+02:00"),
+          ],
+          cursor: "c2",
+          numFound: 0,
+        };
+      if (!restarted) {
+        restarted = true;
+        throw new TerminalPageError("expired cursor");
+      }
+      return { documents: [], cursor: "c2", numFound: 0 };
+    },
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(await prisma.proceeding.count(), 2);
+  const jobs = await prisma.processingJob.findMany({
+    where: { operation: "embed_proceeding", runId: result.runId },
+  });
+  assert.deepEqual(
+    jobs.map((job) => (job.payload as { apiId: string }).apiId).sort(),
+    ["1", "2"],
+  );
+  const candidates = await prisma.candidate.findMany({
+    where: { runId: result.runId },
+  });
+  assert.deepEqual(
+    candidates.map((candidate) => candidate.metadata),
+    [{ endpoint: "/vorgang", id: "2" }],
+  );
+  await prisma.$disconnect();
+});
+
+test("reordered step restart keeps both embedding and document jobs", async () => {
+  const prisma = await isolatedDatabase();
+  let restarted = false;
+  const result = await collectSteps(prisma, {
+    runId: "dip-step-restart-reordered",
+    electoralTerm: 21,
+    now: new Date("2026-10-10T12:00:00+02:00"),
+    retryDelayMs: () => 0,
+    fetchPage: async (params) => {
+      if (params.cursor === undefined)
+        return {
+          documents: [proceedingStep(restarted ? "701511" : "701510")],
+          cursor: "c2",
+          numFound: 0,
+        };
+      if (!restarted) {
+        restarted = true;
+        throw new TerminalPageError("expired cursor");
+      }
+      return { documents: [], cursor: "c2", numFound: 0 };
+    },
+  });
+  assert.equal(result.status, "completed");
+  const jobs = await prisma.processingJob.findMany({
+    where: { runId: result.runId },
+  });
+  assert.deepEqual(
+    jobs
+      .map((job) => {
+        const payload = job.payload as { apiId?: string; stepApiId?: string };
+        return `${job.operation}:${payload.apiId ?? payload.stepApiId}`;
+      })
+      .sort(),
+    [
+      "embed_step:701510",
+      "embed_step:701511",
+      "process_document:701510",
+      "process_document:701511",
+    ],
   );
   await prisma.$disconnect();
 });
@@ -442,6 +529,47 @@ test("failed scopes stay listed as gaps with window and error", async () => {
   assert.equal(gaps[0]?.windowStart, null);
   assert.equal(gaps[0]?.windowEnd?.toISOString(), now.toISOString());
   assert.match(gaps[0]?.error ?? "", /responded 503/);
+  await syncDipEndpoint(prisma, "/vorgang", {
+    runId: "dip-gap-partial",
+    electoralTerm: 21,
+    window: {
+      start: new Date(now.getTime() - 60_000),
+      end: new Date(now.getTime() + 60_000),
+    },
+    fetchPage: async (params) => ({
+      documents: [],
+      cursor: params.cursor ?? "c2",
+      numFound: 0,
+    }),
+  });
+  assert.equal((await listDipGaps(prisma)).length, 1);
+  await syncDipEndpoint(prisma, "/vorgang", {
+    runId: "dip-gap-different-cap",
+    electoralTerm: 21,
+    proceedingCap: 1,
+    window: { end: new Date(now.getTime() + 90_000) },
+    fetchPage: async (params) => ({
+      documents: [],
+      cursor: params.cursor ?? "c2",
+      numFound: 0,
+    }),
+  });
+  assert.equal((await listDipGaps(prisma)).length, 1);
+  await syncDipEndpoint(prisma, "/vorgang", {
+    runId: "dip-gap-recovered",
+    electoralTerm: 21,
+    window: { end: new Date(now.getTime() + 120_000) },
+    fetchPage: async (params) => ({
+      documents: [],
+      cursor: params.cursor ?? "c2",
+      numFound: 0,
+    }),
+  });
+  assert.deepEqual(await listDipGaps(prisma), []);
+  assert.equal(
+    (await prisma.run.findUniqueOrThrow({ where: { id: "dip-gap-1" } })).status,
+    "failed",
+  );
   await prisma.$disconnect();
 });
 
