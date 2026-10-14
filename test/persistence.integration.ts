@@ -133,6 +133,13 @@ test("PostgreSQL retains candidates and distinct discoveries; replay is idempote
       const entry = await (await fetch(`${server.url}/admin`)).text();
       assert.match(entry, /\/admin\/news/);
       assert.match(entry, /\/admin\/dip/);
+      const dipPage = await (await fetch(`${server.url}/admin/dip`)).text();
+      assert.match(dipPage, /DIP import runs/);
+      assert.match(dipPage, /No DIP runs yet/);
+      assert.match(dipPage, /\/admin\/news/);
+      const crossKind = await fetch(`${server.url}/admin/dip?run=first`);
+      assert.equal(crossKind.status, 200);
+      await crossKind.text();
       const response = await fetch(`${server.url}/admin/news`);
       assert.equal(response.status, 200);
       initialPage = await response.text();

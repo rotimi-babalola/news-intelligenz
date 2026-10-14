@@ -1,21 +1,13 @@
-import {
-  Cpu,
-  Landmark,
-  ListChecks,
-  Layers,
-  RotateCcw,
-  TriangleAlert,
-} from "lucide-react";
+import { Cpu, Landmark, ListChecks, Layers } from "lucide-react";
 import { getDipOverview } from "../../../src/admin/service";
 import { Badge } from "../../../src/components/ui/badge";
 import { Button } from "../../../src/components/ui/button";
 import { cn } from "../../../src/lib/utils";
-import { retryJobAction } from "../actions";
 import { Pager } from "../_components/pager";
 import { TableCard } from "../_components/table-card";
+import { JobsTable } from "../_components/jobs-table";
 import {
   formatDate,
-  jobTone,
   paginate,
   parsePage,
   runTone,
@@ -434,101 +426,22 @@ export default async function DipAdminPage({
           </div>
         </section>
 
-        <section id="jobs" aria-labelledby="jobs-h" className="space-y-3">
-          <div>
-            <h2 id="jobs-h" className="text-xl font-semibold tracking-tight">
-              Processing jobs
-            </h2>
-            <p className="text-sm text-stone-500">
+        <JobsTable
+          jobs={jobs}
+          prevHref={hrefFor("jobsPage", jobs.page - 1, "#jobs")}
+          nextHref={hrefFor("jobsPage", jobs.page + 1, "#jobs")}
+          tableLabel="DIP processing jobs table"
+          blurb={
+            <>
               DIP endpoints only · Retrying: {counts.retrying} · Exhausted:{" "}
               {counts.exhausted} · {counts.pending} pending embedding/document
               jobs are queued downstream work, not failures — they drain once
               the retrieval and PDF workers land. Retries resume automatically
               with backoff.
-            </p>
-          </div>
-          <TableCard
-            label="DIP processing jobs table"
-            pager={
-              <Pager
-                page={jobs.page}
-                totalPages={jobs.totalPages}
-                from={jobs.from}
-                to={jobs.to}
-                total={jobs.total}
-                prevHref={hrefFor("jobsPage", jobs.page - 1, "#jobs")}
-                nextHref={hrefFor("jobsPage", jobs.page + 1, "#jobs")}
-              />
-            }
-          >
-            <table className="w-full border-collapse text-left text-sm">
-              <thead className="bg-stone-50">
-                <tr className="text-xs tracking-wide text-stone-500 uppercase">
-                  <th scope="col" className="px-4 py-3 font-medium">
-                    Source / run
-                  </th>
-                  <th scope="col" className="px-4 py-3 font-medium">
-                    State
-                  </th>
-                  <th scope="col" className="px-4 py-3 font-medium">
-                    Last error
-                  </th>
-                  <th scope="col" className="px-4 py-3 font-medium">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100">
-                {jobs.rows.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center">
-                      No pending, retrying, or exhausted DIP jobs.
-                    </td>
-                  </tr>
-                )}
-                {jobs.rows.map((j) => (
-                  <tr key={j.id} className="align-top hover:bg-stone-50/70">
-                    <td className="px-4 py-3">
-                      <span className="font-medium">{j.sourceKey}</span>
-                      <span className="block text-xs text-stone-400">
-                        {j.operation} · {j.sourceKind} · Run {j.runId}
-                        {j.itemIndex === null
-                          ? ""
-                          : ` · Item ${j.itemIndex + 1}`}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant={jobTone(j.status)}>{j.status}</Badge>
-                      <span className="mt-1 block text-xs whitespace-nowrap tabular-nums text-stone-500">
-                        Attempt {j.attempts}/{j.maxAttempts} · Next{" "}
-                        {formatDate(j.nextAttemptAt)}
-                      </span>
-                    </td>
-                    <td className="max-w-xs px-4 py-3 text-xs text-stone-600">
-                      {j.lastError ?? ""}
-                    </td>
-                    <td className="px-4 py-3">
-                      {j.status === "exhausted" && (
-                        <form action={retryJobAction}>
-                          <input type="hidden" name="id" value={j.id} />
-                          <Button
-                            type="submit"
-                            size="sm"
-                            variant="outline"
-                            className="gap-1.5"
-                          >
-                            <RotateCcw className="size-3.5" aria-hidden />
-                            Retry
-                          </Button>
-                        </form>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </TableCard>
-        </section>
+            </>
+          }
+          emptyLabel="No pending, retrying, or exhausted DIP jobs."
+        />
 
         <section id="progress" aria-labelledby="prog-h" className="space-y-3">
           <div>
