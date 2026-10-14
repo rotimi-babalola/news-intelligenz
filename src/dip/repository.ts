@@ -3,6 +3,7 @@ import type {
   Prisma,
   PrismaClient,
 } from "../generated/prisma/client";
+import { qualifiedTable } from "../db";
 
 type Client = PrismaClient | Prisma.TransactionClient;
 
@@ -23,6 +24,41 @@ export function latestProceedingVersion(
     where: { proceedingApiId },
     orderBy: { versionNo: "desc" },
   });
+}
+
+export function findProceedingVersion(
+  client: Client,
+  proceedingApiId: string,
+  versionNo: number,
+) {
+  return client.proceedingVersion.findUnique({
+    where: { proceedingApiId_versionNo: { proceedingApiId, versionNo } },
+  });
+}
+
+export function saveProceedingEmbedding(
+  client: Client,
+  input: {
+    apiId: string;
+    versionNo: number;
+    model: string;
+    documentInstruction: string;
+    queryInstruction: string;
+    embedding: number[];
+  },
+) {
+  return client.$executeRawUnsafe(
+    `INSERT INTO ${qualifiedTable("dip_embeddings")}
+      (id, source_entity, source_api_id, source_version_no, model, document_instruction, query_instruction, embedding)
+     VALUES (gen_random_uuid(), 'vorgang', $1, $2, $3, $4, $5, $6::public.vector)
+     ON CONFLICT (source_entity, source_api_id, source_version_no, model, document_instruction, query_instruction) DO NOTHING`,
+    input.apiId,
+    input.versionNo,
+    input.model,
+    input.documentInstruction,
+    input.queryInstruction,
+    JSON.stringify(input.embedding),
+  );
 }
 
 export function createProceeding(

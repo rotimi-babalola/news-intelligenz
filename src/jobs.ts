@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "./generated/prisma/client";
+import { qualifiedTable } from "./db";
 
 export type SourceKind = "news_feed" | "search_query" | "dip_endpoint";
 export type SourceRef = {
@@ -108,23 +109,6 @@ export async function enqueueJob(
   });
 }
 
-// Typed Prisma queries route into the configured schema automatically; raw
-// SQL must qualify tables itself. Integration tests run each suite in an
-// isolated schema via ?schema=, so an unqualified claim would read the wrong
-// (public) table and never find ready jobs.
-function qualifiedTable(table: string): string {
-  let schema = "public";
-  try {
-    schema =
-      new URL(process.env.DATABASE_URL ?? "").searchParams.get("schema") ||
-      "public";
-  } catch {
-    // Fall through to the default schema.
-  }
-  const ident = (value: string) => `"${value.replaceAll('"', '""')}"`;
-  return `${ident(schema)}.${ident(table)}`;
-}
-
 export type ClaimedJob = {
   id: string;
   dedupeKey: string;
@@ -150,6 +134,7 @@ export async function claimNextJob(
     runId?: string;
     jobId?: string;
     excludeSourceKind?: SourceKind;
+    operation?: string;
   } = {},
 ): Promise<ClaimedJob | null> {
   const params: unknown[] = [workerId, leaseMs / 1000];
@@ -165,6 +150,10 @@ export async function claimNextJob(
   if (filter.excludeSourceKind) {
     params.push(filter.excludeSourceKind);
     filterClause += ` AND source_kind <> $${params.length}`;
+  }
+  if (filter.operation) {
+    params.push(filter.operation);
+    filterClause += ` AND operation = $${params.length}`;
   }
   const jobsTable = qualifiedTable("processing_jobs");
   const rows = (await prisma.$queryRawUnsafe(
