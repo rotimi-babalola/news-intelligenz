@@ -23,6 +23,20 @@ pnpm build
 pnpm start
 ```
 
+For the optional local DIP embedding model, start Ollama and download the
+0.6B model once (about 639 MB):
+
+```sh
+docker compose --profile embeddings up -d --wait
+docker compose exec ollama ollama pull qwen3-embedding:0.6b
+```
+
+Ollama listens only on `127.0.0.1:11434`. PostgreSQL uses pgvector; the
+existing `news-data` volume is preserved when Compose recreates the database
+container with the pgvector image. If local Ollama already uses port 11434,
+set `OLLAMA_PORT=11435` for the Compose command and use that port for embedding
+requests.
+
 In another terminal, import the deterministic synthetic feed (no network):
 
 ```sh
