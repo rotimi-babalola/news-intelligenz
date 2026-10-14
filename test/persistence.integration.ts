@@ -130,7 +130,17 @@ test("PostgreSQL retains candidates and distinct discoveries; replay is idempote
     const saved = await snapshot();
     let initialPage: string;
     try {
-      const response = await fetch(`${server.url}/admin`);
+      const entry = await (await fetch(`${server.url}/admin`)).text();
+      assert.match(entry, /\/admin\/news/);
+      assert.match(entry, /\/admin\/dip/);
+      const dipPage = await (await fetch(`${server.url}/admin/dip`)).text();
+      assert.match(dipPage, /DIP import runs/);
+      assert.match(dipPage, /No DIP runs yet/);
+      assert.match(dipPage, /\/admin\/news/);
+      const crossKind = await fetch(`${server.url}/admin/dip?run=first`);
+      assert.equal(crossKind.status, 200);
+      await crossKind.text();
+      const response = await fetch(`${server.url}/admin/news`);
       assert.equal(response.status, 200);
       initialPage = await response.text();
       assert.match(initialPage, /Öffentliche Anhörung: Wohnen &amp; Städte/);
@@ -166,7 +176,7 @@ test("PostgreSQL retains candidates and distinct discoveries; replay is idempote
         "a restarted server replays without altering any row",
       );
       assert.equal(
-        await (await fetch(`${server.url}/admin`)).text(),
+        await (await fetch(`${server.url}/admin/news`)).text(),
         initialPage,
       );
       const stuck = await prisma.processingJob.findFirstOrThrow({
@@ -176,7 +186,7 @@ test("PostgreSQL retains candidates and distinct discoveries; replay is idempote
         where: { id: stuck.id },
         data: { status: "exhausted", attempts: 5, lastError: "operator case" },
       });
-      const jobsPage = await (await fetch(`${server.url}/admin`)).text();
+      const jobsPage = await (await fetch(`${server.url}/admin/news`)).text();
       assert.match(jobsPage, new RegExp(stuck.id));
       assert.match(jobsPage, /Retry<\/button>/);
     } finally {
@@ -262,7 +272,9 @@ test("PostgreSQL retains candidates and distinct discoveries; replay is idempote
     );
     server = await startNext(env);
     try {
-      const page = await (await fetch(`${server.url}/admin?run=html`)).text();
+      const page = await (
+        await fetch(`${server.url}/admin/news?run=html`)
+      ).text();
       assert.match(page, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
       assert.ok(!page.includes("<script>alert(1)</script>"));
     } finally {

@@ -293,14 +293,17 @@ export type JobFilter = "pending" | "retrying" | "exhausted" | "all";
 export async function listJobs(
   prisma: PrismaClient,
   filter: JobFilter = "all",
+  sourceKinds?: SourceKind[],
 ) {
+  const kindFilter =
+    sourceKinds === undefined ? {} : { sourceKind: { in: sourceKinds } };
   return prisma.processingJob.findMany({
     where:
       filter === "all"
-        ? {}
+        ? kindFilter
         : filter === "pending"
-          ? { status: { in: ["pending", "claimed"] } }
-          : { status: filter },
+          ? { status: { in: ["pending", "claimed"] }, ...kindFilter }
+          : { status: filter, ...kindFilter },
     orderBy: [{ nextAttemptAt: "asc" }, { createdAt: "asc" }],
     take: 100,
   });
@@ -312,9 +315,13 @@ export async function countOpenJobs(prisma: PrismaClient, runId: string) {
   });
 }
 
-export async function jobCounts(prisma: PrismaClient) {
+export async function jobCounts(
+  prisma: PrismaClient,
+  sourceKinds?: SourceKind[],
+) {
   const groups = await prisma.processingJob.groupBy({
     by: ["status"],
+    where: sourceKinds === undefined ? {} : { sourceKind: { in: sourceKinds } },
     _count: true,
   });
   const byStatus: Record<string, number> = {};
