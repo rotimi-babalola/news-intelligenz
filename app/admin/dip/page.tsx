@@ -111,8 +111,8 @@ export default async function DipAdminPage({
     {
       icon: Cpu,
       label: "Jobs needing attention",
-      value: String(counts.pending + counts.retrying + counts.exhausted),
-      hint: `Pending ${counts.pending} · Retrying ${counts.retrying} · Exhausted ${counts.exhausted}`,
+      value: String(counts.retrying + counts.exhausted),
+      hint: `Retrying ${counts.retrying} · Exhausted ${counts.exhausted} · ${counts.pending} queued downstream`,
     },
   ];
 
@@ -440,9 +440,11 @@ export default async function DipAdminPage({
               Processing jobs
             </h2>
             <p className="text-sm text-stone-500">
-              DIP endpoints only · Pending (incl. claimed): {counts.pending} ·
-              Retrying: {counts.retrying} · Exhausted: {counts.exhausted} ·
-              Retries resume automatically with backoff.
+              DIP endpoints only · Retrying: {counts.retrying} · Exhausted:{" "}
+              {counts.exhausted} · {counts.pending} pending embedding/document
+              jobs are queued downstream work, not failures — they drain once
+              the retrieval and PDF workers land. Retries resume automatically
+              with backoff.
             </p>
           </div>
           <TableCard

@@ -16,7 +16,7 @@ export default async function AdminEntryPage() {
 
   const newsJobs =
     newsCounts.pending + newsCounts.retrying + newsCounts.exhausted;
-  const dipJobs = dipCounts.pending + dipCounts.retrying + dipCounts.exhausted;
+  const dipJobs = dipCounts.retrying + dipCounts.exhausted;
 
   const areas = [
     {
@@ -129,7 +129,7 @@ export default async function AdminEntryPage() {
             <span className="flex items-center gap-1 text-xs text-stone-500">
               <Cpu className="size-3.5" aria-hidden />
               News pending {newsCounts.pending} · retrying {newsCounts.retrying}
-              {" · "}DIP pending {dipCounts.pending} · retrying{" "}
+              {" · "}DIP {dipCounts.pending} queued downstream · retrying{" "}
               {dipCounts.retrying}
             </span>
           </div>
