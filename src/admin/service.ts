@@ -9,6 +9,7 @@ import {
 } from "../import/service";
 import { database } from "../db";
 import { dedupeKey, jobCounts, listJobs, retryExhausted } from "../jobs";
+import type { SourceKind } from "../jobs";
 import { listCandidatesByRun } from "./candidate.repository";
 import {
   listDipCandidates,
@@ -22,24 +23,47 @@ import {
   getPublicationDetail,
   listPublications,
 } from "./publication.repository";
-import { getRunOrThrow, listRuns } from "./run.repository";
+import { getRunOrThrow, listNewsRuns } from "./run.repository";
 
-export async function getAdminOverview(runParam?: string) {
+const NEWS_KINDS: SourceKind[] = ["news_feed", "search_query"];
+const DIP_KINDS: SourceKind[] = ["dip_endpoint"];
+
+// Entry point: counts only, no run-scoped rows. Detailed inspection lives in
+// /admin/news and /admin/dip, each scoped to its own source kinds.
+export async function getAdminOverview() {
+  const prisma = database();
+  try {
+    const [newsRuns, dipRuns, publications, newsCounts, dipCounts, gaps] =
+      await Promise.all([
+        prisma.run.count({ where: { sourceKind: { in: NEWS_KINDS } } }),
+        prisma.run.count({ where: { sourceKind: { in: DIP_KINDS } } }),
+        prisma.publication.count(),
+        jobCounts(prisma, NEWS_KINDS),
+        jobCounts(prisma, DIP_KINDS),
+        listDipGapsForAdmin(prisma),
+      ]);
+    return { newsRuns, dipRuns, publications, newsCounts, dipCounts, gaps };
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+export async function getNewsOverview(runParam?: string) {
   const prisma = database();
   try {
     const [publications, runs] = await Promise.all([
       listPublications(prisma),
-      listRuns(prisma),
+      listNewsRuns(prisma),
     ]);
     const selectedRun = runParam ?? runs[0]?.id ?? "";
     const [candidates, discoveries, counts, pending, retrying, exhausted] =
       await Promise.all([
         listCandidatesByRun(prisma, selectedRun),
         listDiscoveriesByRun(prisma, selectedRun),
-        jobCounts(prisma),
-        listJobs(prisma, "pending"),
-        listJobs(prisma, "retrying"),
-        listJobs(prisma, "exhausted"),
+        jobCounts(prisma, NEWS_KINDS),
+        listJobs(prisma, "pending", NEWS_KINDS),
+        listJobs(prisma, "retrying", NEWS_KINDS),
+        listJobs(prisma, "exhausted", NEWS_KINDS),
       ]);
     const attention = [...pending, ...retrying, ...exhausted]
       .sort((a, b) => a.nextAttemptAt.getTime() - b.nextAttemptAt.getTime())
@@ -63,13 +87,38 @@ export async function getDipOverview(runParam?: string) {
   try {
     const runs = await listDipRuns(prisma);
     const selectedRun = runParam ?? runs[0]?.id ?? "";
-    const [candidates, discoveries, checkpoints, gaps] = await Promise.all([
+    const [
+      candidates,
+      discoveries,
+      checkpoints,
+      gaps,
+      counts,
+      pending,
+      retrying,
+      exhausted,
+    ] = await Promise.all([
       listDipCandidates(prisma, selectedRun),
       listParliamentaryDiscoveries(prisma, selectedRun),
       listDipCheckpoints(prisma),
       listDipGapsForAdmin(prisma),
+      jobCounts(prisma, DIP_KINDS),
+      listJobs(prisma, "pending", DIP_KINDS),
+      listJobs(prisma, "retrying", DIP_KINDS),
+      listJobs(prisma, "exhausted", DIP_KINDS),
     ]);
-    return { runs, selectedRun, candidates, discoveries, checkpoints, gaps };
+    const attention = [...pending, ...retrying, ...exhausted]
+      .sort((a, b) => a.nextAttemptAt.getTime() - b.nextAttemptAt.getTime())
+      .slice(0, 100);
+    return {
+      runs,
+      selectedRun,
+      candidates,
+      discoveries,
+      checkpoints,
+      gaps,
+      counts,
+      attention,
+    };
   } finally {
     await prisma.$disconnect();
   }

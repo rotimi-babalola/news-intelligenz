@@ -1,11 +1,25 @@
-import { Landmark, ListChecks, Layers, TriangleAlert } from "lucide-react";
+import {
+  Cpu,
+  Landmark,
+  ListChecks,
+  Layers,
+  RotateCcw,
+  TriangleAlert,
+} from "lucide-react";
 import { getDipOverview } from "../../../src/admin/service";
 import { Badge } from "../../../src/components/ui/badge";
 import { Button } from "../../../src/components/ui/button";
 import { cn } from "../../../src/lib/utils";
+import { retryJobAction } from "../actions";
 import { Pager } from "../_components/pager";
 import { TableCard } from "../_components/table-card";
-import { formatDate, paginate, parsePage, runTone } from "../_components/display";
+import {
+  formatDate,
+  jobTone,
+  paginate,
+  parsePage,
+  runTone,
+} from "../_components/display";
 
 export const dynamic = "force-dynamic";
 
@@ -13,51 +27,93 @@ function scopeLabel(scope: unknown): string {
   if (typeof scope !== "object" || scope === null) return "";
   const s = scope as Record<string, unknown>;
   const parts: string[] = [];
-  if (typeof s["electoralTerm"] === "number") parts.push(`WP ${s["electoralTerm"]}`);
-  if (typeof s["aktualisiertStart"] === "string" || typeof s["aktualisiertEnd"] === "string")
-    parts.push(`${String(s["aktualisiertStart"] ?? "…")} → ${String(s["aktualisiertEnd"] ?? "…")}`);
+  if (typeof s["electoralTerm"] === "number")
+    parts.push(`WP ${s["electoralTerm"]}`);
+  if (
+    typeof s["aktualisiertStart"] === "string" ||
+    typeof s["aktualisiertEnd"] === "string"
+  )
+    parts.push(
+      `${String(s["aktualisiertStart"] ?? "…")} → ${String(s["aktualisiertEnd"] ?? "…")}`,
+    );
   return parts.join(" · ");
 }
 
 export default async function DipAdminPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ run?: string; runsPage?: string; candPage?: string }>;
+  searchParams?: Promise<{
+    run?: string;
+    runsPage?: string;
+    candPage?: string;
+    jobsPage?: string;
+  }>;
 }) {
   const params = searchParams ? await searchParams : {};
-  const { runs, selectedRun, candidates, discoveries, checkpoints, gaps } =
-    await getDipOverview(params.run);
+  const {
+    runs,
+    selectedRun,
+    candidates,
+    discoveries,
+    checkpoints,
+    gaps,
+    counts,
+    attention,
+  } = await getDipOverview(params.run);
 
   const runsPage = parsePage(params.runsPage);
   const candPage = parsePage(params.candPage);
+  const jobsPage = parsePage(params.jobsPage);
   const runList = paginate(runs, runsPage);
   const cand = paginate(candidates, candPage);
+  const jobs = paginate(attention, jobsPage);
   const accepted = candidates.filter((c) => c.errors.length === 0).length;
   const selectedRunMeta = runs.find((r) => r.id === selectedRun);
 
-  function hrefFor(key: "runsPage" | "candPage", value: number, anchor: string): string {
+  function hrefFor(
+    key: "runsPage" | "candPage" | "jobsPage",
+    value: number,
+    anchor: string,
+  ): string {
     const query = new URLSearchParams();
     if (selectedRun) query.set("run", selectedRun);
     const all = {
       runsPage: key === "runsPage" ? value : runList.page,
       candPage: key === "candPage" ? value : cand.page,
+      jobsPage: key === "jobsPage" ? value : jobs.page,
     };
     if (all.runsPage > 1) query.set("runsPage", String(all.runsPage));
     if (all.candPage > 1) query.set("candPage", String(all.candPage));
+    if (all.jobsPage > 1) query.set("jobsPage", String(all.jobsPage));
     const qs = query.toString();
     return `/admin/dip${qs ? `?${qs}` : ""}${anchor}`;
   }
 
   const stats = [
-    { icon: Layers, label: "DIP runs", value: String(runs.length), hint: "Latest 100 · dip_endpoint" },
+    {
+      icon: Layers,
+      label: "DIP runs",
+      value: String(runs.length),
+      hint: "Latest 100 · dip_endpoint",
+    },
     {
       icon: ListChecks,
       label: "Selected run candidates",
       value: `${accepted}/${candidates.length}`,
       hint: selectedRun || "No run selected",
     },
-    { icon: Landmark, label: "Checkpoints", value: String(checkpoints.length), hint: "Per endpoint / term" },
-    { icon: TriangleAlert, label: "Unresolved gaps", value: String(gaps.length), hint: "Failed windows" },
+    {
+      icon: Landmark,
+      label: "Checkpoints",
+      value: String(checkpoints.length),
+      hint: `Per endpoint / term · ${gaps.length} unresolved gaps`,
+    },
+    {
+      icon: Cpu,
+      label: "Jobs needing attention",
+      value: String(counts.pending + counts.retrying + counts.exhausted),
+      hint: `Pending ${counts.pending} · Retrying ${counts.retrying} · Exhausted ${counts.exhausted}`,
+    },
   ];
 
   return (
@@ -68,14 +124,23 @@ export default async function DipAdminPage({
             <p className="text-xs font-semibold tracking-[0.14em] text-emerald-900">
               NEWS INTELLIGENZ / LOCAL ADMIN
             </p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight">DIP import runs</h1>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+              DIP import runs
+            </h1>
             <p className="mt-1 max-w-xl text-sm text-stone-500">
-              Parliamentary proceedings and steps, kept separate from news publications.
-              Candidates resolve to stored proceeding/step titles — never news headlines.
+              Parliamentary proceedings and steps, kept separate from news
+              publications. Candidates resolve to stored proceeding/step titles
+              — never news headlines.
             </p>
           </div>
-          <form action="/admin/dip" method="GET" className="flex items-center gap-2">
-            <label htmlFor="run" className="text-xs font-medium text-stone-500">Run</label>
+          <form
+            action="/admin/dip"
+            method="GET"
+            className="flex items-center gap-2"
+          >
+            <label htmlFor="run" className="text-xs font-medium text-stone-500">
+              Run
+            </label>
             <select
               id="run"
               name="run"
@@ -83,20 +148,33 @@ export default async function DipAdminPage({
               className="h-9 max-w-72 rounded-md border border-input bg-background px-2 text-sm"
             >
               {runs.map((r) => (
-                <option key={r.id} value={r.id}>{r.id}</option>
+                <option key={r.id} value={r.id}>
+                  {r.id}
+                </option>
               ))}
             </select>
-            <Button type="submit" size="sm" variant="secondary">Inspect</Button>
+            <Button type="submit" size="sm" variant="secondary">
+              Inspect
+            </Button>
           </form>
         </div>
-        <nav aria-label="Page sections" className="mx-auto flex max-w-[1400px] gap-1 overflow-x-auto px-6 pb-3 text-sm">
+        <nav
+          aria-label="Page sections"
+          className="mx-auto flex max-w-[1400px] gap-1 overflow-x-auto px-6 pb-3 text-sm"
+        >
           {[
-            ["/admin#publications", "News admin"],
+            ["/admin", "Overview"],
+            ["/admin/news", "News imports"],
             ["#runs", `Runs (${runs.length})`],
             ["#candidates", `Candidates (${candidates.length})`],
+            ["#jobs", `Jobs (${attention.length})`],
             ["#progress", `Checkpoints (${checkpoints.length})`],
           ].map(([href, label]) => (
-            <a key={href} href={href} className="rounded-full px-3 py-1.5 whitespace-nowrap text-stone-600 transition-colors hover:bg-stone-200/70 hover:text-stone-900">
+            <a
+              key={href}
+              href={href}
+              className="rounded-full px-3 py-1.5 whitespace-nowrap text-stone-600 transition-colors hover:bg-stone-200/70 hover:text-stone-900"
+            >
               {label}
             </a>
           ))}
@@ -106,53 +184,116 @@ export default async function DipAdminPage({
       <main className="mx-auto max-w-[1400px] space-y-10 px-6 py-8">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {stats.map((s) => (
-            <div key={s.label} className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+            <div
+              key={s.label}
+              className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm"
+            >
               <div className="flex items-center gap-2 text-stone-500">
                 <s.icon className="size-4" aria-hidden />
                 <p className="text-xs font-medium">{s.label}</p>
               </div>
-              <p className="mt-2 text-2xl font-semibold tabular-nums">{s.value}</p>
-              <p className="mt-1 truncate text-xs text-stone-500" title={s.hint}>{s.hint}</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums">
+                {s.value}
+              </p>
+              <p
+                className="mt-1 truncate text-xs text-stone-500"
+                title={s.hint}
+              >
+                {s.hint}
+              </p>
             </div>
           ))}
         </div>
 
         <section id="runs" aria-labelledby="runs-h" className="space-y-3">
           <div>
-            <h2 id="runs-h" className="text-xl font-semibold tracking-tight">DIP runs</h2>
-            <p className="text-sm text-stone-500">Latest 100 · endpoint + electoral-term scope · window from sourceScope.</p>
+            <h2 id="runs-h" className="text-xl font-semibold tracking-tight">
+              DIP runs
+            </h2>
+            <p className="text-sm text-stone-500">
+              Latest 100 · endpoint + electoral-term scope · window from
+              sourceScope.
+            </p>
           </div>
           <TableCard
             label="DIP runs table"
-            pager={<Pager page={runList.page} totalPages={runList.totalPages} from={runList.from} to={runList.to} total={runList.total} prevHref={hrefFor("runsPage", runList.page - 1, "#runs")} nextHref={hrefFor("runsPage", runList.page + 1, "#runs")} />}
+            pager={
+              <Pager
+                page={runList.page}
+                totalPages={runList.totalPages}
+                from={runList.from}
+                to={runList.to}
+                total={runList.total}
+                prevHref={hrefFor("runsPage", runList.page - 1, "#runs")}
+                nextHref={hrefFor("runsPage", runList.page + 1, "#runs")}
+              />
+            }
           >
             <table className="w-full border-collapse text-left text-sm">
               <thead className="bg-stone-50">
                 <tr className="text-xs tracking-wide text-stone-500 uppercase">
-                  <th scope="col" className="px-4 py-3 font-medium">Run / endpoint</th>
-                  <th scope="col" className="px-4 py-3 font-medium">Result</th>
-                  <th scope="col" className="px-4 py-3 font-medium">Started</th>
-                  <th scope="col" className="px-4 py-3 text-right font-medium">Valid</th>
-                  <th scope="col" className="px-4 py-3 text-right font-medium">Invalid</th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Run / endpoint
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Result
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Started
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">
+                    Valid
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">
+                    Invalid
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {runList.rows.length === 0 && (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center">No DIP runs yet.</td></tr>
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center">
+                      No DIP runs yet.
+                    </td>
+                  </tr>
                 )}
                 {runList.rows.map((r) => (
-                  <tr key={r.id} aria-current={r.id === selectedRun ? "true" : undefined} className={cn("align-top hover:bg-stone-50/70", r.id === selectedRun && "bg-emerald-900/[0.04]")}>
+                  <tr
+                    key={r.id}
+                    aria-current={r.id === selectedRun ? "true" : undefined}
+                    className={cn(
+                      "align-top hover:bg-stone-50/70",
+                      r.id === selectedRun && "bg-emerald-900/[0.04]",
+                    )}
+                  >
                     <td className="px-4 py-3">
-                      <a href={`/admin/dip?run=${encodeURIComponent(r.id)}#candidates`} className="font-medium text-emerald-900 underline-offset-4 hover:underline">{r.id}</a>
-                      <span className="block text-xs text-stone-400">{r.feedId} · {scopeLabel(r.sourceScope)}</span>
+                      <a
+                        href={`/admin/dip?run=${encodeURIComponent(r.id)}#candidates`}
+                        className="font-medium text-emerald-900 underline-offset-4 hover:underline"
+                      >
+                        {r.id}
+                      </a>
+                      <span className="block text-xs text-stone-400">
+                        {r.feedId} · {scopeLabel(r.sourceScope)}
+                      </span>
                     </td>
                     <td className="px-4 py-3">
                       <Badge variant={runTone(r.status)}>{r.status}</Badge>
-                      {r.error && <span className="mt-1 block max-w-56 truncate text-xs text-red-800">{r.error}</span>}
+                      {r.error && (
+                        <span className="mt-1 block max-w-56 truncate text-xs text-red-800">
+                          {r.error}
+                        </span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-xs whitespace-nowrap tabular-nums text-stone-600">{formatDate(r.startedAt)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{r.validCount}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{r.invalidCount}</td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap tabular-nums text-stone-600">
+                      {formatDate(r.startedAt)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {r.validCount}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {r.invalidCount}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -162,41 +303,83 @@ export default async function DipAdminPage({
 
         <section id="candidates" aria-labelledby="cand-h" className="space-y-3">
           <div>
-            <h2 id="cand-h" className="text-xl font-semibold tracking-tight">Candidates</h2>
+            <h2 id="cand-h" className="text-xl font-semibold tracking-tight">
+              Candidates
+            </h2>
             <p className="text-sm text-stone-500">
-              Run {selectedRunMeta?.id ?? "None"}{selectedRunMeta ? ` · ${selectedRunMeta.feedId} · ${scopeLabel(selectedRunMeta.sourceScope)}` : ""} · First 100 entries · {accepted} accepted
+              Run {selectedRunMeta?.id ?? "None"}
+              {selectedRunMeta
+                ? ` · ${selectedRunMeta.feedId} · ${scopeLabel(selectedRunMeta.sourceScope)}`
+                : ""}{" "}
+              · First 100 entries · {accepted} accepted
             </p>
           </div>
           <TableCard
             label="DIP candidates table"
-            pager={<Pager page={cand.page} totalPages={cand.totalPages} from={cand.from} to={cand.to} total={cand.total} prevHref={hrefFor("candPage", cand.page - 1, "#candidates")} nextHref={hrefFor("candPage", cand.page + 1, "#candidates")} />}
+            pager={
+              <Pager
+                page={cand.page}
+                totalPages={cand.totalPages}
+                from={cand.from}
+                to={cand.to}
+                total={cand.total}
+                prevHref={hrefFor("candPage", cand.page - 1, "#candidates")}
+                nextHref={hrefFor("candPage", cand.page + 1, "#candidates")}
+              />
+            }
           >
             <table className="w-full border-collapse text-left text-sm">
               <thead className="bg-stone-50">
                 <tr className="text-xs tracking-wide text-stone-500 uppercase">
-                  <th scope="col" className="w-14 px-4 py-3 font-medium"><span aria-hidden="true">#</span><span className="sr-only">Row</span></th>
-                  <th scope="col" className="px-4 py-3 font-medium">Record</th>
-                  <th scope="col" className="px-4 py-3 font-medium">Validation</th>
+                  <th scope="col" className="w-14 px-4 py-3 font-medium">
+                    <span aria-hidden="true">#</span>
+                    <span className="sr-only">Row</span>
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Record
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Validation
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {cand.rows.length === 0 && (
-                  <tr><td colSpan={3} className="px-4 py-8 text-center">No candidates in this run.</td></tr>
+                  <tr>
+                    <td colSpan={3} className="px-4 py-8 text-center">
+                      No candidates in this run.
+                    </td>
+                  </tr>
                 )}
                 {cand.rows.map((c) => (
-                  <tr key={`${c.runId}:${c.itemIndex}`} className="align-top hover:bg-stone-50/70">
-                    <td className="px-4 py-3 tabular-nums text-stone-500">{c.itemIndex + 1}</td>
+                  <tr
+                    key={`${c.runId}:${c.itemIndex}`}
+                    className="align-top hover:bg-stone-50/70"
+                  >
+                    <td className="px-4 py-3 tabular-nums text-stone-500">
+                      {c.itemIndex + 1}
+                    </td>
                     <td className="max-w-lg px-4 py-3">
                       <span className="font-medium">{c.title}</span>
-                      <span className="mt-0.5 block text-xs text-stone-500">{c.subtitle}</span>
+                      <span className="mt-0.5 block text-xs text-stone-500">
+                        {c.subtitle}
+                      </span>
                       <span className="mt-1 flex flex-wrap gap-1">
-                        <Badge variant="secondary">{c.endpoint || "no endpoint"}</Badge>
-                        {c.apiId && <Badge variant="secondary">ID {c.apiId}</Badge>}
+                        <Badge variant="secondary">
+                          {c.endpoint || "no endpoint"}
+                        </Badge>
+                        {c.apiId && (
+                          <Badge variant="secondary">ID {c.apiId}</Badge>
+                        )}
                         <Badge variant="secondary">{c.kind}</Badge>
                       </span>
                       <details className="mt-1 text-xs">
-                        <summary className="cursor-pointer text-emerald-900">Retained metadata</summary>
-                        <pre className="mt-1 max-w-lg overflow-x-auto rounded-md bg-stone-100 p-2 whitespace-pre-wrap text-stone-600">{JSON.stringify(c.metadata, null, 2)}</pre>
+                        <summary className="cursor-pointer text-emerald-900">
+                          Retained metadata
+                        </summary>
+                        <pre className="mt-1 max-w-lg overflow-x-auto rounded-md bg-stone-100 p-2 whitespace-pre-wrap text-stone-600">
+                          {JSON.stringify(c.metadata, null, 2)}
+                        </pre>
                       </details>
                     </td>
                     <td className="px-4 py-3">
@@ -204,7 +387,9 @@ export default async function DipAdminPage({
                         <div className="space-y-1">
                           <Badge variant="destructive">Rejected</Badge>
                           <ul className="list-disc pl-4 text-xs text-red-800">
-                            {c.errors.map((e, i) => <li key={i}>{String(e)}</li>)}
+                            {c.errors.map((e, i) => (
+                              <li key={i}>{String(e)}</li>
+                            ))}
                           </ul>
                         </div>
                       ) : (
@@ -219,16 +404,28 @@ export default async function DipAdminPage({
 
           <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
             <div className="p-4">
-              <h3 className="text-sm font-semibold">Parliamentary discoveries for this run</h3>
-              <p className="mt-0.5 text-xs text-stone-500">First 100 encounters · entity + API ID · titles from stored records.</p>
+              <h3 className="text-sm font-semibold">
+                Parliamentary discoveries for this run
+              </h3>
+              <p className="mt-0.5 text-xs text-stone-500">
+                First 100 encounters · entity + API ID · titles from stored
+                records.
+              </p>
               {discoveries.length === 0 ? (
-                <p className="mt-2 text-sm text-stone-500">No parliamentary discoveries in this run.</p>
+                <p className="mt-2 text-sm text-stone-500">
+                  No parliamentary discoveries in this run.
+                </p>
               ) : (
                 <ul className="mt-2 divide-y divide-stone-100 text-sm">
                   {discoveries.slice(0, 100).map((d) => (
-                    <li key={`${d.runId}:${d.entity}:${d.apiId}`} className="flex flex-wrap justify-between gap-2 py-1.5">
+                    <li
+                      key={`${d.runId}:${d.entity}:${d.apiId}`}
+                      className="flex flex-wrap justify-between gap-2 py-1.5"
+                    >
                       <span className="font-medium">{d.title}</span>
-                      <span className="text-xs whitespace-nowrap tabular-nums text-stone-500">{d.entity} · {d.apiId} · {formatDate(d.discoveredAt)}</span>
+                      <span className="text-xs whitespace-nowrap tabular-nums text-stone-500">
+                        {d.entity} · {d.apiId} · {formatDate(d.discoveredAt)}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -237,28 +434,142 @@ export default async function DipAdminPage({
           </div>
         </section>
 
+        <section id="jobs" aria-labelledby="jobs-h" className="space-y-3">
+          <div>
+            <h2 id="jobs-h" className="text-xl font-semibold tracking-tight">
+              Processing jobs
+            </h2>
+            <p className="text-sm text-stone-500">
+              DIP endpoints only · Pending (incl. claimed): {counts.pending} ·
+              Retrying: {counts.retrying} · Exhausted: {counts.exhausted} ·
+              Retries resume automatically with backoff.
+            </p>
+          </div>
+          <TableCard
+            label="DIP processing jobs table"
+            pager={
+              <Pager
+                page={jobs.page}
+                totalPages={jobs.totalPages}
+                from={jobs.from}
+                to={jobs.to}
+                total={jobs.total}
+                prevHref={hrefFor("jobsPage", jobs.page - 1, "#jobs")}
+                nextHref={hrefFor("jobsPage", jobs.page + 1, "#jobs")}
+              />
+            }
+          >
+            <table className="w-full border-collapse text-left text-sm">
+              <thead className="bg-stone-50">
+                <tr className="text-xs tracking-wide text-stone-500 uppercase">
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Source / run
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    State
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Last error
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {jobs.rows.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-8 text-center">
+                      No pending, retrying, or exhausted DIP jobs.
+                    </td>
+                  </tr>
+                )}
+                {jobs.rows.map((j) => (
+                  <tr key={j.id} className="align-top hover:bg-stone-50/70">
+                    <td className="px-4 py-3">
+                      <span className="font-medium">{j.sourceKey}</span>
+                      <span className="block text-xs text-stone-400">
+                        {j.operation} · {j.sourceKind} · Run {j.runId}
+                        {j.itemIndex === null
+                          ? ""
+                          : ` · Item ${j.itemIndex + 1}`}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant={jobTone(j.status)}>{j.status}</Badge>
+                      <span className="mt-1 block text-xs whitespace-nowrap tabular-nums text-stone-500">
+                        Attempt {j.attempts}/{j.maxAttempts} · Next{" "}
+                        {formatDate(j.nextAttemptAt)}
+                      </span>
+                    </td>
+                    <td className="max-w-xs px-4 py-3 text-xs text-stone-600">
+                      {j.lastError ?? ""}
+                    </td>
+                    <td className="px-4 py-3">
+                      {j.status === "exhausted" && (
+                        <form action={retryJobAction}>
+                          <input type="hidden" name="id" value={j.id} />
+                          <Button
+                            type="submit"
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5"
+                          >
+                            <RotateCcw className="size-3.5" aria-hidden />
+                            Retry
+                          </Button>
+                        </form>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableCard>
+        </section>
+
         <section id="progress" aria-labelledby="prog-h" className="space-y-3">
           <div>
-            <h2 id="prog-h" className="text-xl font-semibold tracking-tight">Checkpoints & gaps</h2>
-            <p className="mt-0.5 text-xs text-stone-500">Checkpoint advances only after all pages of a window are stored. Gaps are failed windows not yet covered by success.</p>
+            <h2 id="prog-h" className="text-xl font-semibold tracking-tight">
+              Checkpoints & gaps
+            </h2>
+            <p className="mt-0.5 text-xs text-stone-500">
+              Checkpoint advances only after all pages of a window are stored.
+              Gaps are failed windows not yet covered by success.
+            </p>
           </div>
           <div className="grid gap-3 lg:grid-cols-2">
             <TableCard label="DIP checkpoints table">
               <table className="w-full border-collapse text-left text-sm">
                 <thead className="bg-stone-50">
                   <tr className="text-xs tracking-wide text-stone-500 uppercase">
-                    <th scope="col" className="px-4 py-3 font-medium">Endpoint / term</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Updated through</th>
+                    <th scope="col" className="px-4 py-3 font-medium">
+                      Endpoint / term
+                    </th>
+                    <th scope="col" className="px-4 py-3 font-medium">
+                      Updated through
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {checkpoints.length === 0 && (
-                    <tr><td colSpan={2} className="px-4 py-8 text-center">No checkpoints yet.</td></tr>
+                    <tr>
+                      <td colSpan={2} className="px-4 py-8 text-center">
+                        No checkpoints yet.
+                      </td>
+                    </tr>
                   )}
                   {checkpoints.map((c) => (
-                    <tr key={`${c.endpoint}:${c.electoralTerm}`} className="align-top hover:bg-stone-50/70">
-                      <td className="px-4 py-3 font-medium">{c.endpoint} · WP {c.electoralTerm}</td>
-                      <td className="px-4 py-3 text-xs tabular-nums text-stone-600">{formatDate(c.updatedThrough)}</td>
+                    <tr
+                      key={`${c.endpoint}:${c.electoralTerm}`}
+                      className="align-top hover:bg-stone-50/70"
+                    >
+                      <td className="px-4 py-3 font-medium">
+                        {c.endpoint} · WP {c.electoralTerm}
+                      </td>
+                      <td className="px-4 py-3 text-xs tabular-nums text-stone-600">
+                        {formatDate(c.updatedThrough)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -268,21 +579,42 @@ export default async function DipAdminPage({
               <table className="w-full border-collapse text-left text-sm">
                 <thead className="bg-stone-50">
                   <tr className="text-xs tracking-wide text-stone-500 uppercase">
-                    <th scope="col" className="px-4 py-3 font-medium">Failed window</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Error</th>
+                    <th scope="col" className="px-4 py-3 font-medium">
+                      Failed window
+                    </th>
+                    <th scope="col" className="px-4 py-3 font-medium">
+                      Error
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {gaps.length === 0 && (
-                    <tr><td colSpan={2} className="px-4 py-8 text-center">No unresolved gaps.</td></tr>
+                    <tr>
+                      <td colSpan={2} className="px-4 py-8 text-center">
+                        No unresolved gaps.
+                      </td>
+                    </tr>
                   )}
                   {gaps.map((g) => (
-                    <tr key={g.runId} className="align-top hover:bg-stone-50/70">
+                    <tr
+                      key={g.runId}
+                      className="align-top hover:bg-stone-50/70"
+                    >
                       <td className="px-4 py-3">
-                        <span className="font-medium">{g.endpoint} · {g.electoralTerm === null ? "no term" : `WP ${g.electoralTerm}`}</span>
-                        <span className="block text-xs tabular-nums text-stone-500">{g.runId} · {formatDate(g.windowStart)} → {formatDate(g.windowEnd)}</span>
+                        <span className="font-medium">
+                          {g.endpoint} ·{" "}
+                          {g.electoralTerm === null
+                            ? "no term"
+                            : `WP ${g.electoralTerm}`}
+                        </span>
+                        <span className="block text-xs tabular-nums text-stone-500">
+                          {g.runId} · {formatDate(g.windowStart)} →{" "}
+                          {formatDate(g.windowEnd)}
+                        </span>
                       </td>
-                      <td className="max-w-xs px-4 py-3 text-xs text-red-800">{g.error ?? ""}</td>
+                      <td className="max-w-xs px-4 py-3 text-xs text-red-800">
+                        {g.error ?? ""}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

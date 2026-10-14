@@ -293,8 +293,7 @@ test("rate-limited failures resume after the provider delay", async () => {
 
 test("the admin service exposes exhausted jobs and retries them deliberately", async () => {
   const { prisma, done } = await isolatedDb();
-  const { getAdminOverview, retryJob } =
-    await import("../src/admin/service.js");
+  const { getNewsOverview, retryJob } = await import("../src/admin/service.js");
   try {
     await collectIntake(prisma, "admin-retry", xml(["op"]), feed);
     const job = await prisma.processingJob.findFirstOrThrow({
@@ -304,7 +303,7 @@ test("the admin service exposes exhausted jobs and retries them deliberately", a
       where: { id: job.id },
       data: { status: "exhausted", attempts: 5, lastError: "operator case" },
     });
-    const overview = await getAdminOverview("admin-retry");
+    const overview = await getNewsOverview("admin-retry");
     assert.equal(overview.counts.exhausted, 1);
     assert.ok(
       overview.attention.some(
