@@ -10,6 +10,13 @@ import {
 import { database } from "../db";
 import { dedupeKey, jobCounts, listJobs, retryExhausted } from "../jobs";
 import { listCandidatesByRun } from "./candidate.repository";
+import {
+  listDipCandidates,
+  listDipCheckpoints,
+  listDipGapsForAdmin,
+  listDipRuns,
+  listParliamentaryDiscoveries,
+} from "./dip.repository";
 import { listDiscoveriesByRun } from "./discovery.repository";
 import {
   getPublicationDetail,
@@ -46,6 +53,23 @@ export async function getAdminOverview(runParam?: string) {
       counts,
       attention,
     };
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+export async function getDipOverview(runParam?: string) {
+  const prisma = database();
+  try {
+    const runs = await listDipRuns(prisma);
+    const selectedRun = runParam ?? runs[0]?.id ?? "";
+    const [candidates, discoveries, checkpoints, gaps] = await Promise.all([
+      listDipCandidates(prisma, selectedRun),
+      listParliamentaryDiscoveries(prisma, selectedRun),
+      listDipCheckpoints(prisma),
+      listDipGapsForAdmin(prisma),
+    ]);
+    return { runs, selectedRun, candidates, discoveries, checkpoints, gaps };
   } finally {
     await prisma.$disconnect();
   }

@@ -167,6 +167,7 @@ export default async function AdminPage({
             ["#runs", `Runs (${runs.length})`],
             ["#candidates", `Candidates (${candidates.length})`],
             ["#jobs", `Jobs (${attention.length})`],
+            ["/admin/dip", "DIP import runs"],
           ].map(([href, label]) => (
             <a
               key={href}
