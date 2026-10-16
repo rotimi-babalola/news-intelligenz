@@ -15,7 +15,19 @@ export const QUERY_INSTRUCTION =
 
 type Embed = (text: string) => Promise<number[]>;
 
-export async function embedDocument(text: string): Promise<number[]> {
+export function assertEmbedding(embedding: number[]) {
+  if (
+    !Array.isArray(embedding) ||
+    embedding.length !== 1024 ||
+    !embedding.every(
+      (value) => typeof value === "number" && Number.isFinite(value),
+    ) ||
+    !embedding.some((value) => value !== 0)
+  )
+    throw new Error("Ollama returned an invalid 1024-dimensional embedding");
+}
+
+export async function embedText(text: string): Promise<number[]> {
   const port = Number(process.env.OLLAMA_PORT || "11434");
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error("OLLAMA_PORT must be a valid TCP port");
@@ -89,14 +101,8 @@ async function processNextEmbedding(
     ]
       .filter(Boolean)
       .join("\n\n");
-    const embedding = await (options.embed ?? embedDocument)(text);
-    if (
-      embedding.length !== 1024 ||
-      !embedding.every(
-        (value) => typeof value === "number" && Number.isFinite(value),
-      )
-    )
-      throw new Error("Ollama returned an invalid 1024-dimensional embedding");
+    const embedding = await (options.embed ?? embedText)(text);
+    assertEmbedding(embedding);
     await saveDipEmbedding(prisma, {
       sourceEntity:
         sourceOperation === EMBED_PROCEEDING ? "vorgang" : "vorgangsposition",
