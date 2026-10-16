@@ -35,8 +35,9 @@ Ollama listens only on `127.0.0.1:11434`. PostgreSQL uses pgvector; the
 existing `news-data` volume is preserved when Compose recreates the database
 container with the pgvector image. If local Ollama already uses port 11434,
 set `OLLAMA_PORT=11435` in `.env` before starting Compose and the app. Once
-DIP proceedings are collected, `POST /api/drain-dip` embeds one pending
-proceeding version per call; failed jobs retain their standard retry state.
+DIP proceedings and steps are collected, `POST /api/drain-dip` embeds one
+pending proceeding or step version per call; failed jobs retain their standard
+retry state.
 
 In another terminal, import the deterministic synthetic feed (no network):
 

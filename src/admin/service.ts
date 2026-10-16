@@ -7,8 +7,11 @@ import {
   finalizeRunIfSettled,
   type ArticleFetcher,
 } from "../import/service";
-import { processNextProceedingEmbedding } from "../dip/embedding";
-import { EMBED_PROCEEDING } from "../dip/jobs";
+import {
+  processNextProceedingEmbedding,
+  processNextStepEmbedding,
+} from "../dip/embedding";
+import { EMBED_PROCEEDING, EMBED_STEP } from "../dip/jobs";
 import { database } from "../db";
 import {
   dedupeKey,
@@ -162,6 +165,10 @@ export async function retryJob(jobId: string) {
     if (retried.sourceKind === "dip_endpoint") {
       if (retried.operation === EMBED_PROCEEDING)
         await processNextProceedingEmbedding(prisma, "admin-retry", {
+          jobId: retried.id,
+        });
+      if (retried.operation === EMBED_STEP)
+        await processNextStepEmbedding(prisma, "admin-retry", {
           jobId: retried.id,
         });
       return;

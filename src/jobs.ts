@@ -134,7 +134,7 @@ export async function claimNextJob(
     runId?: string;
     jobId?: string;
     excludeSourceKind?: SourceKind;
-    operation?: string;
+    operation?: string | string[];
   } = {},
 ): Promise<ClaimedJob | null> {
   const params: unknown[] = [workerId, leaseMs / 1000];
@@ -153,7 +153,9 @@ export async function claimNextJob(
   }
   if (filter.operation) {
     params.push(filter.operation);
-    filterClause += ` AND operation = $${params.length}`;
+    filterClause += Array.isArray(filter.operation)
+      ? ` AND operation = ANY($${params.length}::text[])`
+      : ` AND operation = $${params.length}`;
   }
   const jobsTable = qualifiedTable("processing_jobs");
   const rows = (await prisma.$queryRawUnsafe(

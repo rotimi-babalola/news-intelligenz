@@ -4,8 +4,8 @@ import { dipSource, enqueueJob } from "../jobs";
 // Downstream DIP work submits as durable jobs at collection time and runs
 // independently: model outages or PDF failures never hold a collection
 // checkpoint open, and replaying a run never enqueues twice (dedupeKey).
-// The workers themselves arrive in later slices; collection only promises
-// the jobs exist exactly once per new record version.
+// Collection only promises the jobs exist exactly once per new record version;
+// document processing remains a separate downstream path.
 
 export const EMBED_PROCEEDING = "embed_proceeding";
 export const EMBED_STEP = "embed_step";

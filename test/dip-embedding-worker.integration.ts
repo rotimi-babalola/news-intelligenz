@@ -3,12 +3,15 @@ import { test } from "node:test";
 import { retryJob } from "../src/admin/service.js";
 import {
   processNextProceedingEmbedding,
+  processNextStepEmbedding,
+  processNextDipEmbedding,
   EMBEDDING_MODEL,
   DOCUMENT_INSTRUCTION,
   QUERY_INSTRUCTION,
 } from "../src/dip/embedding.js";
 import { EMBED_STEP } from "../src/dip/jobs.js";
 import { collectVorgang } from "../src/dip/vorgang.js";
+import { collectSteps } from "../src/dip/steps.js";
 import { dipSource, enqueueJob } from "../src/jobs.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 
@@ -157,6 +160,92 @@ test("model failure retries without changing the DIP source or checkpoint", asyn
         },
       }),
       before,
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("step jobs embed saved labels and available descriptions for each version", async () => {
+  const prisma = await isolatedDatabase();
+  const step = (label: string, abstract?: string) => ({
+    id: "456",
+    typ: "Vorgangsposition",
+    vorgangsposition: label,
+    zuordnung: "BT",
+    gang: false,
+    fortsetzung: false,
+    nachtrag: false,
+    vorgangstyp: "Gesetzentwurf",
+    titel: "Wohnraumgesetz",
+    dokumentart: "Drucksache",
+    vorgang_id: "123",
+    datum: "2026-10-14",
+    aktualisiert: "2026-10-14T12:00:00+02:00",
+    fundstelle: { id: "789", dokumentnummer: "21/1", datum: "2026-10-14" },
+    aktivitaet_anzahl: 0,
+    ...(abstract ? { abstract } : {}),
+  });
+  const collectStep = (runId: string, document: ReturnType<typeof step>) =>
+    collectSteps(prisma, {
+      runId,
+      electoralTerm: 21,
+      fetchPage: async () => ({
+        documents: [document],
+        cursor: "x",
+        numFound: 1,
+      }),
+    });
+  try {
+    await collectStep(
+      "step-v1",
+      step("Einbringung", "Mehr bezahlbarer Wohnraum."),
+    );
+    await collectStep("step-v2", step("Beratung"));
+    await collect(prisma, "later-proceeding", "Späterer Vorgang");
+    const inputs: string[] = [];
+    const embed = async (text: string) => {
+      inputs.push(text);
+      return Array.from({ length: 1024 }, () => 0.1);
+    };
+    assert.equal(
+      (await processNextDipEmbedding(prisma, "worker", { embed })).status,
+      "succeeded",
+    );
+    assert.equal(
+      (await processNextStepEmbedding(prisma, "worker", { embed })).status,
+      "succeeded",
+    );
+    assert.deepEqual(inputs, [
+      "Wohnraumgesetz\n\nEinbringung\n\nMehr bezahlbarer Wohnraum.",
+      "Wohnraumgesetz\n\nBeratung",
+    ]);
+    assert.deepEqual(
+      await prisma.dipEmbedding.findMany({
+        select: {
+          sourceEntity: true,
+          sourceApiId: true,
+          sourceVersionNo: true,
+          model: true,
+          documentInstruction: true,
+          queryInstruction: true,
+        },
+        orderBy: { sourceVersionNo: "asc" },
+      }),
+      [1, 2].map((sourceVersionNo) => ({
+        sourceEntity: "vorgangsposition",
+        sourceApiId: "456",
+        sourceVersionNo,
+        model: EMBEDDING_MODEL,
+        documentInstruction: DOCUMENT_INSTRUCTION,
+        queryInstruction: QUERY_INSTRUCTION,
+      })),
+    );
+    assert.equal(
+      await prisma.processingJob.count({
+        where: { runId: "later-proceeding", status: "pending" },
+      }),
+      1,
     );
   } finally {
     await prisma.$disconnect();

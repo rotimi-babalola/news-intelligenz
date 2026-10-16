@@ -36,9 +36,20 @@ export function findProceedingVersion(
   });
 }
 
-export function saveProceedingEmbedding(
+export function findStepVersion(
+  client: Client,
+  stepApiId: string,
+  versionNo: number,
+) {
+  return client.proceedingStepVersion.findUnique({
+    where: { stepApiId_versionNo: { stepApiId, versionNo } },
+  });
+}
+
+export function saveDipEmbedding(
   client: Client,
   input: {
+    sourceEntity: ParliamentaryEntity;
     apiId: string;
     versionNo: number;
     model: string;
@@ -50,8 +61,9 @@ export function saveProceedingEmbedding(
   return client.$executeRawUnsafe(
     `INSERT INTO ${qualifiedTable("dip_embeddings")}
       (id, source_entity, source_api_id, source_version_no, model, document_instruction, query_instruction, embedding)
-     VALUES (gen_random_uuid(), 'vorgang', $1, $2, $3, $4, $5, $6::public.vector)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::public.vector)
      ON CONFLICT (source_entity, source_api_id, source_version_no, model, document_instruction, query_instruction) DO NOTHING`,
+    input.sourceEntity,
     input.apiId,
     input.versionNo,
     input.model,
