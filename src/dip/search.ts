@@ -4,9 +4,11 @@ import {
   DOCUMENT_INSTRUCTION,
   embedText,
   EMBEDDING_MODEL,
-  QUERY_INSTRUCTION,
 } from "./embedding";
 import { searchDipEmbeddings } from "./repository";
+
+export const QUERY_INSTRUCTION =
+  "Given a German or English query, retrieve relevant German parliamentary proceedings and steps";
 
 export async function searchDip(
   prisma: PrismaClient,
@@ -22,7 +24,6 @@ export async function searchDip(
     embedding,
     model: EMBEDDING_MODEL,
     documentInstruction: DOCUMENT_INSTRUCTION,
-    queryInstruction: QUERY_INSTRUCTION,
     limit,
   });
   return rows.map((row) => {

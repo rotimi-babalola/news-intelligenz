@@ -4,11 +4,11 @@ import { test } from "node:test";
 import {
   DOCUMENT_INSTRUCTION,
   EMBEDDING_MODEL,
-  processNextProceedingEmbedding,
-  QUERY_INSTRUCTION,
+  processNextDipEmbedding,
 } from "../src/dip/embedding.js";
 import { saveDipEmbedding } from "../src/dip/repository.js";
-import { searchDip } from "../src/dip/search.js";
+import { QUERY_INSTRUCTION, searchDip } from "../src/dip/search.js";
+import { EMBED_PROCEEDING } from "../src/dip/jobs.js";
 import type { VorgangPage } from "../src/dip/types.js";
 import { collectVorgang } from "../src/dip/vorgang.js";
 import { isolatedDatabase } from "./dip-test-db.js";
@@ -58,7 +58,6 @@ test("German and English queries return only current DIP source versions", async
         versionNo: sourceVersionNo,
         model: EMBEDDING_MODEL,
         documentInstruction: DOCUMENT_INSTRUCTION,
-        queryInstruction: QUERY_INSTRUCTION,
         embedding,
       });
     await save("vorgang", "123", 1, vector(1, 0));
@@ -135,7 +134,11 @@ test(
       );
       for (let i = 0; i < 3; i++)
         assert.equal(
-          (await processNextProceedingEmbedding(prisma, "search-qa")).status,
+          (
+            await processNextDipEmbedding(prisma, "search-qa", {
+              operation: EMBED_PROCEEDING,
+            })
+          ).status,
           "succeeded",
         );
       const changed = {
@@ -144,7 +147,11 @@ test(
       };
       assert.equal((await collect("search-v2", [changed])).versionsAdded, 1);
       assert.equal(
-        (await processNextProceedingEmbedding(prisma, "search-qa")).status,
+        (
+          await processNextDipEmbedding(prisma, "search-qa", {
+            operation: EMBED_PROCEEDING,
+          })
+        ).status,
         "succeeded",
       );
 

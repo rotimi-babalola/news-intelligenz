@@ -8,10 +8,8 @@ import {
 } from "./repository";
 
 export const EMBEDDING_MODEL = "qwen3-embedding:0.6b";
-// Qwen3 embeds retrieval documents without a prefix; queries use this task.
+// Qwen3 embeds retrieval documents without a prefix.
 export const DOCUMENT_INSTRUCTION = "";
-export const QUERY_INSTRUCTION =
-  "Given a German or English query, retrieve relevant German parliamentary proceedings and steps";
 
 type Embed = (text: string) => Promise<number[]>;
 
@@ -52,14 +50,17 @@ export async function embedText(text: string): Promise<number[]> {
   return body.embeddings?.[0] ?? [];
 }
 
-async function processNextEmbedding(
+export async function processNextDipEmbedding(
   prisma: PrismaClient,
   workerId: string,
-  operation: typeof EMBED_PROCEEDING | typeof EMBED_STEP | undefined,
-  options: { embed?: Embed; jobId?: string } = {},
+  options: {
+    embed?: Embed;
+    jobId?: string;
+    operation?: typeof EMBED_PROCEEDING | typeof EMBED_STEP;
+  } = {},
 ) {
   const job = await claimNextJob(prisma, workerId, undefined, {
-    operation: operation ?? [EMBED_PROCEEDING, EMBED_STEP],
+    operation: options.operation ?? [EMBED_PROCEEDING, EMBED_STEP],
     jobId: options.jobId,
   });
   if (!job) return { status: "empty" as const };
@@ -110,7 +111,6 @@ async function processNextEmbedding(
       versionNo,
       model: EMBEDDING_MODEL,
       documentInstruction: DOCUMENT_INSTRUCTION,
-      queryInstruction: QUERY_INSTRUCTION,
       embedding,
     });
     await completeJob(prisma, job, workerId);
@@ -127,28 +127,4 @@ async function processNextEmbedding(
       jobId: job.id,
     };
   }
-}
-
-export function processNextDipEmbedding(
-  prisma: PrismaClient,
-  workerId: string,
-  options: { embed?: Embed; jobId?: string } = {},
-) {
-  return processNextEmbedding(prisma, workerId, undefined, options);
-}
-
-export function processNextProceedingEmbedding(
-  prisma: PrismaClient,
-  workerId: string,
-  options: { embed?: Embed; jobId?: string } = {},
-) {
-  return processNextEmbedding(prisma, workerId, EMBED_PROCEEDING, options);
-}
-
-export function processNextStepEmbedding(
-  prisma: PrismaClient,
-  workerId: string,
-  options: { embed?: Embed; jobId?: string } = {},
-) {
-  return processNextEmbedding(prisma, workerId, EMBED_STEP, options);
 }

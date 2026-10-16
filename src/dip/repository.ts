@@ -54,21 +54,19 @@ export function saveDipEmbedding(
     versionNo: number;
     model: string;
     documentInstruction: string;
-    queryInstruction: string;
     embedding: number[];
   },
 ) {
   return client.$executeRawUnsafe(
     `INSERT INTO ${qualifiedTable("dip_embeddings")}
-      (id, source_entity, source_api_id, source_version_no, model, document_instruction, query_instruction, embedding)
-     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::public.vector)
-     ON CONFLICT (source_entity, source_api_id, source_version_no, model, document_instruction, query_instruction) DO NOTHING`,
+      (id, source_entity, source_api_id, source_version_no, model, document_instruction, embedding)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6::public.vector)
+     ON CONFLICT (source_entity, source_api_id, source_version_no, model, document_instruction) DO NOTHING`,
     input.sourceEntity,
     input.apiId,
     input.versionNo,
     input.model,
     input.documentInstruction,
-    input.queryInstruction,
     JSON.stringify(input.embedding),
   );
 }
@@ -90,7 +88,6 @@ export function searchDipEmbeddings(
     embedding: number[];
     model: string;
     documentInstruction: string;
-    queryInstruction: string;
     limit: number;
   },
 ) {
@@ -109,14 +106,12 @@ export function searchDipEmbeddings(
        ON e.source_entity = 'vorgangsposition' AND s.api_id = e.source_api_id
        AND s.latest_version_no = e.source_version_no
      WHERE e.model = $2 AND e.document_instruction = $3
-       AND e.query_instruction = $4
        AND (p.api_id IS NOT NULL OR s.api_id IS NOT NULL)
      ORDER BY e.embedding <=> $1::public.vector, e.source_entity, e.source_api_id
-     LIMIT $5`,
+     LIMIT $4`,
     JSON.stringify(input.embedding),
     input.model,
     input.documentInstruction,
-    input.queryInstruction,
     input.limit,
   );
 }

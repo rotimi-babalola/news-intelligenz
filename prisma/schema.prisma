@@ -291,11 +291,10 @@ model DipEmbedding {
   sourceVersionNo     Int                 @map("source_version_no")
   model               String              @db.Text
   documentInstruction String              @map("document_instruction") @db.Text
-  queryInstruction    String              @map("query_instruction") @db.Text
   embedding           Unsupported("vector(1024)")
   createdAt           DateTime            @map("created_at") @default(now()) @db.Timestamptz(6)
 
-  @@unique([sourceEntity, sourceApiId, sourceVersionNo, model, documentInstruction, queryInstruction], map: "dip_embeddings_source_entity_source_api_id_source_version_no_mo")
+  @@unique([sourceEntity, sourceApiId, sourceVersionNo, model, documentInstruction], map: "dip_embeddings_source_version_model_document_key")
   @@map("dip_embeddings")
 }
 

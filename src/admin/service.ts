@@ -7,11 +7,7 @@ import {
   finalizeRunIfSettled,
   type ArticleFetcher,
 } from "../import/service";
-import {
-  processNextProceedingEmbedding,
-  processNextStepEmbedding,
-} from "../dip/embedding";
-import { EMBED_PROCEEDING, EMBED_STEP } from "../dip/jobs";
+import { processNextDipEmbedding } from "../dip/embedding";
 import { database } from "../db";
 import {
   dedupeKey,
@@ -163,14 +159,9 @@ export async function retryJob(jobId: string) {
     if (!jobId) throw new Error("Missing job id");
     const retried = await retryExhausted(prisma, jobId);
     if (retried.sourceKind === "dip_endpoint") {
-      if (retried.operation === EMBED_PROCEEDING)
-        await processNextProceedingEmbedding(prisma, "admin-retry", {
-          jobId: retried.id,
-        });
-      if (retried.operation === EMBED_STEP)
-        await processNextStepEmbedding(prisma, "admin-retry", {
-          jobId: retried.id,
-        });
+      await processNextDipEmbedding(prisma, "admin-retry", {
+        jobId: retried.id,
+      });
       return;
     }
     await drainJobs(prisma, "admin-retry", { runId: retried.runId });

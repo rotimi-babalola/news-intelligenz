@@ -2,14 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { retryJob } from "../src/admin/service.js";
 import {
-  processNextProceedingEmbedding,
-  processNextStepEmbedding,
   processNextDipEmbedding,
   EMBEDDING_MODEL,
   DOCUMENT_INSTRUCTION,
-  QUERY_INSTRUCTION,
 } from "../src/dip/embedding.js";
-import { EMBED_STEP } from "../src/dip/jobs.js";
+import { EMBED_PROCEEDING, EMBED_STEP } from "../src/dip/jobs.js";
 import { collectVorgang } from "../src/dip/vorgang.js";
 import { collectSteps } from "../src/dip/steps.js";
 import { dipSource, enqueueJob } from "../src/jobs.js";
@@ -55,13 +52,21 @@ test("proceeding jobs embed exact versions once and leave step jobs alone", asyn
       return Array.from({ length: 1024 }, () => 0.1);
     };
     assert.equal(
-      (await processNextProceedingEmbedding(prisma, "worker", { embed }))
-        .status,
+      (
+        await processNextDipEmbedding(prisma, "worker", {
+          embed,
+          operation: EMBED_PROCEEDING,
+        })
+      ).status,
       "succeeded",
     );
     assert.equal(
-      (await processNextProceedingEmbedding(prisma, "worker", { embed }))
-        .status,
+      (
+        await processNextDipEmbedding(prisma, "worker", {
+          embed,
+          operation: EMBED_PROCEEDING,
+        })
+      ).status,
       "succeeded",
     );
     assert.deepEqual(inputs, [
@@ -76,7 +81,6 @@ test("proceeding jobs embed exact versions once and leave step jobs alone", asyn
           sourceApiId: true,
           model: true,
           documentInstruction: true,
-          queryInstruction: true,
         },
         orderBy: { sourceVersionNo: "asc" },
       }),
@@ -86,7 +90,6 @@ test("proceeding jobs embed exact versions once and leave step jobs alone", asyn
         sourceApiId: "123",
         model: EMBEDDING_MODEL,
         documentInstruction: DOCUMENT_INSTRUCTION,
-        queryInstruction: QUERY_INSTRUCTION,
       })),
     );
 
@@ -99,8 +102,12 @@ test("proceeding jobs embed exact versions once and leave step jobs alone", asyn
       data: { status: "retrying", nextAttemptAt: new Date(0) },
     });
     assert.equal(
-      (await processNextProceedingEmbedding(prisma, "worker", { embed }))
-        .status,
+      (
+        await processNextDipEmbedding(prisma, "worker", {
+          embed,
+          operation: EMBED_PROCEEDING,
+        })
+      ).status,
       "succeeded",
     );
     assert.equal(await prisma.dipEmbedding.count(), 2);
@@ -114,8 +121,12 @@ test("proceeding jobs embed exact versions once and leave step jobs alone", asyn
       }),
     );
     assert.equal(
-      (await processNextProceedingEmbedding(prisma, "worker", { embed }))
-        .status,
+      (
+        await processNextDipEmbedding(prisma, "worker", {
+          embed,
+          operation: EMBED_PROCEEDING,
+        })
+      ).status,
       "empty",
     );
     assert.equal(
@@ -140,7 +151,8 @@ test("model failure retries without changing the DIP source or checkpoint", asyn
     });
     assert.equal(
       (
-        await processNextProceedingEmbedding(prisma, "worker", {
+        await processNextDipEmbedding(prisma, "worker", {
+          operation: EMBED_PROCEEDING,
           embed: async () => {
             throw new Error("model offline");
           },
@@ -213,7 +225,12 @@ test("step jobs embed saved labels and available descriptions for each version",
       "succeeded",
     );
     assert.equal(
-      (await processNextStepEmbedding(prisma, "worker", { embed })).status,
+      (
+        await processNextDipEmbedding(prisma, "worker", {
+          embed,
+          operation: EMBED_STEP,
+        })
+      ).status,
       "succeeded",
     );
     assert.deepEqual(inputs, [
@@ -228,7 +245,6 @@ test("step jobs embed saved labels and available descriptions for each version",
           sourceVersionNo: true,
           model: true,
           documentInstruction: true,
-          queryInstruction: true,
         },
         orderBy: { sourceVersionNo: "asc" },
       }),
@@ -238,7 +254,6 @@ test("step jobs embed saved labels and available descriptions for each version",
         sourceVersionNo,
         model: EMBEDDING_MODEL,
         documentInstruction: DOCUMENT_INSTRUCTION,
-        queryInstruction: QUERY_INSTRUCTION,
       })),
     );
     assert.equal(
