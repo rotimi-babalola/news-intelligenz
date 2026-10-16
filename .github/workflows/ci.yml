@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17
+        image: pgvector/pgvector:0.8.7-pg17-trixie
         env:
           POSTGRES_USER: news
           POSTGRES_PASSWORD: local-news-only
