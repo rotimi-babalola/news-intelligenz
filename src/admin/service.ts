@@ -7,6 +7,7 @@ import {
   finalizeRunIfSettled,
   type ArticleFetcher,
 } from "../import/service";
+import { processNextDipEmbedding } from "../dip/embedding";
 import { database } from "../db";
 import {
   dedupeKey,
@@ -157,6 +158,12 @@ export async function retryJob(jobId: string) {
   try {
     if (!jobId) throw new Error("Missing job id");
     const retried = await retryExhausted(prisma, jobId);
+    if (retried.sourceKind === "dip_endpoint") {
+      await processNextDipEmbedding(prisma, "admin-retry", {
+        jobId: retried.id,
+      });
+      return;
+    }
     await drainJobs(prisma, "admin-retry", { runId: retried.runId });
     const run = await getRunOrThrow(prisma, retried.runId);
     await finalizeRunIfSettled(prisma, retried.runId, run.error);

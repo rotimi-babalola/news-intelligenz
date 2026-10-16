@@ -20,3 +20,17 @@ export function database() {
   );
   return new PrismaClient({ adapter });
 }
+
+// Raw SQL needs the same schema selected for Prisma's typed queries.
+export function qualifiedTable(table: string): string {
+  let schema = "public";
+  try {
+    schema =
+      new URL(process.env.DATABASE_URL ?? "").searchParams.get("schema") ||
+      "public";
+  } catch {
+    // Fall through to the default schema.
+  }
+  const ident = (value: string) => `"${value.replaceAll('"', '""')}"`;
+  return `${ident(schema)}.${ident(table)}`;
+}

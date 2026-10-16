@@ -6,7 +6,7 @@ News Intelligenz aims to help immigrants living in Germany understand the countr
 
 Phase 1 design is confirmed and its implementation is tracked in [GitHub issues labelled Phase 1](https://github.com/rotimi-babalola/news-intelligenz/issues?q=is%3Aissue%20label%3A%22Phase%201%22). The local app collects nine public-news RSS feeds (tagesschau all updates plus eight Deutschlandfunk feeds) and a synthetic fixture into PostgreSQL. For this private, non-commercial project, it also fetches and stores article text from the configured news hosts when extraction succeeds. Other hosts retain metadata and links only; see the [feed verification report](docs/launch-feed-verification.md).
 
-The confirmed [DIP architecture amendment](docs/dip-design-notes.md) replaces Bundestag RSS with parliamentary proceedings and steps. The planned behavior below reflects the amendment; DIP is not implemented yet.
+The confirmed [DIP architecture amendment](docs/dip-design-notes.md) replaces Bundestag RSS with parliamentary proceedings and steps. DIP collection and local record-text embedding are implemented; linked PDF processing remains planned.
 
 ## Run locally
 
@@ -22,6 +22,36 @@ docker compose up -d --wait
 pnpm build
 pnpm start
 ```
+
+For the optional local DIP embedding model, start Ollama and download the
+0.6B model once (about 639 MB):
+
+```sh
+docker compose --profile embeddings up -d --wait
+docker compose exec ollama ollama pull qwen3-embedding:0.6b
+```
+
+Ollama listens only on `127.0.0.1:11434`. PostgreSQL uses pgvector; the
+existing `news-data` volume is preserved when Compose recreates the database
+container with the pgvector image. If local Ollama already uses port 11434,
+set `OLLAMA_PORT=11435` in `.env` before starting Compose and the app. Once
+DIP proceedings and steps are collected, `POST /api/drain-dip` embeds one
+pending proceeding or step version per call; failed jobs retain their standard
+retry state.
+
+Search the embedded DIP records with a German or English query:
+
+```sh
+curl -X POST http://127.0.0.1:3000/api/search-dip \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"release of petroleum reserves","limit":10}'
+```
+
+`limit` defaults to 10 and is capped at 20. Results include the source entity,
+API ID, current version number, title, available summary or step label, cosine
+similarity score, and a DIP API source reference. A record appears only after
+its current version's embedding job succeeds. Search requires the local Ollama model;
+collection and stored source records remain available if it is offline.
 
 In another terminal, import the deterministic synthetic feed (no network):
 

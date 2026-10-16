@@ -282,6 +282,22 @@ model ProceedingStepVersion {
   @@map("proceeding_step_versions")
 }
 
+// The vector column is written and searched with SQL because Prisma does not
+// expose pgvector operators. The source identity and version remain explicit.
+model DipEmbedding {
+  id                  String              @id @default(uuid()) @db.Uuid
+  sourceEntity        ParliamentaryEntity @map("source_entity")
+  sourceApiId         String              @map("source_api_id") @db.Text
+  sourceVersionNo     Int                 @map("source_version_no")
+  model               String              @db.Text
+  documentInstruction String              @map("document_instruction") @db.Text
+  embedding           Unsupported("vector(1024)")
+  createdAt           DateTime            @map("created_at") @default(now()) @db.Timestamptz(6)
+
+  @@unique([sourceEntity, sourceApiId, sourceVersionNo, model, documentInstruction], map: "dip_embeddings_source_version_model_document_key")
+  @@map("dip_embeddings")
+}
+
 // Current document reference per step, from the step's fundstelle. History
 // lives in step version snapshots; the parent link is denormalized here so
 // references resolve without joining through steps.

@@ -3,6 +3,7 @@ import type {
   Prisma,
   PrismaClient,
 } from "../generated/prisma/client";
+import { qualifiedTable } from "../db";
 
 type Client = PrismaClient | Prisma.TransactionClient;
 
@@ -23,6 +24,96 @@ export function latestProceedingVersion(
     where: { proceedingApiId },
     orderBy: { versionNo: "desc" },
   });
+}
+
+export function findProceedingVersion(
+  client: Client,
+  proceedingApiId: string,
+  versionNo: number,
+) {
+  return client.proceedingVersion.findUnique({
+    where: { proceedingApiId_versionNo: { proceedingApiId, versionNo } },
+  });
+}
+
+export function findStepVersion(
+  client: Client,
+  stepApiId: string,
+  versionNo: number,
+) {
+  return client.proceedingStepVersion.findUnique({
+    where: { stepApiId_versionNo: { stepApiId, versionNo } },
+  });
+}
+
+export function saveDipEmbedding(
+  client: Client,
+  input: {
+    sourceEntity: ParliamentaryEntity;
+    apiId: string;
+    versionNo: number;
+    model: string;
+    documentInstruction: string;
+    embedding: number[];
+  },
+) {
+  return client.$executeRawUnsafe(
+    `INSERT INTO ${qualifiedTable("dip_embeddings")}
+      (id, source_entity, source_api_id, source_version_no, model, document_instruction, embedding)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6::public.vector)
+     ON CONFLICT (source_entity, source_api_id, source_version_no, model, document_instruction) DO NOTHING`,
+    input.sourceEntity,
+    input.apiId,
+    input.versionNo,
+    input.model,
+    input.documentInstruction,
+    JSON.stringify(input.embedding),
+  );
+}
+
+export type DipSearchRow = {
+  entity: ParliamentaryEntity;
+  apiId: string;
+  versionNo: number;
+  score: number;
+  title: string;
+  summary: string | null;
+  stepLabel: string | null;
+  proceedingApiId: string | null;
+};
+
+export function searchDipEmbeddings(
+  client: Client,
+  input: {
+    embedding: number[];
+    model: string;
+    documentInstruction: string;
+    limit: number;
+  },
+) {
+  return client.$queryRawUnsafe<DipSearchRow[]>(
+    `SELECT e.source_entity::text AS "entity", e.source_api_id AS "apiId",
+      e.source_version_no AS "versionNo",
+      1 - (e.embedding <=> $1::public.vector) AS "score",
+      COALESCE(p.title, s.title) AS "title",
+      COALESCE(p.metadata->>'abstract', s.metadata->>'abstract') AS "summary",
+      s.step_label AS "stepLabel", s.proceeding_id AS "proceedingApiId"
+     FROM ${qualifiedTable("dip_embeddings")} e
+     LEFT JOIN ${qualifiedTable("proceedings")} p
+       ON e.source_entity = 'vorgang' AND p.api_id = e.source_api_id
+       AND p.latest_version_no = e.source_version_no
+     LEFT JOIN ${qualifiedTable("proceeding_steps")} s
+       ON e.source_entity = 'vorgangsposition' AND s.api_id = e.source_api_id
+       AND s.latest_version_no = e.source_version_no
+     WHERE e.model = $2 AND e.document_instruction = $3
+       AND (p.api_id IS NOT NULL OR s.api_id IS NOT NULL)
+     ORDER BY e.embedding <=> $1::public.vector, e.source_entity, e.source_api_id
+     LIMIT $4`,
+    JSON.stringify(input.embedding),
+    input.model,
+    input.documentInstruction,
+    input.limit,
+  );
 }
 
 export function createProceeding(
