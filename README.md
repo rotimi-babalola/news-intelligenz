@@ -6,7 +6,7 @@ News Intelligenz aims to help immigrants living in Germany understand the countr
 
 Phase 1 design is confirmed and its implementation is tracked in [GitHub issues labelled Phase 1](https://github.com/rotimi-babalola/news-intelligenz/issues?q=is%3Aissue%20label%3A%22Phase%201%22). The local app collects nine public-news RSS feeds (tagesschau all updates plus eight Deutschlandfunk feeds) and a synthetic fixture into PostgreSQL. For this private, non-commercial project, it also fetches and stores article text from the configured news hosts when extraction succeeds. Other hosts retain metadata and links only; see the [feed verification report](docs/launch-feed-verification.md).
 
-The confirmed [DIP architecture amendment](docs/dip-design-notes.md) replaces Bundestag RSS with parliamentary proceedings and steps. DIP collection and local record-text embedding are implemented; linked PDF processing remains planned.
+The confirmed [DIP architecture amendment](docs/dip-design-notes.md) replaces Bundestag RSS with parliamentary proceedings and steps. DIP collection, local retrieval and lazy linked-PDF processing are implemented; news-to-proceeding links remain future work.
 
 ## Run locally
 
@@ -36,8 +36,23 @@ existing `news-data` volume is preserved when Compose recreates the database
 container with the pgvector image. If local Ollama already uses port 11434,
 set `OLLAMA_PORT=11435` in `.env` before starting Compose and the app. Once
 DIP proceedings and steps are collected, `POST /api/drain-dip` embeds one
-pending proceeding or step version per call; failed jobs retain their standard
-retry state.
+pending proceeding, step or extracted PDF page per call; failed jobs retain
+their standard retry state.
+
+Linked PDFs are extracted with [PyMuPDF](https://pymupdf.readthedocs.io/)
+through `scripts/extract_pdf.py`, so the `python3` on `PATH` needs that package
+once:
+
+```sh
+python3 -m pip install pymupdf
+```
+
+PDF fetching is independent of DIP collection: only references dated within the
+previous 14 days are queued automatically, and `POST /api/drain-documents`
+processes one queued document per call. Fetched bytes and extracted page text
+stay in the local database for this private project; the DIP API contract does
+not itself establish retention or reuse permission, and news-to-proceeding
+links remain future work.
 
 Search the embedded DIP records with a German or English query:
 
@@ -50,8 +65,21 @@ curl -X POST http://127.0.0.1:3000/api/search-dip \
 `limit` defaults to 10 and is capped at 20. Results include the source entity,
 API ID, current version number, title, available summary or step label, cosine
 similarity score, and a DIP API source reference. A record appears only after
-its current version's embedding job succeeds. Search requires the local Ollama model;
-collection and stored source records remain available if it is offline.
+its current version's embedding job succeeds; extracted PDF pages appear as
+`dokument` results carrying the document reference, page number and original
+`pdf_url`, and only the latest fetched content variant is searchable. Search
+requires the local Ollama model; collection and stored source records remain
+available if it is offline.
+
+Request a cited document on demand. This returns stored metadata and the
+original `pdf_url` immediately, and raises an unprocessed document to the front
+of the processing queue:
+
+```sh
+curl http://127.0.0.1:3000/api/documents/29701499
+```
+
+Repeated requests reuse the one processing job for that document revision.
 
 In another terminal, import the deterministic synthetic feed (no network):
 

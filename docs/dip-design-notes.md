@@ -1,6 +1,6 @@
 # DIP collection design interview
 
-Status: DIP collection, multilingual retrieval, and lazy PDF processing decisions confirmed by the user. Runtime implementation is pending; this document records the accepted target design.
+Status: DIP collection, multilingual retrieval, and lazy PDF processing decisions confirmed by the user and implemented; this document records the accepted design.
 
 ## Settled decisions
 

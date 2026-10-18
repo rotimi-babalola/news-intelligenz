@@ -122,25 +122,26 @@ is a single atomic `UPDATE ... FOR UPDATE SKIP LOCKED`: exactly one worker
 wins each ready job. See [processing jobs](processing-jobs.md) for the
 retry policy.
 
-| Field            | Column             | Type                 | Null | Default   | Notes                                                           |
-| ---------------- | ------------------ | -------------------- | ---- | --------- | --------------------------------------------------------------- |
-| `id`             | `id`               | uuid, PK             | no   | `uuid()`  |                                                                 |
-| `dedupeKey`      | `dedupe_key`       | text, UQ             | no   | —         | `<runId>:<itemIndex>:<operation>`                               |
-| `sourceKind`     | `source_kind`      | `SourceKind`         | no   | —         | `news_feed`, `search_query`, or `dip_endpoint`                  |
-| `sourceKey`      | `source_key`       | text                 | no   | —         | Feed ID, query, or endpoint                                     |
-| `sourceScope`    | `source_scope`     | jsonb                | yes  | —         | Allowed domains, electoral term, or null                        |
-| `runId`          | `run_id`           | text, FK → `runs.id` | no   | —         |                                                                 |
-| `itemIndex`      | `item_index`       | integer              | yes  | —         | Candidate position; null for run-scoped work                    |
-| `operation`      | `operation`        | text                 | no   | —         | `resolve_publication`; DIP operations arrive with later tickets |
-| `payload`        | `payload`          | jsonb                | no   | —         | Operation input, e.g. publisher snapshot                        |
-| `status`         | `status`           | `JobStatus`          | no   | `pending` | `pending`, `claimed`, `retrying`, `succeeded`, or `exhausted`   |
-| `attempts`       | `attempts`         | integer              | no   | `0`       | Incremented at claim; reset by deliberate retry                 |
-| `maxAttempts`    | `max_attempts`     | integer              | no   | `5`       | Bounded retries                                                 |
-| `nextAttemptAt`  | `next_attempt_at`  | timestamptz          | no   | `now()`   | Backoff or provider `Retry-After` delay                         |
-| `claimedAt`      | `claimed_at`       | timestamptz          | yes  | —         |                                                                 |
-| `claimedBy`      | `claimed_by`       | text                 | yes  | —         | Worker ID                                                       |
-| `leaseExpiresAt` | `lease_expires_at` | timestamptz          | yes  | —         | 5-minute claim lease; expiry makes the job reclaimable          |
-| `lastError`      | `last_error`       | text                 | yes  | —         | Inspectable failure, preserved on exhaustion                    |
+| Field            | Column             | Type                 | Null | Default   | Notes                                                                                                         |
+| ---------------- | ------------------ | -------------------- | ---- | --------- | ------------------------------------------------------------------------------------------------------------- |
+| `id`             | `id`               | uuid, PK             | no   | `uuid()`  |                                                                                                               |
+| `dedupeKey`      | `dedupe_key`       | text, UQ             | no   | —         | `<runId>:<itemIndex>:<operation>`, or the DIP record/document identity                                        |
+| `sourceKind`     | `source_kind`      | `SourceKind`         | no   | —         | `news_feed`, `search_query`, or `dip_endpoint`                                                                |
+| `sourceKey`      | `source_key`       | text                 | no   | —         | Feed ID, query, or endpoint                                                                                   |
+| `sourceScope`    | `source_scope`     | jsonb                | yes  | —         | Allowed domains, electoral term, or null                                                                      |
+| `runId`          | `run_id`           | text, FK → `runs.id` | no   | —         |                                                                                                               |
+| `itemIndex`      | `item_index`       | integer              | yes  | —         | Candidate position; null for run-scoped work                                                                  |
+| `operation`      | `operation`        | text                 | no   | —         | `resolve_publication`, `extract_text`, `process_document`, `embed_proceeding`, `embed_step`, `embed_document` |
+| `payload`        | `payload`          | jsonb                | no   | —         | Operation input, e.g. publisher snapshot                                                                      |
+| `priority`       | `priority`         | integer              | no   | `0`       | Higher values claim first; on-demand documents raise pending work                                             |
+| `status`         | `status`           | `JobStatus`          | no   | `pending` | `pending`, `claimed`, `retrying`, `succeeded`, or `exhausted`                                                 |
+| `attempts`       | `attempts`         | integer              | no   | `0`       | Incremented at claim; reset by deliberate retry                                                               |
+| `maxAttempts`    | `max_attempts`     | integer              | no   | `5`       | Bounded retries                                                                                               |
+| `nextAttemptAt`  | `next_attempt_at`  | timestamptz          | no   | `now()`   | Backoff or provider `Retry-After` delay                                                                       |
+| `claimedAt`      | `claimed_at`       | timestamptz          | yes  | —         |                                                                                                               |
+| `claimedBy`      | `claimed_by`       | text                 | yes  | —         | Worker ID                                                                                                     |
+| `leaseExpiresAt` | `lease_expires_at` | timestamptz          | yes  | —         | 5-minute claim lease; expiry makes the job reclaimable                                                        |
+| `lastError`      | `last_error`       | text                 | yes  | —         | Inspectable failure, preserved on exhaustion                                                                  |
 
 ## job_attempts
 
@@ -168,7 +169,7 @@ excluded until the operator records `accepted` (routes into processing) or
 ## Enums
 
 - `RelevanceDecision`: `accepted`, `uncertain`, `rejected`.
-- `ParliamentaryEntity`: `vorgang`, `vorgangsposition`.
+- `ParliamentaryEntity`: `vorgang`, `vorgangsposition`, `dokument`.
 
 ## Parliamentary records
 
@@ -191,6 +192,14 @@ earlier text counts as a new version, mirroring publications).
 | `document_references`       | `step_id`                       | Current `fundstelle` per step: `reference_id`, `document_number`, nullable `pdf_url`, `document_date`, plus the denormalized parent `proceeding_id`; history lives in step version snapshots |
 | `parliamentary_discoveries` | (`run_id`, `entity`, `api_id`)  | Distinct encounters; replaying a run reuses the row, a new run adds one                                                                                                                      |
 | `dip_checkpoints`           | (`endpoint`, `electoral_term`)  | Durable per-endpoint/scope progress; advances only after all pages of a window are stored                                                                                                    |
+| `document_contents`         | (`reference_id`, `byte_hash`)   | Fetched PDF bytes per document revision: `variant_no`, `byte_size`, `page_count`, nullable `source_url`, `fetched_at`, `is_latest`. Changed bytes add a retained variant                     |
+| `document_pages`            | (`content_id`, `page_no`)       | Extracted page text from PyMuPDF; `dip_embeddings` joins the variant and page so retrieval can cite a specific page                                                                          |
+
+Fetched PDF bytes stay in the local PostgreSQL database for this private
+project. The cache is content-addressed: `(reference_id, byte_hash)` is unique,
+so reprocessing identical bytes is idempotent while changed bytes become a new
+retained variant. The DIP API contract does not establish retention or reuse
+permission for linked documents.
 
 - `RunStatus`: `running`, `completed`, `failed`.
 - `Language`: `de`, `en`.
