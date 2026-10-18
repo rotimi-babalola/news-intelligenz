@@ -52,6 +52,7 @@ export function saveDipEmbedding(
     sourceEntity: ParliamentaryEntity;
     apiId: string;
     versionNo: number;
+    sourcePage?: number;
     model: string;
     documentInstruction: string;
     embedding: number[];
@@ -59,12 +60,13 @@ export function saveDipEmbedding(
 ) {
   return client.$executeRawUnsafe(
     `INSERT INTO ${qualifiedTable("dip_embeddings")}
-      (id, source_entity, source_api_id, source_version_no, model, document_instruction, embedding)
-     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6::public.vector)
-     ON CONFLICT (source_entity, source_api_id, source_version_no, model, document_instruction) DO NOTHING`,
+      (id, source_entity, source_api_id, source_version_no, source_page, model, document_instruction, embedding)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::public.vector)
+     ON CONFLICT (source_entity, source_api_id, source_version_no, source_page, model, document_instruction) DO NOTHING`,
     input.sourceEntity,
     input.apiId,
     input.versionNo,
+    input.sourcePage ?? 0,
     input.model,
     input.documentInstruction,
     JSON.stringify(input.embedding),
@@ -317,6 +319,69 @@ export function createStepVersion(
 
 export function findDocumentReference(client: Client, stepApiId: string) {
   return client.documentReference.findUnique({ where: { stepApiId } });
+}
+
+// Steps are discovered by collection runs; the latest encounter supplies the
+// run a later on-demand document job belongs to.
+export function latestStepDiscovery(client: Client, apiId: string) {
+  return client.parliamentaryDiscovery.findFirst({
+    where: { entity: "vorgangsposition", apiId },
+    orderBy: { discoveredAt: "desc" },
+  });
+}
+
+// A reference id may be cited by more than one step; on-demand requests only
+// need one stored citation to resolve metadata for the document.
+export function findDocumentReferenceById(client: Client, referenceId: string) {
+  return client.documentReference.findFirst({
+    where: { referenceId },
+    orderBy: { observedAt: "desc" },
+  });
+}
+
+export function findDocumentContentByHash(
+  client: Client,
+  referenceId: string,
+  byteHash: string,
+) {
+  return client.documentContent.findUnique({
+    where: { referenceId_byteHash: { referenceId, byteHash } },
+  });
+}
+
+export function latestDocumentContent(client: Client, referenceId: string) {
+  return client.documentContent.findFirst({
+    where: { referenceId, isLatest: true },
+    orderBy: { variantNo: "desc" },
+  });
+}
+
+export function createDocumentContent(
+  client: Client,
+  data: Prisma.DocumentContentUncheckedCreateInput,
+) {
+  return client.documentContent.create({ data });
+}
+
+export function createDocumentPages(
+  client: Client,
+  data: Prisma.DocumentPageUncheckedCreateInput[],
+) {
+  return client.documentPage.createMany({ data });
+}
+
+export function listDocumentPages(client: Client, contentId: string) {
+  return client.documentPage.findMany({
+    where: { contentId },
+    orderBy: { pageNo: "asc" },
+  });
+}
+
+export function supersedeDocumentContents(client: Client, referenceId: string) {
+  return client.documentContent.updateMany({
+    where: { referenceId, isLatest: true },
+    data: { isLatest: false },
+  });
 }
 
 export function upsertDocumentReference(

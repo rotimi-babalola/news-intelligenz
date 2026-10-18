@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { claimNextJob, failJob, requeueStaleClaims } from "../src/jobs.js";
+import {
+  claimNextJob,
+  dipSource,
+  enqueueJob,
+  failJob,
+  requeueStaleClaims,
+} from "../src/jobs.js";
 import {
   EMBED_PROCEEDING,
   EMBED_STEP,
   PROCESS_DOCUMENT,
+  raiseDocumentJob,
 } from "../src/dip/jobs.js";
 import { collectVorgang } from "../src/dip/vorgang.js";
 import { collectSteps, type FetchStepPage } from "../src/dip/steps.js";
@@ -174,6 +181,36 @@ test("hot document references queue PDF work; cold ones wait for on-demand", asy
   await prisma.$disconnect();
 });
 
+test("steps citing the same document share one document job", async () => {
+  const prisma = await isolatedDatabase();
+  const shared = {
+    id: "29000001",
+    dokumentnummer: "21/1001",
+    datum: HOT_DATUM,
+    pdf_url: "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
+  };
+  await collectSteps(prisma, {
+    runId: "dip-jobs-shared-doc",
+    electoralTerm: 21,
+    now: NOW,
+    fetchPage: async () => ({
+      documents: [
+        { ...step("701420", "340135", HOT_DATUM), fundstelle: shared },
+        { ...step("701421", "340135", HOT_DATUM), fundstelle: shared },
+      ],
+      cursor: "x",
+      numFound: 0,
+    }),
+  });
+  assert.equal(
+    await prisma.processingJob.count({
+      where: { operation: PROCESS_DOCUMENT },
+    }),
+    1,
+  );
+  await prisma.$disconnect();
+});
+
 test("downstream failure leaves records and checkpoints intact", async () => {
   const prisma = await isolatedDatabase();
   await collectVorgang(prisma, {
@@ -242,6 +279,56 @@ test("records and jobs survive a worker restart", async () => {
   assert.equal(reclaimed.dedupeKey, claimed.dedupeKey);
   await prisma.$disconnect();
   await fresh.$disconnect();
+});
+
+test("on-demand priority is claimed before older background work", async () => {
+  const prisma = await isolatedDatabase();
+  await prisma.run.create({
+    data: {
+      id: "priority-run",
+      feedId: "/vorgangsposition",
+      sourceKind: "dip_endpoint",
+      inputHash: "h",
+      status: "running",
+    },
+  });
+  const job = (dedupeKey: string, priority: number) => ({
+    dedupeKey,
+    sourceKind: "dip_endpoint" as const,
+    sourceKey: "/vorgangsposition",
+    runId: "priority-run",
+    operation: PROCESS_DOCUMENT,
+    payload: {},
+    priority,
+  });
+  await prisma.processingJob.create({ data: job("background", 0) });
+  const raised = await prisma.processingJob.create({
+    data: job("on-demand", 0),
+  });
+
+  // Enqueue is idempotent per dedupe key, so a request for work that already
+  // exists adds no second job.
+  await prisma.$transaction((tx) =>
+    enqueueJob(tx, {
+      source: dipSource("/vorgangsposition", "21"),
+      runId: "priority-run",
+      dedupeKey: raised.dedupeKey,
+      operation: PROCESS_DOCUMENT,
+      payload: {},
+    }),
+  );
+  assert.equal(await prisma.processingJob.count(), 2);
+
+  await raiseDocumentJob(prisma, raised.dedupeKey);
+  assert.equal(
+    (
+      await claimNextJob(prisma, "worker", undefined, {
+        operation: PROCESS_DOCUMENT,
+      })
+    )?.dedupeKey,
+    "on-demand",
+  );
+  await prisma.$disconnect();
 });
 
 test("incremental windows resume from the checkpoint", async () => {

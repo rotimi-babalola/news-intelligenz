@@ -1,4 +1,4 @@
-import type { Prisma } from "../generated/prisma/client";
+import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { dipSource, enqueueJob } from "../jobs";
 
 // Downstream DIP work submits as durable jobs at collection time and runs
@@ -11,6 +11,10 @@ export const EMBED_PROCEEDING = "embed_proceeding";
 export const EMBED_STEP = "embed_step";
 export const PROCESS_DOCUMENT = "process_document";
 
+// Background document work waits for nothing; an on-demand request jumps the
+// queue by priority without pre-empting a claim already in flight.
+export const ON_DEMAND_PRIORITY = 10;
+
 function dipJobKey(
   runId: string,
   operation: string,
@@ -18,6 +22,23 @@ function dipJobKey(
   version: number | string,
 ) {
   return JSON.stringify([runId, operation, apiId, version]);
+}
+
+// Document work is keyed by the document it processes rather than the run that
+// noticed it, so the background hot subset and an on-demand request converge
+// on one job. A changed reference (url or date) is a new revision and gets its
+// own job; identical bytes are recognised from the cache at processing time.
+export function documentJobKey(input: {
+  referenceId: string;
+  pdfUrl: string | null;
+  documentDate: Date | null;
+}) {
+  return JSON.stringify([
+    PROCESS_DOCUMENT,
+    input.referenceId,
+    input.pdfUrl,
+    input.documentDate?.toISOString() ?? null,
+  ]);
 }
 
 export function enqueueProceedingEmbedding(
@@ -72,26 +93,51 @@ export function enqueueDocumentProcessing(
     itemIndex: number;
     electoralTerm: number;
     stepApiId: string;
-    contentHash: string;
     referenceId: string;
     pdfUrl: string | null;
+    documentDate: Date | null;
   },
 ) {
   return enqueueJob(tx, {
     source: dipSource("/vorgangsposition", String(input.electoralTerm)),
     runId: input.runId,
     itemIndex: input.itemIndex,
-    dedupeKey: dipJobKey(
-      input.runId,
-      PROCESS_DOCUMENT,
-      input.stepApiId,
-      input.contentHash,
-    ),
+    dedupeKey: documentJobKey(input),
     operation: PROCESS_DOCUMENT,
     payload: {
       stepApiId: input.stepApiId,
       referenceId: input.referenceId,
       pdfUrl: input.pdfUrl,
+    },
+  });
+}
+
+// On-demand requests raise the priority of work that already exists instead of
+// adding a second job for the same document. Only unprocessed work moves; a
+// succeeded document already has its bytes and text cached. An exhausted job
+// is revived once, with a fresh retry budget, because a person asked for it.
+export async function raiseDocumentJob(
+  db: PrismaClient | Prisma.TransactionClient,
+  key: string,
+) {
+  const job = await db.processingJob.findUnique({ where: { dedupeKey: key } });
+  if (!job || job.status === "succeeded") return job;
+  const reviving = job.status === "exhausted";
+  return db.processingJob.update({
+    where: { id: job.id },
+    data: {
+      priority: ON_DEMAND_PRIORITY,
+      nextAttemptAt: new Date(),
+      ...(reviving
+        ? {
+            status: "pending",
+            maxAttempts: { increment: job.maxAttempts },
+            lastError: null,
+            claimedAt: null,
+            claimedBy: null,
+            leaseExpiresAt: null,
+          }
+        : {}),
     },
   });
 }

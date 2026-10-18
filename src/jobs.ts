@@ -81,6 +81,7 @@ export type EnqueueSpec = {
   operation: string;
   payload: Prisma.InputJsonValue;
   maxAttempts?: number;
+  priority?: number;
 };
 
 export async function enqueueJob(
@@ -104,6 +105,7 @@ export async function enqueueJob(
       operation: spec.operation,
       payload: spec.payload,
       maxAttempts: spec.maxAttempts ?? MAX_ATTEMPTS_DEFAULT,
+      priority: spec.priority ?? 0,
     },
     update: {},
   });
