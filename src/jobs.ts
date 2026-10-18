@@ -172,7 +172,11 @@ export async function claimNextJob(
         status IN ('pending', 'retrying') OR
         (status = 'claimed' AND lease_expires_at IS NOT NULL AND lease_expires_at <= now())
       )
-      ORDER BY next_attempt_at ASC, created_at ASC
+      -- On-demand document requests set a higher priority; ties keep the
+      -- earliest ready job first.
+      -- shortcut: no (priority, next_attempt_at) index; add one if the jobs
+      -- table grows far beyond local single-operator scale.
+      ORDER BY priority DESC, next_attempt_at ASC, created_at ASC
       LIMIT 1
       FOR UPDATE SKIP LOCKED
     )
