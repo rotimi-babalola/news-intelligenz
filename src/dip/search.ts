@@ -29,6 +29,33 @@ export async function searchDip(
   return rows.map((row) => {
     const endpoint =
       row.entity === "vorgang" ? "/vorgang" : "/vorgangsposition";
+    if (row.entity === "dokument") {
+      const stepApiId = row.stepId ?? "";
+      return {
+        entity: row.entity,
+        apiId: row.apiId,
+        versionNo: row.versionNo,
+        score: row.score,
+        title: row.documentNumber,
+        summary: null,
+        stepLabel: null,
+        proceedingApiId: row.proceedingApiId,
+        page: row.pageNo,
+        document: {
+          referenceId: row.referenceId ?? row.apiId,
+          number: row.documentNumber,
+          page: row.pageNo,
+          pdfUrl: row.pdfUrl,
+        },
+        source: {
+          endpoint,
+          apiId: stepApiId,
+          url:
+            row.pdfUrl ??
+            `https://search.dip.bundestag.de/api/v1${endpoint}/${stepApiId}`,
+        },
+      };
+    }
     return {
       ...row,
       source: {

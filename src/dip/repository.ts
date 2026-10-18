@@ -82,8 +82,16 @@ export type DipSearchRow = {
   summary: string | null;
   stepLabel: string | null;
   proceedingApiId: string | null;
+  referenceId: string | null;
+  documentNumber: string | null;
+  pdfUrl: string | null;
+  stepId: string | null;
+  pageNo: number | null;
 };
 
+// Records join their current version; document text joins the citation and
+// only the latest fetched content variant, so historical bytes never produce
+// duplicate hits. One citation is chosen per document to keep results unique.
 export function searchDipEmbeddings(
   client: Client,
   input: {
@@ -97,9 +105,16 @@ export function searchDipEmbeddings(
     `SELECT e.source_entity::text AS "entity", e.source_api_id AS "apiId",
       e.source_version_no AS "versionNo",
       1 - (e.embedding <=> $1::public.vector) AS "score",
-      COALESCE(p.title, s.title) AS "title",
+      CASE WHEN e.source_entity = 'dokument' THEN dr.document_number
+        ELSE COALESCE(p.title, s.title) END AS "title",
       COALESCE(p.metadata->>'abstract', s.metadata->>'abstract') AS "summary",
-      s.step_label AS "stepLabel", s.proceeding_id AS "proceedingApiId"
+      s.step_label AS "stepLabel",
+      COALESCE(s.proceeding_id, dr.proceeding_id) AS "proceedingApiId",
+      dr.reference_id AS "referenceId",
+      dr.document_number AS "documentNumber",
+      dr.pdf_url AS "pdfUrl",
+      dr.step_id AS "stepId",
+      CASE WHEN e.source_entity = 'dokument' THEN e.source_page END AS "pageNo"
      FROM ${qualifiedTable("dip_embeddings")} e
      LEFT JOIN ${qualifiedTable("proceedings")} p
        ON e.source_entity = 'vorgang' AND p.api_id = e.source_api_id
@@ -107,8 +122,19 @@ export function searchDipEmbeddings(
      LEFT JOIN ${qualifiedTable("proceeding_steps")} s
        ON e.source_entity = 'vorgangsposition' AND s.api_id = e.source_api_id
        AND s.latest_version_no = e.source_version_no
+     LEFT JOIN LATERAL (
+       SELECT r.reference_id, r.document_number, r.pdf_url, r.step_id,
+         r.proceeding_id
+       FROM ${qualifiedTable("document_references")} r
+       JOIN ${qualifiedTable("document_contents")} c
+         ON c.reference_id = r.reference_id
+         AND c.variant_no = e.source_version_no AND c.is_latest
+       WHERE e.source_entity = 'dokument' AND r.reference_id = e.source_api_id
+       ORDER BY r.observed_at DESC
+       LIMIT 1
+     ) dr ON true
      WHERE e.model = $2 AND e.document_instruction = $3
-       AND (p.api_id IS NOT NULL OR s.api_id IS NOT NULL)
+       AND (p.api_id IS NOT NULL OR s.api_id IS NOT NULL OR dr.reference_id IS NOT NULL)
      ORDER BY e.embedding <=> $1::public.vector, e.source_entity, e.source_api_id
      LIMIT $4`,
     JSON.stringify(input.embedding),
