@@ -356,6 +356,16 @@ export function latestDocumentContent(client: Client, referenceId: string) {
   });
 }
 
+export function findDocumentContent(
+  client: Client,
+  referenceId: string,
+  variantNo: number,
+) {
+  return client.documentContent.findFirst({
+    where: { referenceId, variantNo },
+  });
+}
+
 export function createDocumentContent(
   client: Client,
   data: Prisma.DocumentContentUncheckedCreateInput,

@@ -9,6 +9,7 @@ import { dipSource, enqueueJob } from "../jobs";
 
 export const EMBED_PROCEEDING = "embed_proceeding";
 export const EMBED_STEP = "embed_step";
+export const EMBED_DOCUMENT = "embed_document";
 export const PROCESS_DOCUMENT = "process_document";
 
 // Background document work waits for nothing; an on-demand request jumps the
@@ -108,7 +109,34 @@ export function enqueueDocumentProcessing(
       stepApiId: input.stepApiId,
       referenceId: input.referenceId,
       pdfUrl: input.pdfUrl,
+      electoralTerm: input.electoralTerm,
     },
+  });
+}
+
+// Page embeddings run as their own durable job per document variant, so a
+// model outage retries the model call without re-downloading or re-extracting.
+export function enqueueDocumentEmbedding(
+  tx: Prisma.TransactionClient,
+  input: {
+    runId: string;
+    itemIndex: number | null;
+    electoralTerm: number;
+    referenceId: string;
+    variantNo: number;
+  },
+) {
+  return enqueueJob(tx, {
+    source: dipSource("/vorgangsposition", String(input.electoralTerm)),
+    runId: input.runId,
+    itemIndex: input.itemIndex,
+    dedupeKey: JSON.stringify([
+      EMBED_DOCUMENT,
+      input.referenceId,
+      input.variantNo,
+    ]),
+    operation: EMBED_DOCUMENT,
+    payload: { referenceId: input.referenceId, variantNo: input.variantNo },
   });
 }
 
