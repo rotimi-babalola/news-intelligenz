@@ -387,8 +387,8 @@ export function findDocumentContent(
   referenceId: string,
   variantNo: number,
 ) {
-  return client.documentContent.findFirst({
-    where: { referenceId, variantNo },
+  return client.documentContent.findUnique({
+    where: { referenceId_variantNo: { referenceId, variantNo } },
   });
 }
 

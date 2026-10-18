@@ -144,16 +144,19 @@ export async function requestDocument(
     pdfUrl: reference.pdfUrl,
     documentDate: reference.documentDate,
   });
-  if (!content) {
-    const queued = await prisma.processingJob.findUnique({
-      where: { dedupeKey: key },
-    });
+  let job = await prisma.processingJob.findUnique({
+    where: { dedupeKey: key },
+  });
+  // A changed reference (new url or date) is a new revision with no job yet,
+  // even when an earlier variant of the same document is already cached.
+  const processed = content !== null && job?.status === "succeeded";
+  if (!processed) {
     // Every stored citation came from a collection run. Without that encounter
     // there is no run to attach new work to; metadata still returns.
-    const discovery = queued
+    const discovery = job
       ? null
       : await latestStepDiscovery(prisma, reference.stepApiId);
-    if (!queued && discovery) {
+    if (!job && discovery) {
       await prisma.$transaction((tx) =>
         enqueueDocumentProcessing(tx, {
           runId: discovery.runId,
@@ -166,11 +169,8 @@ export async function requestDocument(
         }),
       );
     }
-    await raiseDocumentJob(prisma, key);
+    job = (await raiseDocumentJob(prisma, key)) ?? job;
   }
-  const job = await prisma.processingJob.findUnique({
-    where: { dedupeKey: key },
-  });
   return {
     reference: {
       referenceId,
@@ -180,8 +180,8 @@ export async function requestDocument(
       documentDate: reference.documentDate,
       pdfUrl: reference.pdfUrl,
     },
-    processed: content !== null,
-    variant: content
+    processed,
+    variant: processed
       ? {
           variantNo: content.variantNo,
           pageCount: content.pageCount,

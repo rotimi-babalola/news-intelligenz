@@ -337,6 +337,21 @@ test("an on-demand request returns metadata and jumps the queue", async () => {
     const processed = await requestDocument(prisma, "29701499");
     assert.equal(processed?.processed, true);
     assert.equal(processed?.variant?.variantNo, 1);
+
+    // A changed reference is unprocessed again even though an earlier variant
+    // of the same document is cached.
+    await collect(
+      prisma,
+      "doc-demand-changed",
+      step("701410", `${PDF_URL}?v=2`),
+      new Date("2027-01-01T00:00:00Z"),
+    );
+    const changed = await requestDocument(prisma, "29701499");
+    assert.equal(changed?.processed, false);
+    assert.equal(changed?.variant, null);
+    assert.equal(changed?.job?.status, "pending");
+    assert.equal(changed?.job?.priority, ON_DEMAND_PRIORITY);
+
     assert.equal(await requestDocument(prisma, "999"), null);
   } finally {
     await prisma.$disconnect();

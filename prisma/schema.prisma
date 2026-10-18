@@ -342,6 +342,7 @@ model DocumentContent {
   pages       DocumentPage[]
 
   @@unique([referenceId, byteHash])
+  @@unique([referenceId, variantNo])
   @@index([referenceId, isLatest])
   @@map("document_contents")
 }
