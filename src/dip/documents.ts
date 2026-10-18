@@ -1,13 +1,21 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "../generated/prisma/client";
 import { claimNextJob, completeJob, failJob } from "../jobs";
-import { enqueueDocumentEmbedding, PROCESS_DOCUMENT } from "./jobs";
+import {
+  documentJobKey,
+  enqueueDocumentEmbedding,
+  enqueueDocumentProcessing,
+  PROCESS_DOCUMENT,
+  raiseDocumentJob,
+} from "./jobs";
 import { fetchDocumentPdf, pymupdfExtractor, type PageExtractor } from "./pdf";
 import {
   createDocumentContent,
   createDocumentPages,
   findDocumentContentByHash,
+  findDocumentReferenceById,
   latestDocumentContent,
+  latestStepDiscovery,
   supersedeDocumentContents,
 } from "./repository";
 
@@ -45,8 +53,8 @@ export async function processNextDocument(
     };
     if (typeof payload.referenceId !== "string")
       throw new Error("Document job is missing its reference");
-    if (typeof payload.electoralTerm !== "number")
-      throw new Error("Document job is missing its electoral term");
+    const electoralTerm =
+      typeof payload.electoralTerm === "number" ? payload.electoralTerm : null;
     const referenceId = payload.referenceId;
     const pdfUrl = typeof payload.pdfUrl === "string" ? payload.pdfUrl : null;
     if (!pdfUrl) throw new Error("Document reference has no pdf_url");
@@ -94,7 +102,7 @@ export async function processNextDocument(
       enqueueDocumentEmbedding(tx, {
         runId: job.runId,
         itemIndex: job.itemIndex,
-        electoralTerm: payload.electoralTerm as number,
+        electoralTerm,
         referenceId,
         variantNo: content.variantNo,
       }),
@@ -118,4 +126,72 @@ export async function processNextDocument(
       jobId: job.id,
     };
   }
+}
+
+// On-demand request: stored metadata and the original link return immediately,
+// so a slow or failed download never delays the caller. Unprocessed work is
+// queued at high priority; an identical request raises the existing job rather
+// than adding a second one.
+export async function requestDocument(
+  prisma: PrismaClient,
+  referenceId: string,
+) {
+  const reference = await findDocumentReferenceById(prisma, referenceId);
+  if (!reference) return null;
+  const content = await latestDocumentContent(prisma, referenceId);
+  const key = documentJobKey({
+    referenceId,
+    pdfUrl: reference.pdfUrl,
+    documentDate: reference.documentDate,
+  });
+  if (!content) {
+    const queued = await prisma.processingJob.findUnique({
+      where: { dedupeKey: key },
+    });
+    // Every stored citation came from a collection run. Without that encounter
+    // there is no run to attach new work to; metadata still returns.
+    const discovery = queued
+      ? null
+      : await latestStepDiscovery(prisma, reference.stepApiId);
+    if (!queued && discovery) {
+      await prisma.$transaction((tx) =>
+        enqueueDocumentProcessing(tx, {
+          runId: discovery.runId,
+          itemIndex: null,
+          electoralTerm: null,
+          stepApiId: reference.stepApiId,
+          referenceId,
+          pdfUrl: reference.pdfUrl,
+          documentDate: reference.documentDate,
+        }),
+      );
+    }
+    await raiseDocumentJob(prisma, key);
+  }
+  const job = await prisma.processingJob.findUnique({
+    where: { dedupeKey: key },
+  });
+  return {
+    reference: {
+      referenceId,
+      stepApiId: reference.stepApiId,
+      proceedingApiId: reference.proceedingApiId,
+      documentNumber: reference.documentNumber,
+      documentDate: reference.documentDate,
+      pdfUrl: reference.pdfUrl,
+    },
+    processed: content !== null,
+    variant: content
+      ? {
+          variantNo: content.variantNo,
+          pageCount: content.pageCount,
+          byteHash: content.byteHash,
+          fetchedAt: content.fetchedAt,
+          sourceUrl: content.sourceUrl,
+        }
+      : null,
+    job: job
+      ? { id: job.id, status: job.status, priority: job.priority }
+      : null,
+  };
 }

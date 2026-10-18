@@ -254,13 +254,15 @@ export async function failJob(
 
 // Explicit restart recovery: stale claims become immediately reclaimable
 // instead of waiting for the next claim scan to pick up the expired lease.
+// Epoch makes "now" independent of clock agreement between the app and
+// PostgreSQL, so a restart always reclaims its own work first.
 export async function requeueStaleClaims(prisma: PrismaClient) {
   return prisma.processingJob.updateMany({
     where: {
       status: "claimed",
       leaseExpiresAt: { lte: new Date() },
     },
-    data: { status: "retrying", nextAttemptAt: new Date() },
+    data: { status: "retrying", nextAttemptAt: new Date(0) },
   });
 }
 

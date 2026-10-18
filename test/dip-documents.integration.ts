@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { processNextDocument } from "../src/dip/documents.js";
+import { processNextDocument, requestDocument } from "../src/dip/documents.js";
 import { processNextDipEmbedding } from "../src/dip/embedding.js";
-import { EMBED_DOCUMENT } from "../src/dip/jobs.js";
+import { EMBED_DOCUMENT, ON_DEMAND_PRIORITY } from "../src/dip/jobs.js";
 import { collectSteps } from "../src/dip/steps.js";
 import { claimNextJob, requeueStaleClaims } from "../src/jobs.js";
 import { isolatedDatabase } from "./dip-test-db.js";
@@ -40,11 +40,12 @@ function collect(
   prisma: Awaited<ReturnType<typeof isolatedDatabase>>,
   runId: string,
   document = step("701400"),
+  now = NOW,
 ) {
   return collectSteps(prisma, {
     runId,
     electoralTerm: 21,
-    now: NOW,
+    now,
     fetchPage: async () => ({
       documents: [document],
       cursor: "x",
@@ -263,6 +264,80 @@ test("missing and failed PDFs keep the reference and retry separately", async ()
       ).status,
       "succeeded",
     );
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("an on-demand request returns metadata and jumps the queue", async () => {
+  const prisma = await isolatedDatabase();
+  try {
+    // A cold reference: the background hot subset leaves it alone.
+    await collect(
+      prisma,
+      "doc-demand-cold",
+      step("701410"),
+      new Date("2027-01-01T00:00:00Z"),
+    );
+    // An older background job that would otherwise be claimed next.
+    const background = {
+      ...step("701411"),
+      fundstelle: {
+        ...step("701411").fundstelle,
+        id: "29701500",
+        pdf_url: "https://dserver.bundestag.de/btd/21/010/2110020.pdf",
+      },
+    };
+    await collect(prisma, "doc-demand-hot", background);
+    assert.equal(
+      await prisma.processingJob.count({
+        where: { operation: "process_document" },
+      }),
+      1,
+    );
+
+    const requested = await requestDocument(prisma, "29701499");
+    assert.ok(requested);
+    if (!requested) return;
+    assert.equal(requested.reference.pdfUrl, PDF_URL);
+    assert.equal(requested.reference.documentNumber, "21/1001");
+    assert.equal(requested.processed, false);
+    assert.equal(requested.job?.priority, ON_DEMAND_PRIORITY);
+    assert.equal(requested.job?.status, "pending");
+
+    // Repeating the request converges on the same job instead of adding one.
+    await requestDocument(prisma, "29701499");
+    assert.equal(
+      await prisma.processingJob.count({
+        where: { operation: "process_document" },
+      }),
+      2,
+    );
+
+    // The raised job is processed first, ahead of older background work.
+    const fetched: string[] = [];
+    assert.equal(
+      (
+        await processNextDocument(prisma, "worker", {
+          fetchPdf: async (url) => {
+            fetched.push(url);
+            return {
+              ok: true,
+              bytes: Buffer.from("%PDF on demand"),
+              finalUrl: url,
+            };
+          },
+          extract: async () => pages,
+        })
+      ).status,
+      "succeeded",
+    );
+    assert.deepEqual(fetched, [PDF_URL]);
+
+    const processed = await requestDocument(prisma, "29701499");
+    assert.equal(processed?.processed, true);
+    assert.equal(processed?.variant?.variantNo, 1);
+    assert.equal(await requestDocument(prisma, "999"), null);
   } finally {
     await prisma.$disconnect();
   }

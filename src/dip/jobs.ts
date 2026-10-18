@@ -91,8 +91,8 @@ export function enqueueDocumentProcessing(
   tx: Prisma.TransactionClient,
   input: {
     runId: string;
-    itemIndex: number;
-    electoralTerm: number;
+    itemIndex: number | null;
+    electoralTerm: number | null;
     stepApiId: string;
     referenceId: string;
     pdfUrl: string | null;
@@ -100,7 +100,10 @@ export function enqueueDocumentProcessing(
   },
 ) {
   return enqueueJob(tx, {
-    source: dipSource("/vorgangsposition", String(input.electoralTerm)),
+    source: dipSource(
+      "/vorgangsposition",
+      input.electoralTerm === null ? undefined : String(input.electoralTerm),
+    ),
     runId: input.runId,
     itemIndex: input.itemIndex,
     dedupeKey: documentJobKey(input),
@@ -109,7 +112,9 @@ export function enqueueDocumentProcessing(
       stepApiId: input.stepApiId,
       referenceId: input.referenceId,
       pdfUrl: input.pdfUrl,
-      electoralTerm: input.electoralTerm,
+      ...(input.electoralTerm === null
+        ? {}
+        : { electoralTerm: input.electoralTerm }),
     },
   });
 }
@@ -121,13 +126,16 @@ export function enqueueDocumentEmbedding(
   input: {
     runId: string;
     itemIndex: number | null;
-    electoralTerm: number;
+    electoralTerm: number | null;
     referenceId: string;
     variantNo: number;
   },
 ) {
   return enqueueJob(tx, {
-    source: dipSource("/vorgangsposition", String(input.electoralTerm)),
+    source: dipSource(
+      "/vorgangsposition",
+      input.electoralTerm === null ? undefined : String(input.electoralTerm),
+    ),
     runId: input.runId,
     itemIndex: input.itemIndex,
     dedupeKey: JSON.stringify([
