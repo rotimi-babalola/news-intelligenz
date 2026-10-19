@@ -53,13 +53,17 @@ node --env-file-if-exists=.env --test \
   dist/test/dip-documents.integration.js \
   dist/test/dip-search.integration.js \
   dist/test/dip-jobs.integration.js \
+  dist/test/steps-import.integration.js \
   dist/test/sync.integration.js
 ```
 
 Expected: type check clean, all unit tests pass (including `pdf.test.ts`,
-which injects a fake extractor so no Python is needed), the four DIP
-integrations pass in self-created isolated schemas, formatting clean. The
-real-embedding search test is skipped unless `OLLAMA_QA=1`.
+which injects a fake extractor so no Python is needed), the DIP integrations
+pass in self-created isolated schemas, formatting clean. The
+`dip-documents` suite pins variant promotion (reverting to earlier bytes makes
+that variant latest again) and `pdf.test.ts` pins the private-DNS, declared-size
+and format guards. The real-embedding search test is skipped unless
+`OLLAMA_QA=1`.
 
 ### QA-2 — Fresh schema and empty DIP state
 
@@ -77,7 +81,9 @@ Expected: `document_contents`, `document_pages`, `document_references` all 0
 (no DIP collection has run); no `process_document`/`embed_document` jobs; the
 `ParliamentaryEntity` enum contains `vorgang`, `vorgangsposition`,
 `dokument`; `processing_jobs.priority` exists (migration `20261018120000`
-applied). The seeded news `seed` run is present and unchanged.
+applied) and `document_contents` carries the `(reference_id, variant_no)`
+unique index (migration `20261018130000` applied). The seeded news `seed` run
+is present and unchanged.
 
 ### QA-3 — Collection stores references and queues PDF work without fetching bytes
 
@@ -161,7 +167,8 @@ await prisma.\$disconnect();
 Expected: `result.status: "succeeded"`, `variantNo: 1`, `reused: false`;
 one `document_contents` row (`page_count: 2`, `is_latest: true`) and two
 `document_pages` with pages 1–2; one pending `embed_document` job per page
-(two here); the `process_document` job is `succeeded`. Longer-than-`maxBuffer` or a
+(two here, each keyed by `referenceId`/`variantNo`/`pageNo`); the
+`process_document` job is `succeeded`. Longer-than-`maxBuffer` or a
 failed extraction path is covered by `pdf.test.ts`.
 
 ### QA-5 — Cache identity: identical bytes reuse, changed bytes add a variant
@@ -200,6 +207,9 @@ await run('reused');            // changed URL -> new job, identical bytes -> sa
 bytes = Buffer.from('%PDF changed');
 await collect('qa-doc-cache-3', 'https://dserver.bundestag.de/c.pdf');
 await run('changed');           // new bytes -> new retained variant
+bytes = Buffer.from('%PDF identical');
+await collect('qa-doc-cache-4', 'https://dserver.bundestag.de/d.pdf');
+await run('reverted');          // earlier bytes -> variant 1 promoted back to latest
 console.log('variants', JSON.stringify(await prisma.documentContent.findMany({ orderBy: { variantNo: 'asc' }, select: { variantNo: true, isLatest: true } })));
 console.log('contents', await prisma.documentContent.count());
 console.log('embedJobs', await prisma.processingJob.count({ where: { operation: 'embed_document', payload: { path: ['referenceId'], equals: '292000' } } }));
@@ -209,12 +219,14 @@ await prisma.\$disconnect();
 
 Expected: `first` succeeds as `variantNo: 1, reused: false`; `reused` (new
 reference revision, identical bytes) reports `variantNo: 1, reused: true` and
-leaves `contents: 1`; `changed` reports `variantNo: 2, reused: false`. Final
-`variants` is `[{1,false},{2,true}]` and `embedJobs` is 2 (one per variant
-page — the reused variant adds no duplicate job). The concurrent-variant race is
-pinned by `dip-documents.integration.ts` (unique `reference_id, variant_no`
-turns the loser into a retry); do not try to reproduce it by timing two
-processes manually.
+leaves `contents: 1`; `changed` reports `variantNo: 2, reused: false`;
+`reverted` (the earlier bytes again) reports `variantNo: 1, reused: true` and
+`contents` stays 2. Final `variants` is `[{1,true},{2,false}]` — reverting
+promotes the retained variant back to latest without a new variant number —
+and `embedJobs` is 2 (one per variant page — reused bytes add no duplicate
+job). The concurrent-variant race is pinned by `dip-documents.integration.ts`
+(unique `reference_id, variant_no` turns the loser into a retry); do not try to
+reproduce it by timing two processes manually.
 
 ### QA-6 — Real PyMuPDF extraction through the child process
 
@@ -284,8 +296,10 @@ Requires `BUNDESTAG_API_KEY` in `.env` and network. Store real references with
 a live DIP collection. `proceedingCap` is optional and bounds how many
 proceedings are stored; it defaults to `LOCAL_PROCEEDING_CAP` (1000). It also
 bounds the import work: a capped baseline scan stops paging once the cap is
-reached, and fetches steps only for the stored proceedings rather than
-paginating the whole term. A small value keeps the import short:
+reached, and the endpoint then queries steps by parent (`scopeToStoredProceedings`)
+for the stored set in batches of 50 rather than paginating the whole term, so
+`/vorgangsposition`'s `valid` counts only steps of those proceedings. A small
+value keeps the import short:
 
 ```sh
 curl -s -X POST http://127.0.0.1:3000/api/collect-dip \
