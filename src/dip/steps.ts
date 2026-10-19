@@ -7,6 +7,7 @@ import {
   findProceeding,
   findStep,
   latestStepVersion,
+  listProceedingApiIdsByTerm,
   updateStep,
   upsertDipCandidate,
   upsertDocumentReference,
@@ -200,10 +201,21 @@ export async function collectSteps(
   options: CollectStepsOptions,
 ): Promise<CollectStepsResult> {
   const now = options.now ?? new Date();
+  // A capped run only needs steps for the stored proceeding set; querying by
+  // parent avoids paginating every step in the term.
+  const vorgangIds =
+    options.proceedingCap === undefined
+      ? undefined
+      : (await listProceedingApiIdsByTerm(prisma, options.electoralTerm)).map(
+          ({ apiId }) => apiId,
+        );
   return collectDipPages(
     prisma,
     STEPS_ENDPOINT,
-    options,
+    {
+      ...options,
+      vorgangIds,
+    },
     async (documents, firstIndex, runId) => {
       const kept: StoredStep[] = [];
       const invalidDocs: { index: number; error: string; id: string | null }[] =
@@ -235,7 +247,15 @@ export async function collectSteps(
         });
         for (const { apiId } of existing) missing.delete(apiId);
         for (const [apiId, index] of missing) {
-          const fetched = await options.fetchVorgang(apiId);
+          // Parent context is optional: one missing, rate-limited or
+          // bot-challenged parent must not fail the whole step run. The step
+          // is still stored with its unresolved parent id.
+          let fetched: unknown;
+          try {
+            fetched = await options.fetchVorgang(apiId);
+          } catch {
+            continue;
+          }
           if (fetched === null) continue;
           const converted = toStored(fetched, index);
           if (!("error" in converted) && converted.doc.id === apiId)
@@ -290,9 +310,11 @@ export function liveStepsFetcher(apiKey: string): {
       aktualisiertStart,
       aktualisiertEnd,
       cursor,
+      vorgangIds,
     }) => {
       const query = new URLSearchParams({ format: "json" });
       query.set("f.wahlperiode", String(wahlperiode));
+      for (const id of vorgangIds ?? []) query.append("f.vorgang", id);
       if (aktualisiertStart)
         query.set("f.aktualisiert.start", aktualisiertStart);
       if (aktualisiertEnd) query.set("f.aktualisiert.end", aktualisiertEnd);

@@ -170,6 +170,19 @@ export function countProceedingsByTerm(client: Client, electoralTerm: number) {
   return client.proceeding.count({ where: { electoralTerm } });
 }
 
+// Capped step collection follows the stored proceeding set; a stable order
+// keeps the request sequence reproducible across runs.
+export function listProceedingApiIdsByTerm(
+  client: Client,
+  electoralTerm: number,
+) {
+  return client.proceeding.findMany({
+    where: { electoralTerm },
+    select: { apiId: true },
+    orderBy: { apiId: "asc" },
+  });
+}
+
 export function upsertDipCandidate(
   client: Client,
   runId: string,

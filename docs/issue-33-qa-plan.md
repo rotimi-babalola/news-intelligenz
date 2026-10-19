@@ -282,8 +282,10 @@ retrying with `attempts` incremented.
 
 Requires `BUNDESTAG_API_KEY` in `.env` and network. Store real references with
 a live DIP collection. `proceedingCap` is optional and bounds how many
-proceedings are stored; it defaults to `LOCAL_PROCEEDING_CAP` (1000). A small
-value keeps the import short:
+proceedings are stored; it defaults to `LOCAL_PROCEEDING_CAP` (1000). It also
+bounds the import work: a capped baseline scan stops paging once the cap is
+reached, and fetches steps only for the stored proceedings rather than
+paginating the whole term. A small value keeps the import short:
 
 ```sh
 curl -s -X POST http://127.0.0.1:3000/api/collect-dip \
@@ -295,9 +297,16 @@ Expected: `{"attribution":"Source: Deutscher Bundestag (DIP)","outcome":{
 "completed":[{"endpoint":"/vorgang",...},{"endpoint":"/vorgangsposition",...}],
 "failed":[]}}` — one run per endpoint/term (`qa-live-dip-1:<endpoint>:21`),
 with the `/vorgang` result showing `capped > 0` once the cap is reached. A
-non-integer or `< 1` `proceedingCap` is rejected with HTTP 400. Steps dated
-within the last 14 days queue `process_document` jobs automatically; pick a
-real reference id from a hot step:
+non-integer or `< 1` `proceedingCap` is rejected with HTTP 400. `failed` must
+be empty: the single-item `/vorgang/{id}` endpoint behind parent backfill is
+bot-challenged (a 303 to an Enodia page that returns 400), and the collector
+now skips such parents instead of failing the whole `/vorgangsposition` run.
+A run's input hash includes `proceedingCap`, so retry a failed run with the
+**identical** request (same `runId`); changing any field, including the cap,
+requires a fresh `runId` (`Run ID already belongs to a different input`).
+Only completed runs replay. Steps dated within the last 14 days queue
+`process_document` jobs automatically; pick a real reference id from a hot
+step:
 
 ```sh
 docker compose exec -T db psql -U news -d news -c "

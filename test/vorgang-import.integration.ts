@@ -248,3 +248,27 @@ test("local cap keeps the first records encountered and keeps syncing them", asy
   );
   await prisma.$disconnect();
 });
+
+test("a baseline cap stops paging once the cap is reached", async () => {
+  const prisma = await isolatedDatabase();
+  const { fetchPage, calls } = fakeFetcher({
+    start: { documents: [doc("1"), doc("2")], next: "c2" },
+    c2: { documents: [doc("3"), doc("4")], next: "c3" },
+    c3: { documents: [doc("5")], next: "c3" },
+  });
+  const result = await collectVorgang(prisma, {
+    runId: "dip-vorgang-cap-stop",
+    electoralTerm: 21,
+    proceedingCap: 1,
+    fetchPage,
+  });
+  // The cap fills on page one; later pages could only be capped, so the scan
+  // must not fetch them (that is what made the live run hit the rate limit).
+  assert.equal(calls.length, 1);
+  assert.deepEqual(
+    { stored: result.stored, capped: result.capped },
+    { stored: 1, capped: 1 },
+  );
+  assert.equal(await prisma.proceeding.count(), 1);
+  await prisma.$disconnect();
+});

@@ -4,12 +4,17 @@ export type VorgangPage = {
   numFound: number;
 };
 
-export type FetchVorgangPage = (params: {
+// Shared by both list endpoints. `vorgangIds` is only sent by capped step
+// collection, which queries the stored parent set instead of the whole term.
+export type PageParams = {
   wahlperiode: number;
   aktualisiertStart?: string;
   aktualisiertEnd?: string;
   cursor?: string;
-}) => Promise<VorgangPage>;
+  vorgangIds?: string[];
+};
+
+export type FetchVorgangPage = (params: PageParams) => Promise<VorgangPage>;
 
 export type CollectVorgangOptions = {
   runId: string;
@@ -55,12 +60,7 @@ export type StepPage = {
   numFound: number;
 };
 
-export type FetchStepPage = (params: {
-  wahlperiode: number;
-  aktualisiertStart?: string;
-  aktualisiertEnd?: string;
-  cursor?: string;
-}) => Promise<StepPage>;
+export type FetchStepPage = (params: PageParams) => Promise<StepPage>;
 
 // Single-item parent retrieval for steps whose proceeding is not stored yet.
 // Returns the raw /vorgang payload, or null when the parent does not exist.
