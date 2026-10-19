@@ -57,7 +57,14 @@ export async function searchDip(
       };
     }
     return {
-      ...row,
+      entity: row.entity,
+      apiId: row.apiId,
+      versionNo: row.versionNo,
+      score: row.score,
+      title: row.title,
+      summary: row.summary,
+      stepLabel: row.stepLabel,
+      proceedingApiId: row.proceedingApiId,
       source: {
         endpoint,
         apiId: row.apiId,

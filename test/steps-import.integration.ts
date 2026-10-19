@@ -443,7 +443,7 @@ test("local step collection follows the stored proceeding set without going sile
   await prisma.$disconnect();
 });
 
-test("capped step collection queries only the stored parents and holds the checkpoint", async () => {
+test("stored-proceeding step collection queries only the stored parents and advances the checkpoint", async () => {
   const prisma = await isolatedDatabase();
   for (const id of ["340135", "340161"])
     await prisma.proceeding.create({ data: proceeding(id) });
@@ -464,17 +464,18 @@ test("capped step collection queries only the stored parents and holds the check
     runId: "dip-steps-cap",
     electoralTerm: 21,
     proceedingCap: 1000,
+    scopeToStoredProceedings: true,
     fetchPage,
   });
   assert.equal(result.stored, 2);
   assert.deepEqual(calls[0]?.vorgangIds, ["340135", "340161"]);
-  // The capped scan says nothing about term-wide progress, so it must not move
-  // the checkpoint past its previous value.
+  // Every stored proceeding was scanned, so the window advances and the next
+  // run uses the overlap instead of re-reading the whole stored set.
   assert.equal(
     (
       await findDipCheckpoint(prisma, "/vorgangsposition", 21)
     )?.updatedThrough?.toISOString(),
-    "2026-10-01T00:00:00.000Z",
+    "2026-10-09T11:24:22.000Z",
   );
   await prisma.$disconnect();
 });

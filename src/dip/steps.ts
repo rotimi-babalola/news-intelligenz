@@ -201,14 +201,13 @@ export async function collectSteps(
   options: CollectStepsOptions,
 ): Promise<CollectStepsResult> {
   const now = options.now ?? new Date();
-  // A capped run only needs steps for the stored proceeding set; querying by
-  // parent avoids paginating every step in the term.
-  const vorgangIds =
-    options.proceedingCap === undefined
-      ? undefined
-      : (await listProceedingApiIdsByTerm(prisma, options.electoralTerm)).map(
-          ({ apiId }) => apiId,
-        );
+  // A stored-proceeding run only needs steps for the stored parent set;
+  // querying by parent avoids paginating every step in the term.
+  const vorgangIds = options.scopeToStoredProceedings
+    ? (await listProceedingApiIdsByTerm(prisma, options.electoralTerm)).map(
+        ({ apiId }) => apiId,
+      )
+    : undefined;
   return collectDipPages(
     prisma,
     STEPS_ENDPOINT,

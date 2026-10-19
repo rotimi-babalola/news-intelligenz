@@ -102,6 +102,10 @@ test("German and English queries return only current DIP source versions", async
         url: "https://search.dip.bundestag.de/api/v1/vorgangsposition/456",
       });
       assert.equal(matches[0]?.proceedingApiId, "123");
+      // Storage-only document fields stay out of proceeding/step results.
+      assert.equal("referenceId" in matches[0]!, false);
+      assert.equal("pdfUrl" in matches[0]!, false);
+      assert.equal("pageNo" in matches[0]!, false);
       assert.equal(
         matches[1]?.summary,
         "Vorräte des Erdölbevorratungsverbandes",

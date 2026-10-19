@@ -70,6 +70,7 @@ export function scopeInputHash(
     updatedTo?: Date;
     proceedingCap?: number;
     followStoredParents?: boolean;
+    scopeToStoredProceedings?: boolean;
   },
 ) {
   return createHash("sha256")
@@ -84,6 +85,9 @@ export function scopeInputHash(
         ...(options.followStoredParents === undefined
           ? {}
           : { followStoredParents: options.followStoredParents }),
+        ...(options.scopeToStoredProceedings === undefined
+          ? {}
+          : { scopeToStoredProceedings: options.scopeToStoredProceedings }),
       }),
     )
     .digest("hex");

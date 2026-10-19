@@ -2,7 +2,11 @@ import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { createRun, finalizeRun, findRun } from "../import/run.repository";
 import { RateLimitedError, backoffMs } from "../jobs";
 import { runIdSchema } from "../validation";
-import { findDipCheckpoint, upsertDipCheckpoint } from "./repository";
+import {
+  countProceedingsByTerm,
+  findDipCheckpoint,
+  upsertDipCheckpoint,
+} from "./repository";
 import type { FetchVorgangPage, PageParams } from "./types";
 import { scopeInputHash } from "./util";
 
@@ -17,11 +21,9 @@ type Options = {
   updatedTo?: Date;
   proceedingCap?: number;
   followStoredParents?: boolean;
-  // Step collection with a proceeding cap queries only the stored parent set.
-  // Batched because the DIP API takes the filter as repeated query params.
-  // Such a run also leaves the term checkpoint untouched: it observes a subset
-  // of the term, so advancing the checkpoint would hide steps of proceedings
-  // stored by a later run.
+  // Step collection can query only the stored parent set. Batched because the
+  // DIP API takes the filter as repeated query params.
+  scopeToStoredProceedings?: boolean;
   vorgangIds?: string[];
   retryDelayMs?: (attempt: number, error: unknown) => number;
   fetchPage: FetchVorgangPage;
@@ -110,6 +112,8 @@ export async function collectDipPages(
     scope.proceedingCap = options.proceedingCap;
   if (options.followStoredParents !== undefined)
     scope.followStoredParents = options.followStoredParents;
+  if (options.scopeToStoredProceedings !== undefined)
+    scope.scopeToStoredProceedings = options.scopeToStoredProceedings;
 
   const replayed = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
@@ -165,13 +169,13 @@ export async function collectDipPages(
     backfilled: 0,
   });
   const totals = zeroTotals();
-  const addTotals = (target: Totals, counts: Totals, sign: 1 | -1) => {
-    target.valid += sign * counts.valid;
-    target.invalid += sign * counts.invalid;
-    target.stored += sign * counts.stored;
-    target.versionsAdded += sign * counts.versionsAdded;
-    target.capped += sign * counts.capped;
-    target.backfilled += sign * counts.backfilled;
+  const addTotals = (target: Totals, counts: Totals) => {
+    target.valid += counts.valid;
+    target.invalid += counts.invalid;
+    target.stored += counts.stored;
+    target.versionsAdded += counts.versionsAdded;
+    target.capped += counts.capped;
+    target.backfilled += counts.backfilled;
   };
   // A cursor restart recounts flow, but versions created before the failure
   // persist in storage and stay credited to this run. Rolling back the flow
@@ -184,19 +188,27 @@ export async function collectDipPages(
     totals.backfilled -= counts.backfilled;
   };
   const retryDelayMs = options.retryDelayMs ?? defaultRetryDelayMs;
-  // One filter group means a normal term-wide scan. Capped step collection
-  // supplies parent IDs, so each group is one `f.vorgang` batch.
+  // One filter group means a normal term-wide scan. Stored-proceeding step
+  // collection supplies parent IDs, so each group is one `f.vorgang` batch.
   const groups: (string[] | undefined)[] =
     options.vorgangIds === undefined
       ? [undefined]
       : batch(options.vorgangIds, STEP_FILTER_BATCH);
   try {
+    // The early-stop shortcut is only safe when the cap was empty at the
+    // start: a later page can then only add capped records. When proceedings
+    // are already stored, later pages may hold updates to known records.
+    const firstBaseline =
+      options.proceedingCap !== undefined &&
+      options.updatedFrom === undefined &&
+      options.vorgangIds === undefined &&
+      (await countProceedingsByTerm(prisma, options.electoralTerm)) === 0;
     let stopped = false;
     for (const vorgangIds of groups) {
       if (stopped) break;
       let cursor: string | undefined;
       const groupStartIndex = itemIndex;
-      const groupTotals = zeroTotals();
+      let groupTotals = zeroTotals();
       // An expired cursor surfaces as a mid-pagination failure. Writes are
       // idempotent (same run ID reuses candidates, discoveries, and versions),
       // so the group restarts once from its first page instead of resuming a
@@ -225,34 +237,25 @@ export async function collectDipPages(
             // Flow counts recount the final pass, but versions created before
             // the failure persist in storage and stay credited to this run.
             rollbackFlowTotals(groupTotals);
-            groupTotals.valid = 0;
-            groupTotals.invalid = 0;
-            groupTotals.stored = 0;
-            groupTotals.capped = 0;
-            groupTotals.backfilled = 0;
+            groupTotals = zeroTotals();
             continue;
           }
           throw error;
         }
         const counts = await storePage(page.documents, itemIndex, runId);
         itemIndex += page.documents.length;
-        addTotals(totals, counts, 1);
-        addTotals(groupTotals, counts, 1);
+        addTotals(totals, counts);
+        addTotals(groupTotals, counts);
         if (
           counts.maxObserved &&
           (!maxObserved || counts.maxObserved > maxObserved)
         )
           maxObserved = counts.maxObserved;
-        // A baseline scan with a local cap keeps only the first N records; once
-        // a page starts skipping, every later page can only be capped, so stop
-        // instead of paginating the whole term. Incremental windows still page
-        // fully so updates to stored records are never missed.
-        if (
-          options.proceedingCap !== undefined &&
-          options.updatedFrom === undefined &&
-          options.vorgangIds === undefined &&
-          counts.capped > 0
-        ) {
+        // An empty-cap baseline keeps only the first N records; once a page
+        // starts skipping, every later page can only be capped, so stop instead
+        // of paginating the whole term. Incremental windows and runs that
+        // already store records still page fully so updates are never missed.
+        if (firstBaseline && counts.capped > 0) {
           stopped = true;
           break;
         }
@@ -285,18 +288,17 @@ export async function collectDipPages(
       completedAt: new Date(),
       error: null,
     });
+    // A stored-proceeding scan still covers every proceeding this run knows
+    // about, so its window advances like any other completed scan.
     await upsertDipCheckpoint(
       tx,
       endpoint,
       options.electoralTerm,
-      options.vorgangIds !== undefined
-        ? ((await findDipCheckpoint(tx, endpoint, options.electoralTerm))
-            ?.updatedThrough ?? null)
-        : pickCheckpointTarget(
-            (await findDipCheckpoint(tx, endpoint, options.electoralTerm))
-              ?.updatedThrough ?? null,
-            options.updatedTo ?? maxObserved,
-          ),
+      pickCheckpointTarget(
+        (await findDipCheckpoint(tx, endpoint, options.electoralTerm))
+          ?.updatedThrough ?? null,
+        options.updatedTo ?? maxObserved,
+      ),
     );
   });
   return { runId, status: "completed" as const, ...totals, replayed: false };

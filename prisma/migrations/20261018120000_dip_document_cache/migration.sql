@@ -1,6 +1,6 @@
 -- PDF-derived text is searchable alongside proceedings and steps, so it needs
--- its own source entity. Separate transactions are not used because the value
--- is never referenced by this statement.
+-- its own source entity. PostgreSQL can add the enum value inside the migration
+-- transaction because no later statement in this migration uses it.
 ALTER TYPE "ParliamentaryEntity" ADD VALUE IF NOT EXISTS 'dokument';
 
 -- Page provenance joins the embedding identity: page 0 means "not page-scoped".

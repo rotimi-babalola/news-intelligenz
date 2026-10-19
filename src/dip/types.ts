@@ -76,6 +76,8 @@ export type CollectStepsOptions = {
   // outside the local proceeding cap are skipped but counted, never silent.
   followStoredParents?: boolean;
   proceedingCap?: number;
+  // Query steps only for proceedings already stored for this term.
+  scopeToStoredProceedings?: boolean;
   // Reference date for the 14-day PDF hot subset; defaults to collection time.
   now?: Date;
   retryDelayMs?: (attempt: number, error: unknown) => number;

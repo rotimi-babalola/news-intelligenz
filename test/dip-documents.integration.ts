@@ -96,26 +96,27 @@ test("a document job caches bytes, stores pages and hands off embedding", async 
       pages.map((page) => ({ pageNo: page.page, text: page.text })),
     );
 
-    // Embedding is its own durable job, through the shared embedding pipeline.
+    // One durable embedding job per page, through the shared pipeline.
     assert.equal(
       await prisma.processingJob.count({
         where: { operation: EMBED_DOCUMENT, status: "pending" },
       }),
-      1,
+      pages.length,
     );
     const inputs: string[] = [];
-    assert.equal(
-      (
-        await processNextDipEmbedding(prisma, "worker", {
-          operation: EMBED_DOCUMENT,
-          embed: async (text) => {
-            inputs.push(text);
-            return Array.from({ length: 1024 }, () => 0.1);
-          },
-        })
-      ).status,
-      "succeeded",
-    );
+    for (let call = 0; call < pages.length; call++)
+      assert.equal(
+        (
+          await processNextDipEmbedding(prisma, "worker", {
+            operation: EMBED_DOCUMENT,
+            embed: async (text) => {
+              inputs.push(text);
+              return Array.from({ length: 1024 }, () => 0.1);
+            },
+          })
+        ).status,
+        "succeeded",
+      );
     assert.deepEqual(
       inputs,
       pages.map((page) => page.text),
@@ -153,7 +154,8 @@ test("a document job caches bytes, stores pages and hands off embedding", async 
 test("identical bytes reuse the cache and changed bytes add a retained variant", async () => {
   const prisma = await isolatedDatabase();
   try {
-    let bytes = Buffer.from("%PDF variant one");
+    const firstBytes = Buffer.from("%PDF variant one");
+    let bytes = firstBytes;
     const fetchPdf = async () => ({
       ok: true as const,
       bytes,
@@ -203,6 +205,28 @@ test("identical bytes reuse the cache and changed bytes add a retained variant",
     assert.equal(await prisma.documentPage.count(), 4);
     assert.ok(
       await prisma.documentPage.count({ where: { contentId: first.id } }),
+    );
+
+    // Reverting to earlier bytes reuses variant 1 and makes it latest again.
+    bytes = firstBytes;
+    await collect(prisma, "doc-cache-4", step("701400", `${PDF_URL}?v=4`));
+    const reverted = await processNextDocument(prisma, "worker", {
+      fetchPdf,
+      extract,
+    });
+    assert.equal(reverted.status, "succeeded");
+    if (reverted.status === "succeeded") {
+      assert.equal(reverted.variantNo, 1);
+      assert.equal(reverted.reused, true);
+    }
+    assert.deepEqual(
+      (
+        await prisma.documentContent.findMany({ orderBy: { variantNo: "asc" } })
+      ).map((row) => [row.variantNo, row.isLatest]),
+      [
+        [1, true],
+        [2, false],
+      ],
     );
   } finally {
     await prisma.$disconnect();
@@ -333,6 +357,14 @@ test("an on-demand request returns metadata and jumps the queue", async () => {
       "succeeded",
     );
     assert.deepEqual(fetched, [PDF_URL]);
+    // The on-demand priority carries into the per-page embedding jobs.
+    assert.deepEqual(
+      await prisma.processingJob.findMany({
+        where: { operation: EMBED_DOCUMENT },
+        select: { priority: true },
+      }),
+      pages.map(() => ({ priority: ON_DEMAND_PRIORITY })),
+    );
 
     const processed = await requestDocument(prisma, "29701499");
     assert.equal(processed?.processed, true);
@@ -353,6 +385,77 @@ test("an on-demand request returns metadata and jumps the queue", async () => {
     assert.equal(changed?.job?.priority, ON_DEMAND_PRIORITY);
 
     assert.equal(await requestDocument(prisma, "999"), null);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("concurrent variants keep unique numbers and one latest row", async () => {
+  const prisma = await isolatedDatabase();
+  try {
+    await collect(prisma, "doc-race-1", step("701420", `${PDF_URL}?a`));
+    await collect(prisma, "doc-race-2", step("701420", `${PDF_URL}?b`));
+    const jobs = await prisma.processingJob.findMany({
+      where: { operation: "process_document" },
+      orderBy: { createdAt: "asc" },
+    });
+    assert.equal(jobs.length, 2);
+    const results = await Promise.all(
+      jobs.map((job, index) =>
+        processNextDocument(prisma, `worker-${index}`, {
+          jobId: job.id,
+          fetchPdf: async () => ({
+            ok: true,
+            bytes: Buffer.from(`%PDF concurrent ${index}`),
+            finalUrl: PDF_URL,
+          }),
+          extract: async () => pages,
+        }),
+      ),
+    );
+    assert.deepEqual(
+      results.map((result) => result.status),
+      ["succeeded", "succeeded"],
+    );
+    const contents = await prisma.documentContent.findMany({
+      orderBy: { variantNo: "asc" },
+    });
+    assert.deepEqual(
+      contents.map((row) => row.variantNo),
+      [1, 2],
+    );
+    assert.equal(contents.filter((row) => row.isLatest).length, 1);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("an on-demand request revives an exhausted document job", async () => {
+  const prisma = await isolatedDatabase();
+  try {
+    await collect(prisma, "doc-exhausted");
+    const job = await prisma.processingJob.findFirstOrThrow({
+      where: { operation: "process_document" },
+    });
+    await prisma.processingJob.update({
+      where: { id: job.id },
+      data: {
+        status: "exhausted",
+        attempts: job.maxAttempts,
+        lastError: "HTTP 503",
+        nextAttemptAt: new Date(0),
+      },
+    });
+
+    const requested = await requestDocument(prisma, "29701499");
+    assert.equal(requested?.job?.status, "pending");
+    assert.equal(requested?.job?.priority, ON_DEMAND_PRIORITY);
+    const revived = await prisma.processingJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
+    assert.equal(revived.status, "pending");
+    assert.equal(revived.maxAttempts, job.maxAttempts * 2);
+    assert.equal(revived.lastError, null);
   } finally {
     await prisma.$disconnect();
   }

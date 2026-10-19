@@ -395,6 +395,19 @@ export function latestDocumentContent(client: Client, referenceId: string) {
   });
 }
 
+// Variant numbers only grow, even when an older variant is promoted back to
+// latest: reused bytes must never reuse a number held by another variant.
+export async function maxDocumentVariantNo(
+  client: Client,
+  referenceId: string,
+) {
+  const result = await client.documentContent.aggregate({
+    where: { referenceId },
+    _max: { variantNo: true },
+  });
+  return result._max.variantNo ?? 0;
+}
+
 export function findDocumentContent(
   client: Client,
   referenceId: string,
@@ -426,6 +439,16 @@ export function listDocumentPages(client: Client, contentId: string) {
   });
 }
 
+export function findDocumentPage(
+  client: Client,
+  contentId: string,
+  pageNo: number,
+) {
+  return client.documentPage.findUnique({
+    where: { contentId_pageNo: { contentId, pageNo } },
+  });
+}
+
 export function supersedeDocumentContents(client: Client, referenceId: string) {
   return client.documentContent.updateMany({
     where: { referenceId, isLatest: true },
@@ -447,6 +470,7 @@ export function upsertDocumentReference(
       pdfUrl: data.pdfUrl,
       documentDate: data.documentDate,
       metadata: data.metadata,
+      observedAt: new Date(),
     },
   });
 }

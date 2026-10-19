@@ -9,11 +9,14 @@ import {
   pymupdfExtractor,
 } from "../src/dip/pdf.js";
 
+const publicResolve = async () => ["203.0.113.10"];
+
 function response(
   status: number,
   options: {
     headers?: Record<string, string>;
     body?: Uint8Array;
+    onRead?: () => void;
   } = {},
 ) {
   const headers = new Map(
@@ -25,8 +28,10 @@ function response(
   return {
     status,
     headers: { get: (name: string) => headers.get(name.toLowerCase()) ?? null },
-    arrayBuffer: async () =>
-      (options.body ?? new Uint8Array()).buffer as ArrayBuffer,
+    arrayBuffer: async () => {
+      options.onRead?.();
+      return (options.body ?? new Uint8Array()).buffer as ArrayBuffer;
+    },
   };
 }
 
@@ -38,6 +43,7 @@ test("document fetch refuses a private destination before any request", async ()
       called += 1;
       return response(200);
     },
+    publicResolve,
   );
   assert.deepEqual(result, {
     ok: false,
@@ -59,6 +65,7 @@ test("document fetch follows one redirect and returns the bytes", async () => {
             body: new Uint8Array([1, 2, 3]),
           });
     },
+    publicResolve,
   );
   assert.deepEqual(result, {
     ok: true,
@@ -73,26 +80,73 @@ test("document fetch follows one redirect and returns the bytes", async () => {
 
 test("document fetch rejects non-PDF formats and oversized bodies", async () => {
   assert.deepEqual(
-    await fetchDocumentPdf("https://dserver.bundestag.de/x", async () =>
-      response(200, { headers: { "content-type": "text/html" } }),
+    await fetchDocumentPdf(
+      "https://dserver.bundestag.de/x",
+      async () => response(200, { headers: { "content-type": "text/html" } }),
+      publicResolve,
     ),
     { ok: false, reason: "Unsupported format: text/html" },
   );
   assert.deepEqual(
-    await fetchDocumentPdf("https://dserver.bundestag.de/x", async () =>
-      response(200, {
-        headers: { "content-type": "application/pdf" },
-        body: new Uint8Array(MAX_PDF_BYTES + 1),
-      }),
+    await fetchDocumentPdf(
+      "https://dserver.bundestag.de/x",
+      async () =>
+        response(200, {
+          headers: { "content-type": "application/pdf" },
+          body: new Uint8Array(MAX_PDF_BYTES + 1),
+        }),
+      publicResolve,
     ),
     { ok: false, reason: "Document exceeds size bound" },
   );
   assert.deepEqual(
-    await fetchDocumentPdf("https://dserver.bundestag.de/x", async () =>
-      response(404),
+    await fetchDocumentPdf(
+      "https://dserver.bundestag.de/x",
+      async () => response(404),
+      publicResolve,
     ),
     { ok: false, reason: "HTTP 404" },
   );
+});
+
+test("document fetch rejects an oversized declared length before reading", async () => {
+  let read = 0;
+  const result = await fetchDocumentPdf(
+    "https://dserver.bundestag.de/x",
+    async () =>
+      response(200, {
+        headers: {
+          "content-type": "application/pdf",
+          "content-length": String(MAX_PDF_BYTES + 1),
+        },
+        onRead: () => {
+          read += 1;
+        },
+      }),
+    publicResolve,
+  );
+  assert.deepEqual(result, {
+    ok: false,
+    reason: "Document exceeds size bound",
+  });
+  assert.equal(read, 0);
+});
+
+test("document fetch blocks hostnames resolving to private addresses", async () => {
+  let called = 0;
+  const result = await fetchDocumentPdf(
+    "https://dserver.bundestag.de/x",
+    async () => {
+      called += 1;
+      return response(200);
+    },
+    async () => ["10.1.2.3"],
+  );
+  assert.deepEqual(result, {
+    ok: false,
+    reason: "Blocked private/local destination",
+  });
+  assert.equal(called, 0);
 });
 
 test("extraction adapter parses page text and fails loudly otherwise", async () => {

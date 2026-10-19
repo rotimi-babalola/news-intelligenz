@@ -3,9 +3,9 @@ import { claimNextJob, completeJob, failJob } from "../jobs";
 import { EMBED_DOCUMENT, EMBED_PROCEEDING, EMBED_STEP } from "./jobs";
 import {
   findDocumentContent,
+  findDocumentPage,
   findProceedingVersion,
   findStepVersion,
-  listDocumentPages,
   saveDipEmbedding,
 } from "./repository";
 
@@ -77,14 +77,18 @@ export async function processNextDipEmbedding(
       const payload = job.payload as {
         referenceId?: unknown;
         variantNo?: unknown;
+        pageNo?: unknown;
       };
       if (
         typeof payload.referenceId !== "string" ||
         typeof payload.variantNo !== "number" ||
         !Number.isInteger(payload.variantNo) ||
-        payload.variantNo < 1
+        payload.variantNo < 1 ||
+        typeof payload.pageNo !== "number" ||
+        !Number.isInteger(payload.pageNo) ||
+        payload.pageNo < 1
       )
-        throw new Error("Document embedding job has an invalid variant");
+        throw new Error("Document embedding job has an invalid variant page");
       const content = await findDocumentContent(
         prisma,
         payload.referenceId,
@@ -92,10 +96,12 @@ export async function processNextDipEmbedding(
       );
       if (!content)
         throw new Error("Document variant for embedding no longer exists");
-      // One vector per non-empty page keeps page-level provenance exact.
-      for (const page of await listDocumentPages(prisma, content.id)) {
-        const text = page.text.trim();
-        if (!text) continue;
+      // One job covers one page, so one drain call embeds one extracted page.
+      const page = await findDocumentPage(prisma, content.id, payload.pageNo);
+      if (!page)
+        throw new Error("Document page for embedding no longer exists");
+      const text = page.text.trim();
+      if (text) {
         const embedding = await (options.embed ?? embedText)(text);
         assertEmbedding(embedding);
         await saveDipEmbedding(prisma, {

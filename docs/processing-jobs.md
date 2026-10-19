@@ -38,8 +38,8 @@ a job and the background hot subset and an on-demand request converge on the
 same row.
 
 A document job fetches the bytes, caches them by reference ID and SHA-256 byte
-hash, extracts page text with PyMuPDF and enqueues `embed_document` for the
-stored variant. Identical bytes are reused without extraction; changed bytes
+hash, extracts page text with PyMuPDF and enqueues one `embed_document` job per
+non-empty page. Identical bytes are reused without extraction; changed bytes
 become a new retained variant, and only the latest variant is searchable. A
 model outage therefore retries the embedding job, not the download.
 `POST /api/drain-documents` processes one document job per call; `POST

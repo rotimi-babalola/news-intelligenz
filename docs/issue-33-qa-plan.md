@@ -160,8 +160,8 @@ await prisma.\$disconnect();
 
 Expected: `result.status: "succeeded"`, `variantNo: 1`, `reused: false`;
 one `document_contents` row (`page_count: 2`, `is_latest: true`) and two
-`document_pages` with pages 1–2; exactly one pending `embed_document` job;
-the `process_document` job is `succeeded`. Longer-than-`maxBuffer` or a
+`document_pages` with pages 1–2; one pending `embed_document` job per page
+(two here); the `process_document` job is `succeeded`. Longer-than-`maxBuffer` or a
 failed extraction path is covered by `pdf.test.ts`.
 
 ### QA-5 — Cache identity: identical bytes reuse, changed bytes add a variant
@@ -210,8 +210,8 @@ await prisma.\$disconnect();
 Expected: `first` succeeds as `variantNo: 1, reused: false`; `reused` (new
 reference revision, identical bytes) reports `variantNo: 1, reused: true` and
 leaves `contents: 1`; `changed` reports `variantNo: 2, reused: false`. Final
-`variants` is `[{1,false},{2,true}]` and `embedJobs` is 2 (one per variant —
-the reused variant adds no duplicate job). The concurrent-variant race is
+`variants` is `[{1,false},{2,true}]` and `embedJobs` is 2 (one per variant
+page — the reused variant adds no duplicate job). The concurrent-variant race is
 pinned by `dip-documents.integration.ts` (unique `reference_id, variant_no`
 turns the loser into a retry); do not try to reproduce it by timing two
 processes manually.

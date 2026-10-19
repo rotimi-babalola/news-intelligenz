@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { PrismaClient } from "../generated/prisma/client";
+import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { claimNextJob, completeJob, failJob } from "../jobs";
 import {
   documentJobKey,
@@ -8,7 +8,12 @@ import {
   PROCESS_DOCUMENT,
   raiseDocumentJob,
 } from "./jobs";
-import { fetchDocumentPdf, pymupdfExtractor, type PageExtractor } from "./pdf";
+import {
+  fetchDocumentPdf,
+  pymupdfExtractor,
+  type ExtractedPage,
+  type PageExtractor,
+} from "./pdf";
 import {
   createDocumentContent,
   createDocumentPages,
@@ -16,12 +21,14 @@ import {
   findDocumentReferenceById,
   latestDocumentContent,
   latestStepDiscovery,
+  listDocumentPages,
+  maxDocumentVariantNo,
   supersedeDocumentContents,
 } from "./repository";
 
 // PDF processing is downstream of DIP collection and never part of it: the
 // document job fetches bytes, caches a content variant, extracts page text and
-// hands embedding to its own durable job. A failure here leaves the source
+// hands embedding to durable per-page jobs. A failure here leaves the source
 // reference, its metadata and its original link intact and never holds an
 // endpoint checkpoint open.
 //
@@ -34,6 +41,68 @@ export type ProcessDocumentOptions = {
   extract?: PageExtractor;
   jobId?: string;
 };
+
+// Concurrent revisions of one document must not pick the same variant number
+// or leave two rows marked latest. The lock is per reference and short-lived.
+function lockDocumentReference(
+  tx: Prisma.TransactionClient,
+  referenceId: string,
+) {
+  return tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${referenceId}, 0))`;
+}
+
+async function storeNewVariant(
+  tx: Prisma.TransactionClient,
+  input: {
+    referenceId: string;
+    byteHash: string;
+    bytes: Buffer;
+    finalUrl: string;
+    pages: ExtractedPage[];
+  },
+): Promise<{
+  content: Awaited<ReturnType<typeof createDocumentContent>>;
+  reused: boolean;
+}> {
+  // Another worker may have stored these exact bytes while we extracted.
+  const existing = await findDocumentContentByHash(
+    tx,
+    input.referenceId,
+    input.byteHash,
+  );
+  if (existing) {
+    if (existing.isLatest) return { content: existing, reused: true };
+    await supersedeDocumentContents(tx, input.referenceId);
+    return {
+      content: await tx.documentContent.update({
+        where: { id: existing.id },
+        data: { isLatest: true },
+      }),
+      reused: true,
+    };
+  }
+  const variantNo = (await maxDocumentVariantNo(tx, input.referenceId)) + 1;
+  await supersedeDocumentContents(tx, input.referenceId);
+  const content = await createDocumentContent(tx, {
+    referenceId: input.referenceId,
+    variantNo,
+    byteHash: input.byteHash,
+    byteSize: input.bytes.byteLength,
+    pageCount: input.pages.length,
+    bytes: new Uint8Array(input.bytes),
+    sourceUrl: input.finalUrl,
+  });
+  if (input.pages.length)
+    await createDocumentPages(
+      tx,
+      input.pages.map((page) => ({
+        contentId: content.id,
+        pageNo: page.page,
+        text: page.text,
+      })),
+    );
+  return { content, reused: false };
+}
 
 export async function processNextDocument(
   prisma: PrismaClient,
@@ -66,47 +135,54 @@ export async function processNextDocument(
 
     // Identical bytes are the same content variant: reuse the cached row and
     // skip extraction entirely. Changed bytes become a new retained variant.
+    // Reverting to earlier bytes promotes that retained variant back to
+    // latest; only the latest variant is searchable.
     let content = await findDocumentContentByHash(
       prisma,
       referenceId,
       byteHash,
     );
-    const reused = content !== null;
+    let reused = content !== null;
     if (!content) {
       const pages = await (options.extract ?? pymupdfExtractor)(fetched.bytes);
       content = await prisma.$transaction(async (tx) => {
-        const latest = await latestDocumentContent(tx, referenceId);
-        await supersedeDocumentContents(tx, referenceId);
-        const stored = await createDocumentContent(tx, {
+        await lockDocumentReference(tx, referenceId);
+        const stored = await storeNewVariant(tx, {
           referenceId,
-          variantNo: (latest?.variantNo ?? 0) + 1,
           byteHash,
-          byteSize: fetched.bytes.byteLength,
-          pageCount: pages.length,
-          bytes: new Uint8Array(fetched.bytes),
-          sourceUrl: fetched.finalUrl,
+          bytes: fetched.bytes,
+          finalUrl: fetched.finalUrl,
+          pages,
         });
-        if (pages.length)
-          await createDocumentPages(
-            tx,
-            pages.map((page) => ({
-              contentId: stored.id,
-              pageNo: page.page,
-              text: page.text,
-            })),
-          );
-        return stored;
+        reused = stored.reused;
+        return stored.content;
+      });
+    } else if (!content.isLatest) {
+      const cached = content;
+      content = await prisma.$transaction(async (tx) => {
+        await lockDocumentReference(tx, referenceId);
+        await supersedeDocumentContents(tx, referenceId);
+        return tx.documentContent.update({
+          where: { id: cached.id },
+          data: { isLatest: true },
+        });
       });
     }
-    await prisma.$transaction((tx) =>
-      enqueueDocumentEmbedding(tx, {
-        runId: job.runId,
-        itemIndex: job.itemIndex,
-        electoralTerm,
-        referenceId,
-        variantNo: content.variantNo,
-      }),
-    );
+    const pageRows = await listDocumentPages(prisma, content.id);
+    await prisma.$transaction(async (tx) => {
+      for (const page of pageRows) {
+        if (!page.text.trim()) continue;
+        await enqueueDocumentEmbedding(tx, {
+          runId: job.runId,
+          itemIndex: job.itemIndex,
+          electoralTerm,
+          referenceId,
+          variantNo: content.variantNo,
+          pageNo: page.pageNo,
+          priority: job.priority,
+        });
+      }
+    });
     await completeJob(prisma, job, workerId);
     return {
       status: "succeeded" as const,

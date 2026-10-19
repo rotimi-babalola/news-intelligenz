@@ -40,6 +40,7 @@ export async function POST(request: Request) {
       runIdFor,
       proceedingCap,
       followStoredParents: true,
+      scopeToStoredProceedings: true,
       fetchVorgangPage: liveVorgangFetcher(apiKey),
       fetchStepPage: steps.fetchPage,
       fetchVorgang: steps.fetchVorgang,

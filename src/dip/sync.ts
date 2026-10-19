@@ -35,6 +35,7 @@ export type SyncDipEndpointOptions = {
   now?: Date;
   proceedingCap?: number;
   followStoredParents?: boolean;
+  scopeToStoredProceedings?: boolean;
   retryDelayMs?: (attempt: number, error: unknown) => number;
   // Operator-selected recovery/backfill window, used verbatim instead of the
   // checkpoint-derived window. The checkpoint still only moves forward.
@@ -79,6 +80,7 @@ export async function syncDipEndpoint(
           ...common,
           now,
           followStoredParents: options.followStoredParents,
+          scopeToStoredProceedings: options.scopeToStoredProceedings,
           fetchPage: options.fetchPage,
           fetchVorgang: options.fetchVorgang,
         });
@@ -114,6 +116,7 @@ export type SyncDipTermsOptions = {
   now?: Date;
   proceedingCap?: number;
   followStoredParents?: boolean;
+  scopeToStoredProceedings?: boolean;
   retryDelayMs?: (attempt: number, error: unknown) => number;
   fetchVorgangPage: FetchVorgangPage;
   fetchStepPage: FetchStepPage;
@@ -139,6 +142,7 @@ export async function syncDipTerms(
           now,
           proceedingCap: options.proceedingCap,
           followStoredParents: options.followStoredParents,
+          scopeToStoredProceedings: options.scopeToStoredProceedings,
           retryDelayMs: options.retryDelayMs,
           fetchPage:
             endpoint === "/vorgang"

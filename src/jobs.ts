@@ -123,6 +123,7 @@ export type ClaimedJob = {
   payload: unknown;
   attempts: number;
   maxAttempts: number;
+  priority: number;
 };
 
 // One atomic claim: exactly one worker wins each ready job. Stale leases
@@ -184,7 +185,8 @@ export async function claimNextJob(
     )
     RETURNING id, dedupe_key AS "dedupeKey", source_kind AS "sourceKind", source_key AS "sourceKey",
       source_scope AS "sourceScope", run_id AS "runId",
-      item_index AS "itemIndex", operation, payload, attempts, max_attempts AS "maxAttempts"`,
+      item_index AS "itemIndex", operation, payload, attempts, max_attempts AS "maxAttempts",
+      priority`,
     ...params,
   )) as ClaimedJob[];
   const job = rows[0] ?? null;
