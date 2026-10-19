@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { retryJob } from "../src/admin/service.js";
 import { processNextDocument, requestDocument } from "../src/dip/documents.js";
 import { processNextDipEmbedding } from "../src/dip/embedding.js";
 import { EMBED_DOCUMENT, ON_DEMAND_PRIORITY } from "../src/dip/jobs.js";
@@ -488,6 +489,41 @@ test("a worker restart resumes the claimed document job", async () => {
       "succeeded",
     );
     assert.equal(await prisma.documentContent.count(), 1);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("admin retry reprocesses an exhausted document job", async () => {
+  const prisma = await isolatedDatabase();
+  try {
+    await collect(
+      prisma,
+      "doc-admin-retry",
+      step("701402", "http://127.0.0.1:1/doc.pdf"),
+    );
+    const job = await prisma.processingJob.findFirstOrThrow({
+      where: { operation: "process_document" },
+    });
+    await prisma.processingJob.update({
+      where: { id: job.id },
+      data: {
+        status: "exhausted",
+        attempts: job.maxAttempts,
+        lastError: "HTTP 503",
+        nextAttemptAt: new Date(0),
+      },
+    });
+    await retryJob(job.id);
+    const retried = await prisma.processingJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
+    assert.equal(retried.attempts, job.maxAttempts + 1);
+    assert.equal(retried.maxAttempts, job.maxAttempts * 2);
+    assert.equal(
+      retried.lastError,
+      "Document fetch failed: Blocked private/local destination",
+    );
   } finally {
     await prisma.$disconnect();
   }
