@@ -211,6 +211,7 @@ The [DIP criteria](docs/dip-design-notes.md#verification-criteria) add initial i
 | [Design notes](docs/phase-1-design-notes.md)                                               | Decisions, acceptance criteria and unresolved factual checks   |
 | [DIP amendment](docs/dip-design-notes.md)                                                  | Parliamentary collection decisions and verification criteria   |
 | [ADR: local multilingual DIP retrieval](docs/adr/0005-local-multilingual-dip-retrieval.md) | Local embeddings, PostgreSQL vector search and PDF processing  |
+| [ADR: proceeding-centric explainers](docs/adr/0006-proceeding-centric-explainers.md)       | Proceeding dossiers and grounded synthesis for reader queries  |
 | [Feed catalog](docs/phase-1-feed-catalog.md)                                               | Exact launch feed URLs                                         |
 | [Domain glossary](CONTEXT.md)                                                              | Shared terminology for publications, versions and discoveries  |
 | [ADR: publication versions](docs/adr/0001-preserve-publication-versions.md)                | Why historical article text is retained                        |
