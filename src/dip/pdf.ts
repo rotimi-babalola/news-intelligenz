@@ -102,6 +102,7 @@ export function pymupdfExtractor(
     options.scriptPath ?? join(process.cwd(), "scripts", "extract_pdf.py");
   return new Promise((resolve, reject) => {
     const child = execFile(
+      /* turbopackIgnore: true */
       command,
       [scriptPath],
       { maxBuffer: options.maxBufferBytes ?? 64 * 1024 * 1024 },
