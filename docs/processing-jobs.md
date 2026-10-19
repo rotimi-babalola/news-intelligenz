@@ -28,6 +28,28 @@ from the pending jobs; replaying a settled run returns the stored row.
   earliest ready job across sources, and `collectAll` records a per-feed
   failure while continuing with the remaining feeds.
 
+## DIP document jobs
+
+DIP collection stores the `fundstelle` reference and enqueues document work for
+references dated within the previous 14 days; it never fetches PDF bytes.
+`process_document` jobs are deduped per referenced document revision
+(`fundstelle.id`, `pdf_url`, `datum`), so two steps citing one Drucksache share
+a job and the background hot subset and an on-demand request converge on the
+same row.
+
+A document job fetches the bytes, caches them by reference ID and SHA-256 byte
+hash, extracts page text with PyMuPDF and enqueues one `embed_document` job per
+non-empty page. Identical bytes are reused without extraction; changed bytes
+become a new retained variant, and only the latest variant is searchable. A
+model outage therefore retries the embedding job, not the download.
+`POST /api/drain-documents` processes one document job per call; `POST
+/api/drain-dip` processes one proceeding, step or extracted-page embedding.
+
+Priority (`processing_jobs.priority`, higher first) lets `GET
+/api/documents/:referenceId` raise unprocessed work ahead of older background
+jobs. Stale claims requeue with an epoch `next_attempt_at`, so restart recovery
+does not depend on the app and PostgreSQL clocks agreeing.
+
 ## Sources
 
 Jobs carry a generic source identity (`source_kind`, `source_key`,

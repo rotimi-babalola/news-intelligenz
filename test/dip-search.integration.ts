@@ -102,12 +102,102 @@ test("German and English queries return only current DIP source versions", async
         url: "https://search.dip.bundestag.de/api/v1/vorgangsposition/456",
       });
       assert.equal(matches[0]?.proceedingApiId, "123");
+      // Storage-only document fields stay out of proceeding/step results.
+      assert.equal("referenceId" in matches[0]!, false);
+      assert.equal("pdfUrl" in matches[0]!, false);
+      assert.equal("pageNo" in matches[0]!, false);
       assert.equal(
         matches[1]?.summary,
         "Vorräte des Erdölbevorratungsverbandes",
       );
       assert.ok(matches[0]!.score > matches[1]!.score);
     }
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("document text returns the latest variant with page provenance", async () => {
+  const prisma = await isolatedDatabase();
+  try {
+    await prisma.proceedingStep.create({
+      data: {
+        apiId: "456",
+        proceedingApiId: "123",
+        institution: "BT",
+        stepLabel: "Kleine Anfrage",
+        title: "Freigabe von Erdölvorräten",
+        documentType: "Drucksache",
+        sourceUpdatedAt: new Date("2026-10-14T12:00:00Z"),
+        metadata: {},
+        latestVersionNo: 1,
+      },
+    });
+    await prisma.documentReference.create({
+      data: {
+        stepApiId: "456",
+        proceedingApiId: "123",
+        referenceId: "789",
+        documentNumber: "21/1001",
+        pdfUrl: "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
+        documentDate: new Date("2026-10-09"),
+        metadata: {},
+      },
+    });
+    const variant = async (variantNo: number, isLatest: boolean) => {
+      const content = await prisma.documentContent.create({
+        data: {
+          referenceId: "789",
+          variantNo,
+          byteHash: `hash-${variantNo}`,
+          byteSize: 4,
+          pageCount: 1,
+          bytes: new Uint8Array([1, 2, 3, variantNo]),
+          isLatest,
+        },
+      });
+      await prisma.documentPage.create({
+        data: {
+          contentId: content.id,
+          pageNo: 1,
+          text: `Haushalt Fassung ${variantNo}`,
+        },
+      });
+    };
+    await variant(1, false);
+    await variant(2, true);
+    for (const variantNo of [1, 2])
+      await saveDipEmbedding(prisma, {
+        sourceEntity: "dokument",
+        apiId: "789",
+        versionNo: variantNo,
+        sourcePage: 1,
+        model: EMBEDDING_MODEL,
+        documentInstruction: DOCUMENT_INSTRUCTION,
+        embedding: vector(1, 0),
+      });
+
+    const results = await searchDip(prisma, "Haushalt", 10, {
+      embed: async () => vector(1, 0),
+    });
+    const documents = results.filter((result) => result.entity === "dokument");
+    assert.equal(documents.length, 1);
+    const document = documents[0];
+    if (!document || document.entity !== "dokument") return;
+    assert.equal(document.versionNo, 2);
+    assert.equal(document.page, 1);
+    assert.equal(document.proceedingApiId, "123");
+    assert.deepEqual(document.document, {
+      referenceId: "789",
+      number: "21/1001",
+      page: 1,
+      pdfUrl: "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
+    });
+    assert.deepEqual(document.source, {
+      endpoint: "/vorgangsposition",
+      apiId: "456",
+      url: "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
+    });
   } finally {
     await prisma.$disconnect();
   }

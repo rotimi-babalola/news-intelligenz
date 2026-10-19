@@ -112,6 +112,7 @@ test("interrupted workers resume without duplicating committed work", async () =
         payload: stored.payload,
         attempts: stored.attempts,
         maxAttempts: stored.maxAttempts,
+        priority: stored.priority,
       });
     }
     assert.equal(await prisma.publication.count(), 2);

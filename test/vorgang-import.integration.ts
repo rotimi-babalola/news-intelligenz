@@ -248,3 +248,66 @@ test("local cap keeps the first records encountered and keeps syncing them", asy
   );
   await prisma.$disconnect();
 });
+
+test("a re-baseline with stored records keeps paging for updates", async () => {
+  const prisma = await isolatedDatabase();
+  await collectVorgang(prisma, {
+    runId: "dip-vorgang-cap-rebase-1",
+    electoralTerm: 21,
+    proceedingCap: 1,
+    fetchPage: fakeFetcher({
+      start: { documents: [doc("1")], next: "x" },
+      x: { documents: [], next: "x" },
+    }).fetchPage,
+  });
+  // No checkpoint, but one record is already stored: the cap can only skip new
+  // records, so later pages may still hold updates to known ones.
+  await prisma.dipCheckpoint.deleteMany({
+    where: { endpoint: "/vorgang", electoralTerm: 21 },
+  });
+  const { fetchPage, calls } = fakeFetcher({
+    start: { documents: [doc("2")], next: "c2" },
+    c2: { documents: [doc("1", { titel: "Aktualisiert" })], next: "c2" },
+  });
+  const result = await collectVorgang(prisma, {
+    runId: "dip-vorgang-cap-rebase-2",
+    electoralTerm: 21,
+    proceedingCap: 1,
+    fetchPage,
+  });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(
+    { stored: result.stored, capped: result.capped },
+    { stored: 1, capped: 1 },
+  );
+  assert.equal(
+    (await prisma.proceeding.findUniqueOrThrow({ where: { apiId: "1" } }))
+      .title,
+    "Aktualisiert",
+  );
+  await prisma.$disconnect();
+});
+
+test("a baseline cap stops paging once the cap is reached", async () => {
+  const prisma = await isolatedDatabase();
+  const { fetchPage, calls } = fakeFetcher({
+    start: { documents: [doc("1"), doc("2")], next: "c2" },
+    c2: { documents: [doc("3"), doc("4")], next: "c3" },
+    c3: { documents: [doc("5")], next: "c3" },
+  });
+  const result = await collectVorgang(prisma, {
+    runId: "dip-vorgang-cap-stop",
+    electoralTerm: 21,
+    proceedingCap: 1,
+    fetchPage,
+  });
+  // The cap fills on page one; later pages could only be capped, so the scan
+  // must not fetch them (that is what made the live run hit the rate limit).
+  assert.equal(calls.length, 1);
+  assert.deepEqual(
+    { stored: result.stored, capped: result.capped },
+    { stored: 1, capped: 1 },
+  );
+  assert.equal(await prisma.proceeding.count(), 1);
+  await prisma.$disconnect();
+});

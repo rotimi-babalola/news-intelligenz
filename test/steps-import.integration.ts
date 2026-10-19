@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { collectVorgang } from "../src/dip/vorgang.js";
 import { collectSteps, type FetchStepPage } from "../src/dip/steps.js";
+import {
+  findDipCheckpoint,
+  upsertDipCheckpoint,
+} from "../src/dip/repository.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 
 function proceeding(id: string, term = 21) {
@@ -287,6 +291,38 @@ test("backfills across pages keep distinct jobs and fetch outside the intake loc
   await prisma.$disconnect();
 });
 
+test("a failed parent backfill never fails the step run", async () => {
+  const prisma = await isolatedDatabase();
+  const { fetchPage } = fakeSteps({
+    start: { documents: [step("701400", "339567")], next: "end" },
+    end: { documents: [], next: "end" },
+  });
+  const result = await collectSteps(prisma, {
+    runId: "dip-steps-parent-error",
+    electoralTerm: 21,
+    followStoredParents: true,
+    fetchPage,
+    // The live single-item endpoint is behind a bot challenge and can 4xx.
+    fetchVorgang: async () => {
+      throw new Error("DIP /vorgang/339567 responded 400");
+    },
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.stored, 1);
+  assert.equal(result.backfilled, 0);
+  assert.equal(await prisma.proceeding.count(), 0);
+  // The step stays stored with its unresolved parent, never silently dropped.
+  assert.equal(
+    (
+      await prisma.proceedingStep.findUniqueOrThrow({
+        where: { apiId: "701400" },
+      })
+    ).proceedingApiId,
+    "339567",
+  );
+  await prisma.$disconnect();
+});
+
 test("changed steps version and update refs; replay adds nothing", async () => {
   const prisma = await isolatedDatabase();
   await prisma.proceeding.create({ data: proceeding("340135") });
@@ -404,6 +440,43 @@ test("local step collection follows the stored proceeding set without going sile
     where: { runId: "dip-steps-follow", itemIndex: 1 },
   });
   assert.deepEqual(skipped.errors, []);
+  await prisma.$disconnect();
+});
+
+test("stored-proceeding step collection queries only the stored parents and advances the checkpoint", async () => {
+  const prisma = await isolatedDatabase();
+  for (const id of ["340135", "340161"])
+    await prisma.proceeding.create({ data: proceeding(id) });
+  await upsertDipCheckpoint(
+    prisma,
+    "/vorgangsposition",
+    21,
+    new Date("2026-10-01T00:00:00.000Z"),
+  );
+  const { fetchPage, calls } = fakeSteps({
+    start: {
+      documents: [step("701400", "340135"), step("701425", "340161")],
+      next: "c2",
+    },
+    c2: { documents: [], next: "c2" },
+  });
+  const result = await collectSteps(prisma, {
+    runId: "dip-steps-cap",
+    electoralTerm: 21,
+    proceedingCap: 1000,
+    scopeToStoredProceedings: true,
+    fetchPage,
+  });
+  assert.equal(result.stored, 2);
+  assert.deepEqual(calls[0]?.vorgangIds, ["340135", "340161"]);
+  // Every stored proceeding was scanned, so the window advances and the next
+  // run uses the overlap instead of re-reading the whole stored set.
+  assert.equal(
+    (
+      await findDipCheckpoint(prisma, "/vorgangsposition", 21)
+    )?.updatedThrough?.toISOString(),
+    "2026-10-09T11:24:22.000Z",
+  );
   await prisma.$disconnect();
 });
 

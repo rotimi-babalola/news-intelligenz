@@ -311,7 +311,21 @@ test("reordered step restart keeps both embedding and document jobs", async () =
     fetchPage: async (params) => {
       if (params.cursor === undefined)
         return {
-          documents: [proceedingStep(restarted ? "701511" : "701510")],
+          documents: [
+            restarted
+              ? proceedingStep("701511", {
+                  // A distinct document: document work is deduped per
+                  // referenced document, not per citing step.
+                  fundstelle: {
+                    id: "29701500",
+                    dokumentnummer: "21/1002",
+                    datum: "2026-10-09",
+                    pdf_url:
+                      "https://dserver.bundestag.de/btd/21/010/2110020.pdf",
+                  },
+                })
+              : proceedingStep("701510"),
+          ],
           cursor: "c2",
           numFound: 0,
         };

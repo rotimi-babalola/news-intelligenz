@@ -2,8 +2,12 @@ import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { createRun, finalizeRun, findRun } from "../import/run.repository";
 import { RateLimitedError, backoffMs } from "../jobs";
 import { runIdSchema } from "../validation";
-import { findDipCheckpoint, upsertDipCheckpoint } from "./repository";
-import type { FetchVorgangPage } from "./types";
+import {
+  countProceedingsByTerm,
+  findDipCheckpoint,
+  upsertDipCheckpoint,
+} from "./repository";
+import type { FetchVorgangPage, PageParams } from "./types";
 import { scopeInputHash } from "./util";
 
 // Terminal failures (bad request, unknown cursor semantics aside) never
@@ -17,6 +21,10 @@ type Options = {
   updatedTo?: Date;
   proceedingCap?: number;
   followStoredParents?: boolean;
+  // Step collection can query only the stored parent set. Batched because the
+  // DIP API takes the filter as repeated query params.
+  scopeToStoredProceedings?: boolean;
+  vorgangIds?: string[];
   retryDelayMs?: (attempt: number, error: unknown) => number;
   fetchPage: FetchVorgangPage;
 };
@@ -35,14 +43,26 @@ export function pickCheckpointTarget(
 
 const PAGE_FETCH_ATTEMPTS = 3;
 
+// The DIP API takes `f.vorgang` as a repeatable query parameter, so capped
+// step collection asks for the stored parent set in URL-sized batches instead
+// of paginating the whole term.
+const STEP_FILTER_BATCH = 50;
+
+function batch<T>(items: T[], size: number): T[][] {
+  const batches: T[][] = [];
+  for (let i = 0; i < items.length; i += size)
+    batches.push(items.slice(i, i + size));
+  return batches;
+}
+
 function defaultRetryDelayMs(attempt: number, error: unknown) {
   if (error instanceof RateLimitedError) return error.retryAfterMs;
   return backoffMs(attempt);
 }
 
 async function fetchPageWithRetry(
-  fetchPage: FetchVorgangPage,
-  params: Parameters<FetchVorgangPage>[0],
+  fetchPage: Options["fetchPage"],
+  params: PageParams,
   retryDelayMs: (attempt: number, error: unknown) => number,
 ) {
   let attempt = 0;
@@ -92,6 +112,8 @@ export async function collectDipPages(
     scope.proceedingCap = options.proceedingCap;
   if (options.followStoredParents !== undefined)
     scope.followStoredParents = options.followStoredParents;
+  if (options.scopeToStoredProceedings !== undefined)
+    scope.scopeToStoredProceedings = options.scopeToStoredProceedings;
 
   const replayed = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
@@ -128,73 +150,118 @@ export async function collectDipPages(
       replayed: true,
     };
 
-  let cursor: string | undefined;
   let itemIndex = 0;
   let maxObserved: Date | null = null;
-  const totals = {
+  type Totals = {
+    valid: number;
+    invalid: number;
+    stored: number;
+    versionsAdded: number;
+    capped: number;
+    backfilled: number;
+  };
+  const zeroTotals = (): Totals => ({
     valid: 0,
     invalid: 0,
     stored: 0,
     versionsAdded: 0,
     capped: 0,
     backfilled: 0,
+  });
+  const totals = zeroTotals();
+  const addTotals = (target: Totals, counts: Totals) => {
+    target.valid += counts.valid;
+    target.invalid += counts.invalid;
+    target.stored += counts.stored;
+    target.versionsAdded += counts.versionsAdded;
+    target.capped += counts.capped;
+    target.backfilled += counts.backfilled;
+  };
+  // A cursor restart recounts flow, but versions created before the failure
+  // persist in storage and stay credited to this run. Rolling back the flow
+  // counters alone avoids double counting them.
+  const rollbackFlowTotals = (counts: Totals) => {
+    totals.valid -= counts.valid;
+    totals.invalid -= counts.invalid;
+    totals.stored -= counts.stored;
+    totals.capped -= counts.capped;
+    totals.backfilled -= counts.backfilled;
   };
   const retryDelayMs = options.retryDelayMs ?? defaultRetryDelayMs;
-  const fetchParams = (cursor: string | undefined) => ({
-    wahlperiode: options.electoralTerm,
-    aktualisiertStart: options.updatedFrom?.toISOString(),
-    aktualisiertEnd: options.updatedTo?.toISOString(),
-    cursor,
-  });
-  const resetTotals = () => {
-    // Flow counts recount the final pass, but versions created before the
-    // failure persist in storage and stay credited to this run.
-    totals.valid = 0;
-    totals.invalid = 0;
-    totals.stored = 0;
-    totals.capped = 0;
-    totals.backfilled = 0;
-  };
-  // An expired cursor surfaces as a mid-pagination failure. Writes are
-  // idempotent (same run ID reuses candidates, discoveries, and versions),
-  // so the window restarts once from the first page instead of resuming a
-  // dead cursor. A first-page failure has no cursor to blame and fails fast.
-  let restarted = false;
+  // One filter group means a normal term-wide scan. Stored-proceeding step
+  // collection supplies parent IDs, so each group is one `f.vorgang` batch.
+  const groups: (string[] | undefined)[] =
+    options.vorgangIds === undefined
+      ? [undefined]
+      : batch(options.vorgangIds, STEP_FILTER_BATCH);
   try {
-    for (;;) {
-      let page;
-      try {
-        page = await fetchPageWithRetry(
-          options.fetchPage,
-          fetchParams(cursor),
-          retryDelayMs,
-        );
-      } catch (error) {
-        if (!restarted && cursor !== undefined) {
-          restarted = true;
-          cursor = undefined;
-          itemIndex = 0;
-          maxObserved = null;
-          resetTotals();
-          continue;
+    // The early-stop shortcut is only safe when the cap was empty at the
+    // start: a later page can then only add capped records. When proceedings
+    // are already stored, later pages may hold updates to known records.
+    const firstBaseline =
+      options.proceedingCap !== undefined &&
+      options.updatedFrom === undefined &&
+      options.vorgangIds === undefined &&
+      (await countProceedingsByTerm(prisma, options.electoralTerm)) === 0;
+    let stopped = false;
+    for (const vorgangIds of groups) {
+      if (stopped) break;
+      let cursor: string | undefined;
+      const groupStartIndex = itemIndex;
+      let groupTotals = zeroTotals();
+      // An expired cursor surfaces as a mid-pagination failure. Writes are
+      // idempotent (same run ID reuses candidates, discoveries, and versions),
+      // so the group restarts once from its first page instead of resuming a
+      // dead cursor. A first-page failure has no cursor to blame and fails
+      // fast.
+      let restarted = false;
+      for (;;) {
+        let page;
+        try {
+          page = await fetchPageWithRetry(
+            options.fetchPage,
+            {
+              wahlperiode: options.electoralTerm,
+              aktualisiertStart: options.updatedFrom?.toISOString(),
+              aktualisiertEnd: options.updatedTo?.toISOString(),
+              cursor,
+              ...(vorgangIds === undefined ? {} : { vorgangIds }),
+            },
+            retryDelayMs,
+          );
+        } catch (error) {
+          if (!restarted && cursor !== undefined) {
+            restarted = true;
+            cursor = undefined;
+            itemIndex = groupStartIndex;
+            // Flow counts recount the final pass, but versions created before
+            // the failure persist in storage and stay credited to this run.
+            rollbackFlowTotals(groupTotals);
+            groupTotals = zeroTotals();
+            continue;
+          }
+          throw error;
         }
-        throw error;
+        const counts = await storePage(page.documents, itemIndex, runId);
+        itemIndex += page.documents.length;
+        addTotals(totals, counts);
+        addTotals(groupTotals, counts);
+        if (
+          counts.maxObserved &&
+          (!maxObserved || counts.maxObserved > maxObserved)
+        )
+          maxObserved = counts.maxObserved;
+        // An empty-cap baseline keeps only the first N records; once a page
+        // starts skipping, every later page can only be capped, so stop instead
+        // of paginating the whole term. Incremental windows and runs that
+        // already store records still page fully so updates are never missed.
+        if (firstBaseline && counts.capped > 0) {
+          stopped = true;
+          break;
+        }
+        if (!page.cursor || page.cursor === cursor) break;
+        cursor = page.cursor;
       }
-      const counts = await storePage(page.documents, itemIndex, runId);
-      itemIndex += page.documents.length;
-      totals.valid += counts.valid;
-      totals.invalid += counts.invalid;
-      totals.stored += counts.stored;
-      totals.versionsAdded += counts.versionsAdded;
-      totals.capped += counts.capped;
-      totals.backfilled += counts.backfilled;
-      if (
-        counts.maxObserved &&
-        (!maxObserved || counts.maxObserved > maxObserved)
-      )
-        maxObserved = counts.maxObserved;
-      if (!page.cursor || page.cursor === cursor) break;
-      cursor = page.cursor;
     }
   } catch (error) {
     await prisma.$transaction(async (tx) => {
@@ -221,6 +288,8 @@ export async function collectDipPages(
       completedAt: new Date(),
       error: null,
     });
+    // A stored-proceeding scan still covers every proceeding this run knows
+    // about, so its window advances like any other completed scan.
     await upsertDipCheckpoint(
       tx,
       endpoint,

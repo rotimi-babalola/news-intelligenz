@@ -13,6 +13,7 @@ const bodySchema = z.object({
   runId: runIdSchema,
   electoralTerm: z.number().int().min(1).max(30),
   source: z.literal("live"),
+  proceedingCap: z.number().int().min(1).default(LOCAL_PROCEEDING_CAP),
 });
 
 // DIP data may be retained and published with the Bundestag as the source.
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
   }
   const prisma = database();
   try {
-    const { runId, electoralTerm } = parsed.data;
+    const { runId, electoralTerm, proceedingCap } = parsed.data;
     const runIdFor = (endpoint: string, term: number) =>
       `${runId}:${endpoint}:${term}`;
     const apiKey = process.env.BUNDESTAG_API_KEY;
@@ -37,8 +38,9 @@ export async function POST(request: Request) {
     const outcome = await syncDipTerms(prisma, {
       terms: [electoralTerm],
       runIdFor,
-      proceedingCap: LOCAL_PROCEEDING_CAP,
+      proceedingCap,
       followStoredParents: true,
+      scopeToStoredProceedings: true,
       fetchVorgangPage: liveVorgangFetcher(apiKey),
       fetchStepPage: steps.fetchPage,
       fetchVorgang: steps.fetchVorgang,

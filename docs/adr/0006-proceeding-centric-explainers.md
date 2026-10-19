@@ -1,0 +1,7 @@
+---
+status: accepted
+---
+
+# Explain parliamentary activity through proceedings, not isolated search hits
+
+Semantic retrieval returns evidence units — document pages, proceeding steps and proceedings — but a reader's question is what the Bundestag is doing about a matter. Treat the proceeding as the unit of understanding: roll retrieved document pages and steps up to their parent proceeding, rank proceedings rather than pages, and cap evidence per document so omnibus Drucksachen cannot dominate the results. Assemble a deterministic dossier from the proceeding (title, type, deliberation state, dates), its ordered step timeline and the best-matching document evidence. Structure documents before summarising them: detect section headings (for example the `A.4` and `B.21` items in a Drucksache), retain page ranges and produce section-level outlines, because a whole-page embedding cannot explain a document that bundles many unrelated items. Synthesis over a dossier must cite the step or document page supporting each claim and must abstain when the stored evidence does not answer the question; retrieval relevance and answer confidence stay separate signals. Persist derived outlines and briefs keyed by source version or content hash so they regenerate only when the underlying record changes. The query user interface and answer generation are deferred to a later ticket; this decision fixes the shape they consume.

@@ -81,6 +81,7 @@ export type EnqueueSpec = {
   operation: string;
   payload: Prisma.InputJsonValue;
   maxAttempts?: number;
+  priority?: number;
 };
 
 export async function enqueueJob(
@@ -104,6 +105,7 @@ export async function enqueueJob(
       operation: spec.operation,
       payload: spec.payload,
       maxAttempts: spec.maxAttempts ?? MAX_ATTEMPTS_DEFAULT,
+      priority: spec.priority ?? 0,
     },
     update: {},
   });
@@ -121,6 +123,7 @@ export type ClaimedJob = {
   payload: unknown;
   attempts: number;
   maxAttempts: number;
+  priority: number;
 };
 
 // One atomic claim: exactly one worker wins each ready job. Stale leases
@@ -172,13 +175,18 @@ export async function claimNextJob(
         status IN ('pending', 'retrying') OR
         (status = 'claimed' AND lease_expires_at IS NOT NULL AND lease_expires_at <= now())
       )
-      ORDER BY next_attempt_at ASC, created_at ASC
+      -- On-demand document requests set a higher priority; ties keep the
+      -- earliest ready job first.
+      -- shortcut: no (priority, next_attempt_at) index; add one if the jobs
+      -- table grows far beyond local single-operator scale.
+      ORDER BY priority DESC, next_attempt_at ASC, created_at ASC
       LIMIT 1
       FOR UPDATE SKIP LOCKED
     )
     RETURNING id, dedupe_key AS "dedupeKey", source_kind AS "sourceKind", source_key AS "sourceKey",
       source_scope AS "sourceScope", run_id AS "runId",
-      item_index AS "itemIndex", operation, payload, attempts, max_attempts AS "maxAttempts"`,
+      item_index AS "itemIndex", operation, payload, attempts, max_attempts AS "maxAttempts",
+      priority`,
     ...params,
   )) as ClaimedJob[];
   const job = rows[0] ?? null;
@@ -248,13 +256,15 @@ export async function failJob(
 
 // Explicit restart recovery: stale claims become immediately reclaimable
 // instead of waiting for the next claim scan to pick up the expired lease.
+// Epoch makes "now" independent of clock agreement between the app and
+// PostgreSQL, so a restart always reclaims its own work first.
 export async function requeueStaleClaims(prisma: PrismaClient) {
   return prisma.processingJob.updateMany({
     where: {
       status: "claimed",
       leaseExpiresAt: { lte: new Date() },
     },
-    data: { status: "retrying", nextAttemptAt: new Date() },
+    data: { status: "retrying", nextAttemptAt: new Date(0) },
   });
 }
 

@@ -1,7 +1,9 @@
 import type { PrismaClient } from "../generated/prisma/client";
 import { claimNextJob, completeJob, failJob } from "../jobs";
-import { EMBED_PROCEEDING, EMBED_STEP } from "./jobs";
+import { EMBED_DOCUMENT, EMBED_PROCEEDING, EMBED_STEP } from "./jobs";
 import {
+  findDocumentContent,
+  findDocumentPage,
   findProceedingVersion,
   findStepVersion,
   saveDipEmbedding,
@@ -56,16 +58,65 @@ export async function processNextDipEmbedding(
   options: {
     embed?: Embed;
     jobId?: string;
-    operation?: typeof EMBED_PROCEEDING | typeof EMBED_STEP;
+    operation?:
+      typeof EMBED_PROCEEDING | typeof EMBED_STEP | typeof EMBED_DOCUMENT;
   } = {},
 ) {
   const job = await claimNextJob(prisma, workerId, undefined, {
-    operation: options.operation ?? [EMBED_PROCEEDING, EMBED_STEP],
+    operation: options.operation ?? [
+      EMBED_PROCEEDING,
+      EMBED_STEP,
+      EMBED_DOCUMENT,
+    ],
     jobId: options.jobId,
   });
   if (!job) return { status: "empty" as const };
   try {
     const sourceOperation = job.operation;
+    if (sourceOperation === EMBED_DOCUMENT) {
+      const payload = job.payload as {
+        referenceId?: unknown;
+        variantNo?: unknown;
+        pageNo?: unknown;
+      };
+      if (
+        typeof payload.referenceId !== "string" ||
+        typeof payload.variantNo !== "number" ||
+        !Number.isInteger(payload.variantNo) ||
+        payload.variantNo < 1 ||
+        typeof payload.pageNo !== "number" ||
+        !Number.isInteger(payload.pageNo) ||
+        payload.pageNo < 1
+      )
+        throw new Error("Document embedding job has an invalid variant page");
+      const content = await findDocumentContent(
+        prisma,
+        payload.referenceId,
+        payload.variantNo,
+      );
+      if (!content)
+        throw new Error("Document variant for embedding no longer exists");
+      // One job covers one page, so one drain call embeds one extracted page.
+      const page = await findDocumentPage(prisma, content.id, payload.pageNo);
+      if (!page)
+        throw new Error("Document page for embedding no longer exists");
+      const text = page.text.trim();
+      if (text) {
+        const embedding = await (options.embed ?? embedText)(text);
+        assertEmbedding(embedding);
+        await saveDipEmbedding(prisma, {
+          sourceEntity: "dokument",
+          apiId: payload.referenceId,
+          versionNo: payload.variantNo,
+          sourcePage: page.pageNo,
+          model: EMBEDDING_MODEL,
+          documentInstruction: DOCUMENT_INSTRUCTION,
+          embedding,
+        });
+      }
+      await completeJob(prisma, job, workerId);
+      return { status: "succeeded" as const, jobId: job.id };
+    }
     if (sourceOperation !== EMBED_PROCEEDING && sourceOperation !== EMBED_STEP)
       throw new Error("Unexpected DIP embedding operation");
     const payload = job.payload as { apiId?: unknown; versionNo?: unknown };

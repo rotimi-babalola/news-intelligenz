@@ -52,6 +52,7 @@ export function saveDipEmbedding(
     sourceEntity: ParliamentaryEntity;
     apiId: string;
     versionNo: number;
+    sourcePage?: number;
     model: string;
     documentInstruction: string;
     embedding: number[];
@@ -59,12 +60,13 @@ export function saveDipEmbedding(
 ) {
   return client.$executeRawUnsafe(
     `INSERT INTO ${qualifiedTable("dip_embeddings")}
-      (id, source_entity, source_api_id, source_version_no, model, document_instruction, embedding)
-     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6::public.vector)
-     ON CONFLICT (source_entity, source_api_id, source_version_no, model, document_instruction) DO NOTHING`,
+      (id, source_entity, source_api_id, source_version_no, source_page, model, document_instruction, embedding)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::public.vector)
+     ON CONFLICT (source_entity, source_api_id, source_version_no, source_page, model, document_instruction) DO NOTHING`,
     input.sourceEntity,
     input.apiId,
     input.versionNo,
+    input.sourcePage ?? 0,
     input.model,
     input.documentInstruction,
     JSON.stringify(input.embedding),
@@ -80,8 +82,16 @@ export type DipSearchRow = {
   summary: string | null;
   stepLabel: string | null;
   proceedingApiId: string | null;
+  referenceId: string | null;
+  documentNumber: string | null;
+  pdfUrl: string | null;
+  stepId: string | null;
+  pageNo: number | null;
 };
 
+// Records join their current version; document text joins the citation and
+// only the latest fetched content variant, so historical bytes never produce
+// duplicate hits. One citation is chosen per document to keep results unique.
 export function searchDipEmbeddings(
   client: Client,
   input: {
@@ -95,9 +105,16 @@ export function searchDipEmbeddings(
     `SELECT e.source_entity::text AS "entity", e.source_api_id AS "apiId",
       e.source_version_no AS "versionNo",
       1 - (e.embedding <=> $1::public.vector) AS "score",
-      COALESCE(p.title, s.title) AS "title",
+      CASE WHEN e.source_entity = 'dokument' THEN dr.document_number
+        ELSE COALESCE(p.title, s.title) END AS "title",
       COALESCE(p.metadata->>'abstract', s.metadata->>'abstract') AS "summary",
-      s.step_label AS "stepLabel", s.proceeding_id AS "proceedingApiId"
+      s.step_label AS "stepLabel",
+      COALESCE(s.proceeding_id, dr.proceeding_id) AS "proceedingApiId",
+      dr.reference_id AS "referenceId",
+      dr.document_number AS "documentNumber",
+      dr.pdf_url AS "pdfUrl",
+      dr.step_id AS "stepId",
+      CASE WHEN e.source_entity = 'dokument' THEN e.source_page END AS "pageNo"
      FROM ${qualifiedTable("dip_embeddings")} e
      LEFT JOIN ${qualifiedTable("proceedings")} p
        ON e.source_entity = 'vorgang' AND p.api_id = e.source_api_id
@@ -105,8 +122,19 @@ export function searchDipEmbeddings(
      LEFT JOIN ${qualifiedTable("proceeding_steps")} s
        ON e.source_entity = 'vorgangsposition' AND s.api_id = e.source_api_id
        AND s.latest_version_no = e.source_version_no
+     LEFT JOIN LATERAL (
+       SELECT r.reference_id, r.document_number, r.pdf_url, r.step_id,
+         r.proceeding_id
+       FROM ${qualifiedTable("document_references")} r
+       JOIN ${qualifiedTable("document_contents")} c
+         ON c.reference_id = r.reference_id
+         AND c.variant_no = e.source_version_no AND c.is_latest
+       WHERE e.source_entity = 'dokument' AND r.reference_id = e.source_api_id
+       ORDER BY r.observed_at DESC
+       LIMIT 1
+     ) dr ON true
      WHERE e.model = $2 AND e.document_instruction = $3
-       AND (p.api_id IS NOT NULL OR s.api_id IS NOT NULL)
+       AND (p.api_id IS NOT NULL OR s.api_id IS NOT NULL OR dr.reference_id IS NOT NULL)
      ORDER BY e.embedding <=> $1::public.vector, e.source_entity, e.source_api_id
      LIMIT $4`,
     JSON.stringify(input.embedding),
@@ -140,6 +168,19 @@ export function createProceedingVersion(
 
 export function countProceedingsByTerm(client: Client, electoralTerm: number) {
   return client.proceeding.count({ where: { electoralTerm } });
+}
+
+// Capped step collection follows the stored proceeding set; a stable order
+// keeps the request sequence reproducible across runs.
+export function listProceedingApiIdsByTerm(
+  client: Client,
+  electoralTerm: number,
+) {
+  return client.proceeding.findMany({
+    where: { electoralTerm },
+    select: { apiId: true },
+    orderBy: { apiId: "asc" },
+  });
 }
 
 export function upsertDipCandidate(
@@ -319,6 +360,102 @@ export function findDocumentReference(client: Client, stepApiId: string) {
   return client.documentReference.findUnique({ where: { stepApiId } });
 }
 
+// Steps are discovered by collection runs; the latest encounter supplies the
+// run a later on-demand document job belongs to.
+export function latestStepDiscovery(client: Client, apiId: string) {
+  return client.parliamentaryDiscovery.findFirst({
+    where: { entity: "vorgangsposition", apiId },
+    orderBy: { discoveredAt: "desc" },
+  });
+}
+
+// A reference id may be cited by more than one step; on-demand requests only
+// need one stored citation to resolve metadata for the document.
+export function findDocumentReferenceById(client: Client, referenceId: string) {
+  return client.documentReference.findFirst({
+    where: { referenceId },
+    orderBy: { observedAt: "desc" },
+  });
+}
+
+export function findDocumentContentByHash(
+  client: Client,
+  referenceId: string,
+  byteHash: string,
+) {
+  return client.documentContent.findUnique({
+    where: { referenceId_byteHash: { referenceId, byteHash } },
+  });
+}
+
+export function latestDocumentContent(client: Client, referenceId: string) {
+  return client.documentContent.findFirst({
+    where: { referenceId, isLatest: true },
+    orderBy: { variantNo: "desc" },
+  });
+}
+
+// Variant numbers only grow, even when an older variant is promoted back to
+// latest: reused bytes must never reuse a number held by another variant.
+export async function maxDocumentVariantNo(
+  client: Client,
+  referenceId: string,
+) {
+  const result = await client.documentContent.aggregate({
+    where: { referenceId },
+    _max: { variantNo: true },
+  });
+  return result._max.variantNo ?? 0;
+}
+
+export function findDocumentContent(
+  client: Client,
+  referenceId: string,
+  variantNo: number,
+) {
+  return client.documentContent.findUnique({
+    where: { referenceId_variantNo: { referenceId, variantNo } },
+  });
+}
+
+export function createDocumentContent(
+  client: Client,
+  data: Prisma.DocumentContentUncheckedCreateInput,
+) {
+  return client.documentContent.create({ data });
+}
+
+export function createDocumentPages(
+  client: Client,
+  data: Prisma.DocumentPageUncheckedCreateInput[],
+) {
+  return client.documentPage.createMany({ data });
+}
+
+export function listDocumentPages(client: Client, contentId: string) {
+  return client.documentPage.findMany({
+    where: { contentId },
+    orderBy: { pageNo: "asc" },
+  });
+}
+
+export function findDocumentPage(
+  client: Client,
+  contentId: string,
+  pageNo: number,
+) {
+  return client.documentPage.findUnique({
+    where: { contentId_pageNo: { contentId, pageNo } },
+  });
+}
+
+export function supersedeDocumentContents(client: Client, referenceId: string) {
+  return client.documentContent.updateMany({
+    where: { referenceId, isLatest: true },
+    data: { isLatest: false },
+  });
+}
+
 export function upsertDocumentReference(
   client: Client,
   data: Prisma.DocumentReferenceUncheckedCreateInput,
@@ -333,6 +470,7 @@ export function upsertDocumentReference(
       pdfUrl: data.pdfUrl,
       documentDate: data.documentDate,
       metadata: data.metadata,
+      observedAt: new Date(),
     },
   });
 }
