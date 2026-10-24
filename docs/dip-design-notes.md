@@ -1,10 +1,10 @@
 # DIP collection design interview
 
-Status: DIP collection, multilingual retrieval, and lazy PDF processing decisions confirmed by the user and implemented; this document records the accepted design.
+Status: DIP collection, multilingual retrieval, and lazy PDF processing decisions confirmed and implemented. [ADR 0007](adr/0007-dip-only-parliamentary-collection.md) later made DIP the sole target source; news references below describe the earlier phase.
 
 ## Settled decisions
 
-- Replace Bundestag RSS collection with DIP API collection. Keep the public-news RSS sources.
+- Replace Bundestag RSS collection with DIP API collection. The earlier choice to keep public-news RSS was superseded by ADR 0007; the target now collects DIP only.
 - Use `/vorgang` as the entry point for parliamentary proceedings and their summaries and deliberation status. Collect individual proceeding steps through `/vorgangsposition` as evidence of developments.
 - Include all proceeding types in the current electoral term, rather than restricting collection to legislation.
 - Treat proceedings and proceeding steps as distinct domain concepts; a proceeding is not itself an article or institutional document.
@@ -17,12 +17,12 @@ Status: DIP collection, multilingual retrieval, and lazy PDF processing decision
 - Provide a retrieval API for German and English queries against one multilingual index. Return matching proceedings, steps, and processed PDF text with source references; do not generate answers or add a reader-facing chat interface in this increment.
 - Fetch and process PDF bytes in independent, low-priority document jobs for references whose `fundstelle.datum` is within the previous 14 days. The on-demand document API returns metadata and the original `pdf_url` immediately and raises processing priority when an unprocessed document is requested. PDF jobs do not block DIP import checkpoints.
 - Extract PDF text with PyMuPDF and embed searchable text while retaining its document reference and page provenance. Keep fetched document bytes as content-addressed cache entries keyed by `fundstelle.id` and byte hash; retain each fetched variant indefinitely, subject to source permissions. A changed byte hash represents a distinct content variant. Cache reuse does not establish permission to retain or republish source content.
-- Do not use news-to-proceeding overlap to select PDFs in this increment. Reliable linking between news publications and proceedings is future work.
+- Select PDFs from DIP document dates or on-demand requests, without news overlap.
 - Preserve changed states of proceedings and steps. An API record update is a data change, not by itself evidence of a new parliamentary event; documented proceeding steps provide evidence of developments.
 - In nonlocal environments, collect all proceedings returned for selected electoral terms and retain all their steps, labeled by institution. Coverage includes Bundestag, Bundesrat, Bundesversammlung, and Europakammer activity; call the source parliamentary activity. In local environments, import steps for the capped set of proceedings.
-- Keep daily collection at 07:00 Europe/Berlin with six hours of overlap. Track proceedings and steps independently by update timestamp. Advance each checkpoint only after all pages are durably stored; retries do not block independent news collection.
+- Keep daily collection at 07:00 Europe/Berlin with six hours of overlap. Track proceedings and steps independently by update timestamp. Advance each checkpoint only after all pages are durably stored.
 - Add new electoral terms explicitly and continue checking previously included terms for updates. Do not automatically import every historical term.
-- Provide an internal proceeding list and detail view with summary, status, steps, document references, retained versions, collection progress, and failures. Keep articles separate; automatic linking of reporting to proceedings is deferred.
+- Provide an internal proceeding list and detail view with summary, status, steps, document references, retained versions, collection progress, and failures. Historical articles remain in legacy inspection paths until cleanup.
 
 ## API evidence
 
@@ -62,8 +62,8 @@ Source: user-supplied DIP OpenAPI specification, version 1.5 (`/Users/rotimibaba
 - Demonstrate multi-page collection and recovery from interruption without prematurely advancing a checkpoint or duplicating records, discoveries, or versions.
 - Demonstrate independent step updates, changed-state retention, unchanged-record replay, and separation of source update time, document date, and observation time.
 - Verify the transition from initial import to incremental collection and continued updates for previously selected terms.
-- Show a DIP failure alongside successful independent public-news collection and inspect both outcomes in the admin.
+- Show a failure in one DIP endpoint alongside successful collection from the other, and inspect both outcomes in the admin.
 - Verify multilingual retrieval against proceeding summaries, step text, and processed PDF text, returning source-linked results without answer generation.
 - Demonstrate lazy PDF processing: metadata import does not fetch bytes; the 14-day hot subset is queued independently; an on-demand request returns the source link immediately and raises processing priority.
 
-These supplement the existing Phase 1 acceptance criteria. The architecture, feed catalog, glossary, and README describe the accepted target design; existing runtime code remains the synthetic RSS implementation.
+These are the active Phase 1 collection criteria after ADR 0007. The architecture and README describe the target design; the feed catalog is historical. Existing runtime code still exposes news collection.

@@ -1,8 +1,8 @@
 # Phase 1 design interview
 
-These notes preserve the original confirmed design interview. The confirmed [DIP amendment](dip-design-notes.md) supersedes the Bundestag RSS source, publication-only model, and institutional collection details below: nine public-news RSS feeds remain, and DIP proceedings and steps supply parliamentary activity. The [Phase 1 architecture](phase-1-architecture.md) incorporates that amendment. These interviews do not authorize implementation.
+These notes preserve the original news-and-RSS design interview as historical context. The later [DIP-only decision](adr/0007-dip-only-parliamentary-collection.md) supersedes public-news RSS, news search, article extraction, publication workflows, and their acceptance criteria below. The active target and acceptance scope are in the [Phase 1 architecture](phase-1-architecture.md); DIP details remain in the [DIP design notes](dip-design-notes.md).
 
-## Original agreed direction (see DIP amendment above)
+## Original agreed direction (superseded)
 
 Phase 1 deliverable: a fault-tolerant collection system combining targeted search agents, parliamentary discovery and direct RSS feeds into a validated, deduplicated and traceable stream of German news content. It collects, processes, and stores news according to a shared schema. There is no reader-facing product in this phase; the inspection page is an internal operational tool.
 
@@ -40,9 +40,9 @@ Phase 1 deliverable: a fault-tolerant collection system combining targeted searc
 - Check applicable retention and reuse permissions per source before enabling retained full-text versions. Where unresolved, retain only permitted metadata and links; do not assume all metadata retention is permitted by default.
 - Delegate remaining technical selections (runtime, search provider, hosting, exact query wording, and bounded retry settings) to implementation research, guided by free-tier availability and measured results. Document selections and reasoning; revisit payment or scope changes with the user.
 
-## Agreed completion criteria
+## Historical completion criteria (superseded)
 
-These original criteria remain applicable; the [DIP verification criteria](dip-design-notes.md#verification-criteria) supplement them for parliamentary collection.
+These criteria describe the superseded news plan and are no longer Phase 1 acceptance criteria. Use the [DIP verification criteria](dip-design-notes.md#verification-criteria) and the [current architecture](phase-1-architecture.md#acceptance) instead.
 
 - Seven consecutive scheduled runs with inspectable results and failures.
 - Repeating a run creates no duplicate publications or discovery encounters.
@@ -54,14 +54,14 @@ These original criteria remain applicable; the [DIP verification criteria](dip-d
 
 ## Future architecture scope
 
-- Generate English explainers that make the original reporting understandable. Phase 1 collects source material; it does not generate explainers. Broader contextual or personal-impact analysis is not an agreed requirement.
+- Generate English explainers grounded in DIP proceedings, steps, and documents. Phase 1 collects and retrieves source material; it does not generate explainers.
 - Add coverage of the state parliaments of all 16 Bundesländer. Initial Bundestag coverage must not be described as comprehensive government coverage.
 - Keep future explainers as downstream consumers of collected material and state-parliament coverage as an extension of collection. Detailed interfaces and storage choices remain unresolved.
 
 ## Design review status and implementation prerequisites
 
-- The original Phase 1 decisions are supplemented by the accepted DIP retrieval and PDF-processing amendments in [DIP design notes](dip-design-notes.md). Runtime implementation remains pending and is tracked in the linked GitHub issues.
-- Source-specific permission checks and live feed validation remain factual implementation prerequisites, not settled findings. No manual-maintenance commitment has been agreed.
+- The original news decisions are superseded by [ADR 0007](adr/0007-dip-only-parliamentary-collection.md). DIP retrieval and PDF-processing decisions remain in [DIP design notes](dip-design-notes.md). Existing news runtime paths and some GitHub tickets still reflect the old plan and require cleanup.
+- The source-specific news permission checks and feed validation below are historical prerequisites for the old plan. DIP source obligations are described in the current architecture.
 
 ## Source research (16 September 2026)
 
