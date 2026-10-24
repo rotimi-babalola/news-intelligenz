@@ -1,5 +1,7 @@
 # Launch feeds: nine public-news RSS feeds
 
+Historical verification of the earlier news implementation. [ADR 0007](adr/0007-dip-only-parliamentary-collection.md) removes these feeds from the target architecture; current runtime cleanup is tracked separately.
+
 Checked on 22 September 2026 with `cli verify-all`. All nine configured
 endpoints returned XML over HTTPS (HTTP 200) and every entry parsed as valid,
 with headlines and original URLs intact. No endpoint was broken, so nothing

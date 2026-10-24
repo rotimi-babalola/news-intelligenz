@@ -1,5 +1,7 @@
 # Phase 1 feed catalog
 
+Historical source research. [ADR 0007](adr/0007-dip-only-parliamentary-collection.md) supersedes this RSS launch selection; the target collects DIP parliamentary activity only. These feed URLs do not define current collection scope.
+
 Launch RSS selection under the [DIP amendment](dip-design-notes.md): nine public-news feeds. DIP `/vorgang` and `/vorgangsposition` replace the 25 previously selected Bundestag feeds. Endpoints and formats require live validation during implementation; listing does not claim they have been verified. Retain each feed's discovery provenance even when items overlap. All valid configured feed items are eligible without relevance filtering, including sport, culture and international coverage.
 
 The local implementation retains metadata for all nine feeds and, for this private,

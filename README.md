@@ -1,12 +1,12 @@
 # News Intelligenz
 
-News Intelligenz aims to help immigrants living in Germany understand the country's news and government activity through English explanations. Coverage focuses on politics and everyday life, including employment, housing, healthcare and education—not only immigration.
+News Intelligenz aims to help immigrants living in Germany understand parliamentary activity through English explanations grounded in official records. Its source scope is DIP proceedings, steps, and linked parliamentary documents across the institutions returned for selected electoral terms.
 
 ## Project status
 
-Phase 1 design is confirmed and its implementation is tracked in [GitHub issues labelled Phase 1](https://github.com/rotimi-babalola/news-intelligenz/issues?q=is%3Aissue%20label%3A%22Phase%201%22). The local app collects nine public-news RSS feeds (tagesschau all updates plus eight Deutschlandfunk feeds) and a synthetic fixture into PostgreSQL. For this private, non-commercial project, it also fetches and stores article text from the configured news hosts when extraction succeeds. Other hosts retain metadata and links only; see the [feed verification report](docs/launch-feed-verification.md).
+The accepted [DIP-only decision](docs/adr/0007-dip-only-parliamentary-collection.md) removes editorial news feeds, news search, and article extraction from the target architecture. DIP collection, local retrieval, and lazy linked-PDF processing are implemented. The local runtime still exposes the earlier news collection and inspection paths; this documentation change does not disable them. Already collected news data stays available for internal inspection until a later cleanup exports or backs it up and removes news-only code and tables.
 
-The confirmed [DIP architecture amendment](docs/dip-design-notes.md) replaces Bundestag RSS with parliamentary proceedings and steps. DIP collection, local retrieval and lazy linked-PDF processing are implemented; news-to-proceeding links remain future work.
+The [current architecture](docs/phase-1-architecture.md) describes the target. Older feed research, Phase 1 news criteria, and GitHub tickets that assume news collection are historical and need backlog review.
 
 ## Run locally
 
@@ -39,6 +39,15 @@ DIP proceedings and steps are collected, `POST /api/drain-dip` embeds one
 pending proceeding, step or extracted PDF page per call; failed jobs retain
 their standard retry state.
 
+To import the selected term manually, set `BUNDESTAG_API_KEY` in `.env`
+and use a new run ID for each collection:
+
+```sh
+curl -X POST http://127.0.0.1:3000/api/collect-dip \
+  -H 'Content-Type: application/json' \
+  -d '{"runId":"manual-21-1","electoralTerm":21,"source":"live"}'
+```
+
 Linked PDFs are extracted with [PyMuPDF](https://pymupdf.readthedocs.io/)
 through `scripts/extract_pdf.py`, so the `python3` on `PATH` needs that package
 once:
@@ -50,9 +59,10 @@ python3 -m pip install pymupdf
 PDF fetching is independent of DIP collection: only references dated within the
 previous 14 days are queued automatically, and `POST /api/drain-documents`
 processes one queued document per call. Fetched bytes and extracted page text
-stay in the local database for this private project; the DIP API contract does
-not itself establish retention or reuse permission, and news-to-proceeding
-links remain future work.
+stay in the local database. DIP data use is governed by the
+[official terms](https://dip.bundestag.de/documents/nutzungsbedingungen_dip.pdf),
+including source attribution, document reproduction rules, and possible
+third-party rights.
 
 Search the embedded DIP records with a German or English query:
 
@@ -80,6 +90,12 @@ curl http://127.0.0.1:3000/api/documents/29701499
 ```
 
 Repeated requests reuse the one processing job for that document revision.
+
+### Legacy news runtime
+
+The following RSS and fixture commands document paths still present in the
+local runtime. They are outside the DIP-only target and will be removed in a
+later cleanup. Do not use them as the new collection plan.
 
 In another terminal, import the deterministic synthetic feed (no network):
 
@@ -163,68 +179,47 @@ run after restoring connectivity. Malformed feeds receive a persisted failed run
 result; SQL/connection failures are reported with a 500 response and roll
 back all writes. Durable retry jobs are deferred.
 
-## Phase 1: news collection
+## Phase 1: parliamentary collection
 
-The target combines a fault-tolerant collection pipeline with a DIP retrieval API for German and English queries. It includes an internal admin tool for one operator. Generated answers and a reader-facing experience come later.
+The accepted target collects DIP parliamentary activity, not editorial news. It keeps
+proceedings, steps, observed versions, document references, source provenance,
+processing jobs, and checkpoints in PostgreSQL. Selected electoral terms cover all
+proceeding types and the institutions returned by DIP. Local imports cap unique
+proceedings at 1,000 across runs; nonlocal environments import the full selected
+scope. New terms are added explicitly while earlier selections remain monitored.
 
-### Sources
+Collection is planned for 07:00 Europe/Berlin with six hours of overlap and
+independent recovery for the two DIP endpoints. No scheduler is wired in the
+current repository. `POST /api/collect-dip` can be called manually with a
+configured `BUNDESTAG_API_KEY`, a unique `runId`, an `electoralTerm`, and
+`"source":"live"`. DIP records persist even if embedding or PDF processing
+later fails. The admin at `/admin/dip` inspects records, document references,
+jobs, and failures.
 
-- **Nine public-news RSS feeds:** Tagesschau all updates and eight Deutschlandfunk feeds. See the [feed catalog](docs/phase-1-feed-catalog.md).
-- **DIP parliamentary activity:** `/vorgang` proceedings and `/vorgangsposition` steps, covering all types and institutions returned for the selected electoral terms. Import the full current term initially; add new terms explicitly and keep previous selections monitored.
-- Local imports cap unique `/vorgang` proceedings at 1,000 across runs, using the first records encountered through cursor pagination; other environments import the full selected scope. The API does not specify ordering, so the local subset is not guaranteed to be the newest.
-- **Targeted search agents:** six fixed German queries covering politics/legislation, employment/economy, housing, healthcare, education and immigration. Initial searches are restricted to `tagesschau.de` and `deutschlandfunk.de`.
+Multilingual retrieval uses local Ollama and pgvector. Linked PDFs are queued
+independently for recent document dates or on demand. Future English explainers
+will use proceeding dossiers with claims cited to steps or document pages;
+generated answers and the reader interface are outside this phase.
 
-All valid items from configured feeds are eligible without relevance filtering. Search results are assessed for relevance to Germany, with uncertain candidates held for manual review. German and English source material is preserved without translation.
-
-### Planned behaviour
-
-- Collect daily at **07:00 Europe/Berlin**, with six hours of overlap and independent recovery progress for each feed, search query, and DIP endpoint/scope.
-- Store publications, text versions, parliamentary records and their versions, discoveries, processing jobs and review decisions in **PostgreSQL**.
-- Retain DIP metadata, available summaries, steps, and document references. The `vorgang_id` and `fundstelle` fields (`id`, `dokumentnummer`, `pdf_url`, `datum`) come from `/vorgangsposition` and are linked to the parent proceeding. Preserve changed record states separately from articles.
-- Embed proceeding titles/summaries and step text with local Qwen3-Embedding-0.6B through optional Ollama in Compose. Store vectors in PostgreSQL with pgvector and provide a retrieval API that returns latest-version source matches for German and English queries.
-- Fetch PDF bytes independently of DIP collection checkpoints. Background-process references whose document date is within 14 days; on-demand requests return metadata and the original URL immediately and raise processing priority. Extract with PyMuPDF and cache by document ID and byte hash. News-to-proceeding linking remains future work.
-- Extract article text from linked pages where source permissions allow; retain permitted metadata and original links when extraction fails or a format is unsupported.
-- Deduplicate the same publication using identifiers and resolved URLs while keeping different publishers' reporting separate.
-- Preserve changed article text as versions, recheck recently discovered publications and refresh older ones when rediscovered.
-- Recover interrupted processing through durable jobs and retries, support manual backfills and expose unresolved gaps and failures.
-- Provide an internal inspection page, relevance review and reversible duplicate merges. Protect deployed admin access with Basic Auth over HTTPS.
-- Inspect proceedings, institution-labeled steps, retained versions, document references, and collection outcomes in dedicated admin views.
-- Measure source contributions, extraction outcomes, search relevance and resource usage. Explore free tiers first and pause affected providers when allowances run out.
-
-The nine launch feeds' metadata formats are verified and live metadata collection is
-enabled; private, non-commercial full-text retention is enabled for the configured
-news hosts. Other hosts remain metadata-only.
-Node.js 24 and Prisma with PostgreSQL are selected for the local runtime.
-Search provider and hosting selections remain future work.
-DIP authentication, permissions, limits, and live synchronization behavior require verification before enabling collection.
-
-### Completion criteria
-
-Phase 1 requires seven consecutive scheduled runs, demonstrated persistence and recovery, idempotent replays, working review flows, a manually checked sample of 30 items, and a report of search's contribution beyond RSS. See the [full acceptance criteria](docs/phase-1-design-notes.md#agreed-completion-criteria).
-The [DIP criteria](docs/dip-design-notes.md#verification-criteria) add initial import, pagination recovery, independent step updates, version history, and electoral-term transitions.
+Phase 1 acceptance is the [DIP verification criteria](docs/dip-design-notes.md#verification-criteria)
+plus seven consecutive scheduled DIP runs once scheduling exists. The original
+RSS/search sample and contribution metrics are superseded.
 
 ## Documentation
 
-| Document                                                                                   | Purpose                                                        |
-| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| [Phase 1 architecture](docs/phase-1-architecture.md)                                       | Agreed scope, collection flow and operational behaviour        |
-| [Design notes](docs/phase-1-design-notes.md)                                               | Decisions, acceptance criteria and unresolved factual checks   |
-| [DIP amendment](docs/dip-design-notes.md)                                                  | Parliamentary collection decisions and verification criteria   |
-| [ADR: local multilingual DIP retrieval](docs/adr/0005-local-multilingual-dip-retrieval.md) | Local embeddings, PostgreSQL vector search and PDF processing  |
-| [ADR: proceeding-centric explainers](docs/adr/0006-proceeding-centric-explainers.md)       | Proceeding dossiers and grounded synthesis for reader queries  |
-| [Feed catalog](docs/phase-1-feed-catalog.md)                                               | Exact launch feed URLs                                         |
-| [Domain glossary](CONTEXT.md)                                                              | Shared terminology for publications, versions and discoveries  |
-| [ADR: publication versions](docs/adr/0001-preserve-publication-versions.md)                | Why historical article text is retained                        |
-| [ADR: PostgreSQL storage and jobs](docs/adr/0002-postgresql-for-storage-and-jobs.md)       | Why persistent data and durable jobs share a database          |
-| [ADR: local runtime](docs/adr/0003-local-runtime-and-database-access.md)                   | Node.js 24 and Prisma with PostgreSQL 17                       |
-| [Launch feed verification](docs/launch-feed-verification.md)                               | First live feed, terms and retention distinction               |
-| [Database tables](docs/database-tables.md)                                                 | Collection schema: runs, publications, candidates, discoveries |
-| [Issue #1 QA plan](docs/issue-1-qa-plan.md)                                                | Manual end-to-end checks: import URL, inspect DB, review admin |
+- [Current architecture](docs/phase-1-architecture.md) — DIP collection,
+  processing, reliability, and acceptance.
+- [DIP design notes](docs/dip-design-notes.md) — source scope and verification.
+- [ADR 0007](docs/adr/0007-dip-only-parliamentary-collection.md) — why the
+  project stopped targeting editorial news.
+- [Domain glossary](CONTEXT.md) — parliamentary terms.
+- [ADR 0006](docs/adr/0006-proceeding-centric-explainers.md) — future grounded
+  English explanations.
+- [Original design interview](docs/phase-1-design-notes.md), [feed catalog](docs/phase-1-feed-catalog.md),
+  and [feed verification](docs/launch-feed-verification.md) — historical news
+  design and implementation evidence.
 
-## Implementation roadmap
-
-Start with [issue #1: collect and inspect one RSS feed locally](https://github.com/rotimi-babalola/news-intelligenz/issues/1), then follow the **Blocked by** references in the [Phase 1 issues](https://github.com/rotimi-babalola/news-intelligenz/issues?q=is%3Aissue%20label%3A%22Phase%201%22). Each issue includes a description and acceptance criteria.
-
-The tickets incorporate the confirmed DIP collection and retrieval design. [Issue #2](https://github.com/rotimi-babalola/news-intelligenz/issues/2) covers the nine public-news RSS feeds. Parliamentary work proceeds through [DIP import and record versions (#14)](https://github.com/rotimi-babalola/news-intelligenz/issues/14), [incremental synchronization (#15)](https://github.com/rotimi-babalola/news-intelligenz/issues/15), [parliamentary inspection (#16)](https://github.com/rotimi-babalola/news-intelligenz/issues/16), [multilingual retrieval (#32)](https://github.com/rotimi-babalola/news-intelligenz/issues/32), and [lazy DIP PDF processing (#33)](https://github.com/rotimi-babalola/news-intelligenz/issues/33). Scheduling, monitoring, deployment, and acceptance tickets include the corresponding dependencies and verification criteria.
-
-Future phases may add English explainers, coverage of all 16 state parliaments, additional publishers, news-to-proceeding links and reader-facing features. Generated answers and event clustering remain outside this increment.
+The older GitHub Phase 1 tickets still include RSS/search assumptions. Review
+them against ADR 0007 before scheduling or deploying the next increment.
+[Issue #42](https://github.com/rotimi-babalola/news-intelligenz/issues/42)
+tracks removal of legacy news code and the later backed-up data and schema cleanup.
