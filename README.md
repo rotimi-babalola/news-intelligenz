@@ -212,6 +212,8 @@ RSS/search sample and contribution metrics are superseded.
 - [DIP design notes](docs/dip-design-notes.md) — source scope and verification.
 - [ADR 0007](docs/adr/0007-dip-only-parliamentary-collection.md) — why the
   project stopped targeting editorial news.
+- [ADR 0008](docs/adr/0008-shared-read-only-mcp-access.md) — invited agent access
+  to the shared DIP corpus.
 - [Domain glossary](CONTEXT.md) — parliamentary terms.
 - [ADR 0006](docs/adr/0006-proceeding-centric-explainers.md) — future grounded
   English explanations.
