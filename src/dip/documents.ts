@@ -8,6 +8,7 @@ import {
   PROCESS_DOCUMENT,
   raiseDocumentJob,
 } from "./jobs";
+import { documentObjectKey, putDocumentPdf } from "./object-store";
 import {
   fetchDocumentPdf,
   pymupdfExtractor,
@@ -39,6 +40,7 @@ import {
 export type ProcessDocumentOptions = {
   fetchPdf?: typeof fetchDocumentPdf;
   extract?: PageExtractor;
+  putPdf?: typeof putDocumentPdf;
   jobId?: string;
 };
 
@@ -56,7 +58,8 @@ async function storeNewVariant(
   input: {
     referenceId: string;
     byteHash: string;
-    bytes: Buffer;
+    objectKey: string;
+    byteSize: number;
     finalUrl: string;
     pages: ExtractedPage[];
   },
@@ -87,9 +90,9 @@ async function storeNewVariant(
     referenceId: input.referenceId,
     variantNo,
     byteHash: input.byteHash,
-    byteSize: input.bytes.byteLength,
+    byteSize: input.byteSize,
     pageCount: input.pages.length,
-    bytes: new Uint8Array(input.bytes),
+    objectKey: input.objectKey,
     sourceUrl: input.finalUrl,
   });
   if (input.pages.length)
@@ -145,12 +148,18 @@ export async function processNextDocument(
     let reused = content !== null;
     if (!content) {
       const pages = await (options.extract ?? pymupdfExtractor)(fetched.bytes);
+      const objectKey = documentObjectKey(referenceId, byteHash);
+      // Upload before the transaction: a failed upload retries the job, and a
+      // failed transaction leaves an unreferenced object that the same
+      // content-addressed key overwrites on retry.
+      await (options.putPdf ?? putDocumentPdf)(objectKey, fetched.bytes);
       content = await prisma.$transaction(async (tx) => {
         await lockDocumentReference(tx, referenceId);
         const stored = await storeNewVariant(tx, {
           referenceId,
           byteHash,
-          bytes: fetched.bytes,
+          objectKey,
+          byteSize: fetched.bytes.byteLength,
           finalUrl: fetched.finalUrl,
           pages,
         });

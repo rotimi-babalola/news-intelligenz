@@ -58,8 +58,8 @@ python3 -m pip install pymupdf
 
 PDF fetching is independent of DIP collection: only references dated within the
 previous 14 days are queued automatically, and `POST /api/drain-documents`
-processes one queued document per call. Fetched bytes and extracted page text
-stay in the local database. DIP data use is governed by the
+processes one queued document per call. Fetched PDF bytes are archived in
+Cloudflare R2; extracted page text stays in PostgreSQL. DIP data use is governed by the
 [official terms](https://dip.bundestag.de/documents/nutzungsbedingungen_dip.pdf),
 including source attribution, document reproduction rules, and possible
 third-party rights.
@@ -214,6 +214,8 @@ RSS/search sample and contribution metrics are superseded.
   project stopped targeting editorial news.
 - [ADR 0008](docs/adr/0008-shared-read-only-mcp-access.md) — invited agent access
   to the shared DIP corpus.
+- [ADR 0009](docs/adr/0009-r2-for-dip-pdf-variants.md) — R2 archive for fetched
+  PDF variants.
 - [Domain glossary](CONTEXT.md) — parliamentary terms.
 - [ADR 0006](docs/adr/0006-proceeding-centric-explainers.md) — future grounded
   English explanations.
