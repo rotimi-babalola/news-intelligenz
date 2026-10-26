@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { retryJob } from "../src/admin/service.js";
 import { processNextDipEmbedding } from "../src/dip/embedding.js";
 import { enqueueDipReindex } from "../src/dip/reindex.js";
 import { collectVorgang } from "../src/dip/vorgang.js";
@@ -114,6 +115,60 @@ test("reindex queues each model once and keeps both vector spaces separate", asy
       "succeeded",
     );
     assert.equal(await prisma.dipEmbedding.count(), 2);
+    await Promise.all(
+      ["first", "second"].map((referenceId) =>
+        prisma.documentContent.create({
+          data: {
+            referenceId,
+            variantNo: 1,
+            byteHash: referenceId,
+            byteSize: 1,
+            pageCount: 2,
+            pages: {
+              create: [
+                { pageNo: 1, text: "Parliamentary text" },
+                { pageNo: 2, text: "" },
+              ],
+            },
+          },
+        }),
+      ),
+    );
+    assert.deepEqual(await enqueueDipReindex(prisma, "model-c"), {
+      proceedings: 1,
+      steps: 0,
+      pages: 2,
+    });
+    assert.deepEqual(await enqueueDipReindex(prisma, "model-c"), {
+      proceedings: 0,
+      steps: 0,
+      pages: 0,
+    });
+    const otherModelJob = await prisma.processingJob.findFirstOrThrow({
+      where: {
+        runId: "embedding-reindex:model-c",
+        operation: "embed_document",
+      },
+    });
+    await prisma.processingJob.update({
+      where: { id: otherModelJob.id },
+      data: { status: "exhausted", attempts: 5 },
+    });
+    const originalError = console.error;
+    const errors: string[] = [];
+    console.error = (...args: unknown[]) => errors.push(args.join(" "));
+    try {
+      await retryJob(otherModelJob.id);
+    } finally {
+      console.error = originalError;
+    }
+    const unchangedJob = await prisma.processingJob.findUniqueOrThrow({
+      where: { id: otherModelJob.id },
+    });
+    assert.equal(unchangedJob.status, "exhausted");
+    assert.equal(unchangedJob.maxAttempts, 5);
+    assert.match(unchangedJob.lastError ?? "", /requires embedding index model-c/);
+    assert.match(errors.join(" "), /requires embedding index model-c/);
   } finally {
     if (previousModel === undefined) delete process.env.EMBEDDING_MODEL;
     else process.env.EMBEDDING_MODEL = previousModel;

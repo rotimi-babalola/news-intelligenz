@@ -113,15 +113,19 @@ export async function enqueueDipReindex(
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       });
     if (!rows.length) break;
-    for (const content of rows) {
-      if (!selected("dokument", content.referenceId)) continue;
+    const contents = new Map(
+      rows
+        .filter((content) => selected("dokument", content.referenceId))
+        .map((content) => [content.id, content]),
+    );
+    if (contents.size) {
       const pages = await prisma.documentPage.findMany({
-        where: { contentId: content.id, text: { not: "" } },
-        select: { pageNo: true },
+        where: { contentId: { in: [...contents.keys()] }, text: { not: "" } },
+        select: { contentId: true, pageNo: true },
       });
-      if (!pages.length) continue;
-      const result = await prisma.processingJob.createMany({
-        data: pages.map((page) => ({
+      const jobs = pages.map((page) => {
+        const content = contents.get(page.contentId)!;
+        return {
           dedupeKey: JSON.stringify([
             "reindex",
             model,
@@ -140,10 +144,15 @@ export async function enqueueDipReindex(
             pageNo: page.pageNo,
             model,
           },
-        })),
-        skipDuplicates: true,
+        };
       });
-      counts.pages += result.count;
+      for (let i = 0; i < jobs.length; i += 500) {
+        const result = await prisma.processingJob.createMany({
+          data: jobs.slice(i, i + 500),
+          skipDuplicates: true,
+        });
+        counts.pages += result.count;
+      }
     }
     cursor = rows.at(-1)!.id;
     if (rows.length < 100) break;

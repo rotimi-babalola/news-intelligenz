@@ -8,7 +8,7 @@ import {
   type ArticleFetcher,
 } from "../import/service";
 import { processNextDocument } from "../dip/documents";
-import { processNextDipEmbedding } from "../dip/embedding";
+import { embeddingConfig, processNextDipEmbedding } from "../dip/embedding";
 import { PROCESS_DOCUMENT } from "../dip/jobs";
 import { database } from "../db";
 import {
@@ -159,6 +159,29 @@ export async function retryJob(jobId: string) {
   const prisma = database();
   try {
     if (!jobId) throw new Error("Missing job id");
+    const job = await prisma.processingJob.findUniqueOrThrow({
+      where: { id: jobId, status: "exhausted" },
+    });
+    if (
+      job.sourceKind === "dip_endpoint" &&
+      job.operation !== PROCESS_DOCUMENT
+    ) {
+      const configuredIndex = embeddingConfig().indexId;
+      const model =
+        typeof job.payload === "object" &&
+        job.payload !== null &&
+        !Array.isArray(job.payload)
+          ? job.payload.model
+          : undefined;
+      if (model !== undefined && model !== configuredIndex) {
+        const message = `Job requires embedding index ${String(model)}; configured index is ${configuredIndex}`;
+        await prisma.processingJob.update({
+          where: { id: jobId, status: "exhausted" },
+          data: { lastError: message },
+        });
+        throw new Error(message);
+      }
+    }
     const retried = await retryExhausted(prisma, jobId);
     if (retried.operation === PROCESS_DOCUMENT) {
       await processNextDocument(prisma, "admin-retry", { jobId: retried.id });
