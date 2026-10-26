@@ -17,6 +17,7 @@ RUN DATABASE_URL=postgresql://build:build@127.0.0.1:5432/news pnpm install --fro
 COPY src ./src
 COPY scripts ./scripts
 RUN DATABASE_URL=postgresql://build:build@127.0.0.1:5432/news pnpm build:collect \
+    && node --input-type=module -e "import('./dist/src/generated/prisma/client.js')" \
     && python3 -c "import pymupdf"
 
 CMD ["node", "dist/scripts/drain-dip.js"]

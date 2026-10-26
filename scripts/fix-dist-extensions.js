@@ -31,11 +31,14 @@ async function fix(dir) {
       const [full, pre, spec, post] = match;
       const index = match.index ?? 0;
       let replacement = full;
+      const jsSpec = spec.endsWith(".ts")
+        ? `${spec.slice(0, -3)}.js`
+        : `${spec}.js`;
       if (
         !(await isFile(join(dirname(path), spec))) &&
-        (await isFile(join(dirname(path), `${spec}.js`)))
+        (await isFile(join(dirname(path), jsSpec)))
       ) {
-        replacement = `${pre}${spec}.js${post}`;
+        replacement = `${pre}${jsSpec}${post}`;
       }
       parts.push(original.slice(last, index), replacement);
       last = index + full.length;
