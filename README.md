@@ -39,7 +39,7 @@ DIP proceedings and steps are collected, `POST /api/drain-dip` embeds one
 pending proceeding, step or extracted PDF page per call; failed jobs retain
 their standard retry state.
 
-To import the selected term manually, set `BUNDESTAG_API_KEY` in `.env`
+To import a selected term manually, set `BUNDESTAG_API_KEY` in `.env`
 and use a new run ID for each collection:
 
 ```sh
@@ -47,6 +47,20 @@ curl -X POST http://127.0.0.1:3000/api/collect-dip \
   -H 'Content-Type: application/json' \
   -d '{"runId":"manual-21-1","electoralTerm":21,"source":"live"}'
 ```
+
+Unattended collection uses the same code as a script, which is what the daily
+deployment cron calls:
+
+```sh
+pnpm collect:dip
+```
+
+It collects `DIP_ELECTORAL_TERMS` (default `21,20`) for both endpoints and
+exits non-zero when any term or endpoint fails; the untouched checkpoint means
+the next run's overlap window retries it. Set `DIP_RUN_HOUR=7` on the deployed
+cron so only the trigger that lands on 07:00 Europe/Berlin collects; the second
+UTC trigger exists solely to absorb daylight saving. The script collects only —
+PDF fetching and embedding remain separate drains.
 
 Linked PDFs are extracted with [PyMuPDF](https://pymupdf.readthedocs.io/)
 through `scripts/extract_pdf.py`, so the `python3` on `PATH` needs that package

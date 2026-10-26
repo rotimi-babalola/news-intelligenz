@@ -19,7 +19,8 @@
     "test:integration": "pnpm build:test && pnpm build && node --env-file-if-exists=.env --test dist/test/*.integration.js",
     "check": "prisma generate && tsc --noEmit -p tsconfig.node.json && tsc --noEmit",
     "format": "prettier --check .",
-    "format:write": "prettier --write ."
+    "format:write": "prettier --write .",
+    "collect:dip": "pnpm build:test && node --env-file-if-exists=.env dist/scripts/run-dip.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1156.0",

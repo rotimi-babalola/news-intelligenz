@@ -43,7 +43,7 @@ DIP metadata and references are committed before the corresponding checkpoint ad
 - Persist records, discoveries, jobs, attempts, checkpoints, run results, and failures in PostgreSQL. Replays must be idempotent, and exhausted work must be inspectable and retryable.
 - Keep DIP import, record embedding, and PDF processing independent. Verify pagination recovery, bootstrap-to-incremental handoff, timestamp boundaries, missing parents, and term transitions. The six-hour overlap does not guarantee capture of arbitrarily delayed updates, and an absent incremental result does not prove deletion.
 - Label institution-specific steps and keep document date, source update time, and observation time distinct. The initial import captures available states, not revisions that were never observed.
-- Protect deployed admin access with Basic Auth over HTTPS. No always-on scheduler is wired in the current repository; deployment and scheduled collection require follow-up implementation.
+- Protect deployed admin access with Basic Auth over HTTPS. Daily DIP collection runs as `scripts/run-dip.ts` under a Render cron service; deploying it is the remaining follow-up, not new collector design.
 
 ## Source use and transition
 
