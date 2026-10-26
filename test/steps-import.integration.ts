@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { collectVorgang } from "../src/dip/vorgang.js";
+import { qualifiedTable } from "../src/db.js";
 import { collectSteps, type FetchStepPage } from "../src/dip/steps.js";
 import {
   findDipCheckpoint,
@@ -133,6 +134,91 @@ test("steps import with parent links, institutions, and document references", as
     },
   });
   assert.ok(checkpoint.updatedThrough instanceof Date);
+  await prisma.$disconnect();
+});
+
+test("large step pages persist references and candidate indexes across batches", async () => {
+  const prisma = await isolatedDatabase();
+  const result = await collectSteps(prisma, {
+    runId: "dip-steps-batches",
+    electoralTerm: 21,
+    fetchPage: fakeSteps({
+      start: {
+        documents: [
+          ...Array.from({ length: 12 }, (_, i) =>
+            step(String(701500 + i), "340135"),
+          ),
+          { id: "invalid", typ: "Vorgangsposition" },
+        ],
+        next: "",
+      },
+    }).fetchPage,
+  });
+  assert.deepEqual(
+    {
+      valid: result.valid,
+      invalid: result.invalid,
+      stored: result.stored,
+      versionsAdded: result.versionsAdded,
+    },
+    { valid: 12, invalid: 1, stored: 12, versionsAdded: 12 },
+  );
+  assert.equal(await prisma.documentReference.count(), 12);
+  assert.deepEqual(
+    (
+      await prisma.candidate.findMany({
+        where: { runId: result.runId },
+        orderBy: { itemIndex: "asc" },
+      })
+    ).map((row) => row.itemIndex),
+    Array.from({ length: 13 }, (_, i) => i),
+  );
+  await prisma.$disconnect();
+});
+
+test("retry credits steps and parents committed before a later batch fails", async () => {
+  const prisma = await isolatedDatabase();
+  const table = qualifiedTable("proceeding_steps");
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE ${table} ADD CONSTRAINT fail_step_six CHECK (api_id <> '701505')`,
+  );
+  const options = {
+    runId: "dip-steps-batch-retry",
+    electoralTerm: 21,
+    followStoredParents: true,
+    fetchPage: fakeSteps({
+      start: {
+        documents: Array.from({ length: 6 }, (_, i) =>
+          step(String(701500 + i), String(340135 + i)),
+        ),
+        next: "",
+      },
+    }).fetchPage,
+    fetchVorgang: async (id: string) => ({
+      id,
+      typ: "Vorgang",
+      vorgangstyp: "Kleine Anfrage",
+      wahlperiode: 21,
+      titel: `Titel ${id}`,
+      aktualisiert: "2026-10-09T13:24:22+02:00",
+    }),
+  };
+  await assert.rejects(collectSteps(prisma, options), /fail_step_six/);
+  assert.equal(await prisma.proceedingVersion.count(), 5);
+  assert.equal(await prisma.proceedingStepVersion.count(), 5);
+  assert.equal(
+    (await prisma.run.findUniqueOrThrow({ where: { id: options.runId } }))
+      .validCount,
+    5,
+  );
+
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE ${table} DROP CONSTRAINT fail_step_six`,
+  );
+  const retried = await collectSteps(prisma, options);
+  assert.equal(retried.valid, 6);
+  assert.equal(retried.versionsAdded, 12);
+  assert.equal(retried.backfilled, 6);
   await prisma.$disconnect();
 });
 

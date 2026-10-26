@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { collectVorgang, type FetchVorgangPage } from "../src/dip/vorgang.js";
+import { qualifiedTable } from "../src/db.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 
 function doc(id: string, overrides: Record<string, unknown> = {}) {
@@ -76,6 +77,74 @@ test("multi-page import stores records once and advances the checkpoint", async 
     },
   });
   assert.ok(checkpoint.updatedThrough instanceof Date);
+  await prisma.$disconnect();
+});
+
+test("large pages keep cap and candidate indexes across write batches", async () => {
+  const prisma = await isolatedDatabase();
+  const result = await collectVorgang(prisma, {
+    runId: "dip-vorgang-batches",
+    electoralTerm: 21,
+    proceedingCap: 7,
+    fetchPage: fakeFetcher({
+      start: {
+        documents: Array.from({ length: 12 }, (_, i) => doc(String(i + 1))),
+        next: "",
+      },
+    }).fetchPage,
+  });
+  assert.deepEqual(
+    {
+      valid: result.valid,
+      stored: result.stored,
+      capped: result.capped,
+      versionsAdded: result.versionsAdded,
+    },
+    { valid: 12, stored: 7, capped: 5, versionsAdded: 7 },
+  );
+  assert.deepEqual(
+    (
+      await prisma.candidate.findMany({
+        where: { runId: result.runId },
+        orderBy: { itemIndex: "asc" },
+      })
+    ).map((row) => row.itemIndex),
+    Array.from({ length: 12 }, (_, i) => i),
+  );
+  await prisma.$disconnect();
+});
+
+test("retry credits proceedings committed before a later batch fails", async () => {
+  const prisma = await isolatedDatabase();
+  const table = qualifiedTable("proceedings");
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE ${table} ADD CONSTRAINT fail_six CHECK (api_id <> '6')`,
+  );
+  const options = {
+    runId: "dip-vorgang-batch-retry",
+    electoralTerm: 21,
+    fetchPage: fakeFetcher({
+      start: {
+        documents: Array.from({ length: 6 }, (_, i) => doc(String(i + 1))),
+        next: "",
+      },
+    }).fetchPage,
+  };
+  await assert.rejects(collectVorgang(prisma, options), /fail_six/);
+  assert.equal(await prisma.proceedingVersion.count(), 5);
+  assert.equal(
+    (await prisma.run.findUniqueOrThrow({ where: { id: options.runId } }))
+      .validCount,
+    5,
+  );
+
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE ${table} DROP CONSTRAINT fail_six`,
+  );
+  const retried = await collectVorgang(prisma, options);
+  assert.equal(retried.valid, 6);
+  assert.equal(retried.versionsAdded, 6);
+  assert.equal(await prisma.proceedingVersion.count(), 6);
   await prisma.$disconnect();
 });
 

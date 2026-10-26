@@ -14,7 +14,11 @@ import {
   upsertParliamentaryDiscovery,
 } from "./repository";
 import { enqueueDocumentProcessing, enqueueStepEmbedding } from "./jobs";
-import { TerminalPageError, collectDipPages } from "./collect";
+import {
+  PAGE_WRITE_BATCH_SIZE,
+  TerminalPageError,
+  collectDipPages,
+} from "./collect";
 import type {
   CollectStepsOptions,
   CollectStepsResult,
@@ -261,25 +265,47 @@ export async function collectSteps(
             fetchedParents.set(apiId, converted);
         }
       }
-      const counts = await prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
-        for (const { index, error, id } of invalidDocs) {
-          await upsertDipCandidate(
-            tx,
-            runId,
-            index,
-            { endpoint: STEPS_ENDPOINT, id },
-            [error],
-          );
-        }
-        return storeStepsPage(tx, runId, kept, {
-          followStored: options.followStoredParents ?? false,
-          cap: options.proceedingCap,
-          fetched: fetchedParents,
-          electoralTerm: options.electoralTerm,
-          now,
+      for (let i = 0; i < invalidDocs.length; i += PAGE_WRITE_BATCH_SIZE) {
+        await prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+          for (const { index, error, id } of invalidDocs.slice(
+            i,
+            i + PAGE_WRITE_BATCH_SIZE,
+          )) {
+            await upsertDipCandidate(
+              tx,
+              runId,
+              index,
+              { endpoint: STEPS_ENDPOINT, id },
+              [error],
+            );
+          }
         });
-      });
+      }
+      const counts = { versionsAdded: 0, capped: 0, backfilled: 0 };
+      for (let i = 0; i < kept.length; i += PAGE_WRITE_BATCH_SIZE) {
+        const batch = await prisma.$transaction(
+          async (tx) => {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+            return storeStepsPage(
+              tx,
+              runId,
+              kept.slice(i, i + PAGE_WRITE_BATCH_SIZE),
+              {
+                followStored: options.followStoredParents ?? false,
+                cap: options.proceedingCap,
+                fetched: fetchedParents,
+                electoralTerm: options.electoralTerm,
+                now,
+              },
+            );
+          },
+          { timeout: 15_000 },
+        );
+        counts.versionsAdded += batch.versionsAdded;
+        counts.capped += batch.capped;
+        counts.backfilled += batch.backfilled;
+      }
       let maxObserved: Date | null = null;
       for (const { doc } of kept) {
         const observed = new Date(doc.aktualisiert);
