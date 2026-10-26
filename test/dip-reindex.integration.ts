@@ -167,7 +167,10 @@ test("reindex queues each model once and keeps both vector spaces separate", asy
     });
     assert.equal(unchangedJob.status, "exhausted");
     assert.equal(unchangedJob.maxAttempts, 5);
-    assert.match(unchangedJob.lastError ?? "", /requires embedding index model-c/);
+    assert.match(
+      unchangedJob.lastError ?? "",
+      /requires embedding index model-c/,
+    );
     assert.match(errors.join(" "), /requires embedding index model-c/);
   } finally {
     if (previousModel === undefined) delete process.env.EMBEDDING_MODEL;
