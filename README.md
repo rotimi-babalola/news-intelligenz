@@ -23,6 +23,21 @@ pnpm build
 pnpm start
 ```
 
+To use Neon Postgres instead of the Compose database, install the Neon CLI,
+link the project, and deploy `neon.ts`:
+
+```sh
+npm i -g neon@latest
+neon login
+neon init -y --org-id <org-id> --project-id <project-id> --branch production \
+  --services postgres
+neon deploy
+```
+
+`neon deploy` writes `DATABASE_URL` and `DATABASE_URL_UNPOOLED` into `.env`.
+Migrations use `DATABASE_URL_UNPOOLED`; application queries use the pooled
+`DATABASE_URL`. PDFs stay in Cloudflare R2.
+
 For the optional local DIP embedding model, start Ollama and download the
 0.6B model once (about 639 MB):
 

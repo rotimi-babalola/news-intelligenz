@@ -11,6 +11,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.1156.0
         version: 3.1156.0
+      '@neon/config':
+        specifier: ^1.9.4
+        version: 1.9.4
       '@prisma/adapter-pg':
         specifier: 7.10.0
         version: 7.10.0
@@ -341,6 +344,14 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@neon/config@1.9.4':
+    resolution: {integrity: sha512-+4tGNNiyS7fFBtpkY2qxTPscPXUFcJSAaDKf+oTb+KV3iNPCx48bRUR//NMnq3wcSQD0ffBwmOCyY3hMhARy3A==}
+    engines: {node: '>=20.19.0'}
+
+  '@neon/sdk@7.5.0':
+    resolution: {integrity: sha512-0zc1SynODndBsO5I+IVXl+6GiJe5LTSomz5WU+161C7EJkkoWBpNyosR4BnYcxfL5kwfutZ44ba4fnxTiSvJEQ==}
+    engines: {node: '>=20.19.0'}
 
   '@next/env@16.4.1':
     resolution: {integrity: sha512-5sUUrrSvs/2/2LnLoesybMGx12EtPB46fdZ6RhAw0XDGSPxU2LFyQBB7yuEiOFFJPKmBY6+q2jTr1/AMbnp0/g==}
@@ -1829,6 +1840,14 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@neon/config@1.9.4':
+    dependencies:
+      '@neon/sdk': 7.5.0
+      jiti: 2.7.0
+      zod: 4.6.5
+
+  '@neon/sdk@7.5.0': {}
 
   '@next/env@16.4.1': {}
 
