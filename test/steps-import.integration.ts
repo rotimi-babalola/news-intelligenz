@@ -136,6 +136,45 @@ test("steps import with parent links, institutions, and document references", as
   await prisma.$disconnect();
 });
 
+test("large step pages persist references and candidate indexes across batches", async () => {
+  const prisma = await isolatedDatabase();
+  const result = await collectSteps(prisma, {
+    runId: "dip-steps-batches",
+    electoralTerm: 21,
+    fetchPage: fakeSteps({
+      start: {
+        documents: [
+          ...Array.from({ length: 12 }, (_, i) =>
+            step(String(701500 + i), "340135"),
+          ),
+          { id: "invalid", typ: "Vorgangsposition" },
+        ],
+        next: "",
+      },
+    }).fetchPage,
+  });
+  assert.deepEqual(
+    {
+      valid: result.valid,
+      invalid: result.invalid,
+      stored: result.stored,
+      versionsAdded: result.versionsAdded,
+    },
+    { valid: 12, invalid: 1, stored: 12, versionsAdded: 12 },
+  );
+  assert.equal(await prisma.documentReference.count(), 12);
+  assert.deepEqual(
+    (
+      await prisma.candidate.findMany({
+        where: { runId: result.runId },
+        orderBy: { itemIndex: "asc" },
+      })
+    ).map((row) => row.itemIndex),
+    Array.from({ length: 13 }, (_, i) => i),
+  );
+  await prisma.$disconnect();
+});
+
 test("cross-term and missing parents are retained with their links", async () => {
   const prisma = await isolatedDatabase();
   // Parent from the previous term: the term filter must not orphan the step.

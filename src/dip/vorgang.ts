@@ -11,7 +11,11 @@ import {
   upsertParliamentaryDiscovery,
 } from "./repository";
 import { enqueueProceedingEmbedding } from "./jobs";
-import { TerminalPageError, collectDipPages } from "./collect";
+import {
+  PAGE_WRITE_BATCH_SIZE,
+  TerminalPageError,
+  collectDipPages,
+} from "./collect";
 import type {
   CollectVorgangOptions,
   CollectVorgangResult,
@@ -190,24 +194,40 @@ export async function collectVorgang(
           storedDocs.push(converted);
         }
       }
-      const counts = await prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
-        for (const { index, error, id } of invalidDocs) {
-          await upsertDipCandidate(
-            tx,
-            runId,
-            index,
-            { endpoint: VORGANG_ENDPOINT, id },
-            [error],
-          );
-        }
-        return storeProceedingPage(
-          tx,
-          runId,
-          storedDocs,
-          options.proceedingCap,
+      for (let i = 0; i < invalidDocs.length; i += PAGE_WRITE_BATCH_SIZE) {
+        await prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+          for (const { index, error, id } of invalidDocs.slice(
+            i,
+            i + PAGE_WRITE_BATCH_SIZE,
+          )) {
+            await upsertDipCandidate(
+              tx,
+              runId,
+              index,
+              { endpoint: VORGANG_ENDPOINT, id },
+              [error],
+            );
+          }
+        });
+      }
+      const counts = { versionsAdded: 0, capped: 0 };
+      for (let i = 0; i < storedDocs.length; i += PAGE_WRITE_BATCH_SIZE) {
+        const batch = await prisma.$transaction(
+          async (tx) => {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+            return storeProceedingPage(
+              tx,
+              runId,
+              storedDocs.slice(i, i + PAGE_WRITE_BATCH_SIZE),
+              options.proceedingCap,
+            );
+          },
+          { timeout: 15_000 },
         );
-      });
+        counts.versionsAdded += batch.versionsAdded;
+        counts.capped += batch.capped;
+      }
       let maxObserved: Date | null = null;
       for (const { doc } of storedDocs) {
         const observed = new Date(doc.aktualisiert);

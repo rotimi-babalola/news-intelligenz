@@ -29,11 +29,14 @@ export async function isolatedDatabase() {
   await admin.query(`CREATE SCHEMA ${schema}`);
   await admin.end();
   schemas.push({ baseUrl, name: schema });
-  const url = `${baseUrl}?schema=${schema}`;
+  configured.searchParams.set("schema", schema);
+  const url = configured.toString();
+  const direct = new URL(process.env.DATABASE_URL_UNPOOLED || baseUrl);
+  direct.searchParams.set("schema", schema);
   process.env.DATABASE_URL = url;
   // Prisma migrate prefers DATABASE_URL_UNPOOLED when set (prisma.config.ts).
-  process.env.DATABASE_URL_UNPOOLED = url;
-  const env = { ...process.env, DATABASE_URL: url };
+  process.env.DATABASE_URL_UNPOOLED = direct.toString();
+  const env = { ...process.env };
   await promisify(execFile)("node_modules/.bin/prisma", ["migrate", "deploy"], {
     env,
     cwd: root,

@@ -42,6 +42,9 @@ export function pickCheckpointTarget(
 }
 
 const PAGE_FETCH_ATTEMPTS = 3;
+// shortcut: Failed pages can leave earlier batches committed, so retry version counts can underreport; persist per-run counts if exact retry totals become necessary.
+// Each record makes several sequential DB calls; keep interactive transactions short.
+export const PAGE_WRITE_BATCH_SIZE = 5;
 
 // The DIP API takes `f.vorgang` as a repeatable query parameter, so capped
 // step collection asks for the stored parent set in URL-sized batches instead

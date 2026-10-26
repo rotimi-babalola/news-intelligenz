@@ -79,6 +79,40 @@ test("multi-page import stores records once and advances the checkpoint", async 
   await prisma.$disconnect();
 });
 
+test("large pages keep cap and candidate indexes across write batches", async () => {
+  const prisma = await isolatedDatabase();
+  const result = await collectVorgang(prisma, {
+    runId: "dip-vorgang-batches",
+    electoralTerm: 21,
+    proceedingCap: 7,
+    fetchPage: fakeFetcher({
+      start: {
+        documents: Array.from({ length: 12 }, (_, i) => doc(String(i + 1))),
+        next: "",
+      },
+    }).fetchPage,
+  });
+  assert.deepEqual(
+    {
+      valid: result.valid,
+      stored: result.stored,
+      capped: result.capped,
+      versionsAdded: result.versionsAdded,
+    },
+    { valid: 12, stored: 7, capped: 5, versionsAdded: 7 },
+  );
+  assert.deepEqual(
+    (
+      await prisma.candidate.findMany({
+        where: { runId: result.runId },
+        orderBy: { itemIndex: "asc" },
+      })
+    ).map((row) => row.itemIndex),
+    Array.from({ length: 12 }, (_, i) => i),
+  );
+  await prisma.$disconnect();
+});
+
 test("replay adds no versions; changed text adds one; restored text adds another", async () => {
   const prisma = await isolatedDatabase();
   const one = await collectVorgang(prisma, {
