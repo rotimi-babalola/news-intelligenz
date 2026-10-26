@@ -820,3 +820,40 @@ test("local proceeding cap applies through multi-term sync", async () => {
   assert.equal(outcome.completed[0]?.result.capped, 1);
   await prisma.$disconnect();
 });
+
+test("multi-term sync applies an operator window to every scope", async () => {
+  const prisma = await isolatedDatabase();
+  const start = new Date("2026-10-01T00:00:00Z");
+  const end = new Date("2026-10-02T00:00:00Z");
+  const seen: string[] = [];
+  const record = (params: {
+    aktualisiertStart?: string;
+    aktualisiertEnd?: string;
+  }) => {
+    seen.push(`${params.aktualisiertStart}/${params.aktualisiertEnd}`);
+  };
+  const outcome = await syncDipTerms(prisma, {
+    terms: [21],
+    runIdFor: (endpoint, term) => `dip-window-${endpoint}-${term}`,
+    window: { start, end },
+    fetchVorgangPage: async (params) => {
+      record(params);
+      return { documents: [], cursor: "v", numFound: 0 };
+    },
+    fetchStepPage: async (params) => {
+      record(params);
+      return { documents: [], cursor: "s", numFound: 0 };
+    },
+  });
+  assert.equal(outcome.failed.length, 0);
+  assert.equal(outcome.completed.length, 2);
+  // Empty pages can still advance the cursor once, so every fetch is checked
+  // rather than counting calls.
+  assert.ok(seen.length >= 2);
+  assert.ok(
+    seen.every(
+      (value) => value === `${start.toISOString()}/${end.toISOString()}`,
+    ),
+  );
+  await prisma.$disconnect();
+});

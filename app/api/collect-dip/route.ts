@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { database } from "../../../src/db";
+import { parseBackfillWindow } from "../../../src/dip/schedule";
 import { liveStepsFetcher } from "../../../src/dip/steps";
 import { syncDipTerms } from "../../../src/dip/sync";
 import {
@@ -9,12 +10,28 @@ import {
 } from "../../../src/dip/vorgang";
 import { runIdSchema } from "../../../src/validation";
 
-const bodySchema = z.object({
-  runId: runIdSchema,
-  electoralTerm: z.number().int().min(1).max(30),
-  source: z.literal("live"),
-  proceedingCap: z.number().int().min(1).default(LOCAL_PROCEEDING_CAP),
-});
+const isoDate = z
+  .string()
+  .refine((value) => !Number.isNaN(Date.parse(value)), "invalid date");
+
+const bodySchema = z
+  .object({
+    runId: runIdSchema,
+    electoralTerm: z.number().int().min(1).max(30),
+    source: z.literal("live"),
+    proceedingCap: z.number().int().min(1).default(LOCAL_PROCEEDING_CAP),
+    // Recovery/backfill window; an omitted end means now. The checkpoint only
+    // moves forward, so replaying an older window never rewinds progress.
+    windowStart: isoDate.optional(),
+    windowEnd: isoDate.optional(),
+  })
+  .refine(
+    (body) =>
+      !body.windowStart ||
+      !body.windowEnd ||
+      Date.parse(body.windowStart) < Date.parse(body.windowEnd),
+    { message: "windowStart must be before windowEnd", path: ["windowStart"] },
+  );
 
 // DIP data may be retained and published with the Bundestag as the source.
 const ATTRIBUTION = "Source: Deutscher Bundestag (DIP)";
@@ -29,7 +46,8 @@ export async function POST(request: Request) {
   }
   const prisma = database();
   try {
-    const { runId, electoralTerm, proceedingCap } = parsed.data;
+    const { runId, electoralTerm, proceedingCap, windowStart, windowEnd } =
+      parsed.data;
     const runIdFor = (endpoint: string, term: number) =>
       `${runId}:${endpoint}:${term}`;
     const apiKey = process.env.BUNDESTAG_API_KEY;
@@ -41,6 +59,7 @@ export async function POST(request: Request) {
       proceedingCap,
       followStoredParents: true,
       scopeToStoredProceedings: true,
+      window: parseBackfillWindow(windowStart, windowEnd),
       fetchVorgangPage: liveVorgangFetcher(apiKey),
       fetchStepPage: steps.fetchPage,
       fetchVorgang: steps.fetchVorgang,

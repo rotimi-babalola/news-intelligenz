@@ -1,5 +1,12 @@
 import { database } from "../src/db.js";
-import { berlinHour, parseElectoralTerms } from "../src/dip/schedule.js";
+import {
+  defaultRunId,
+  isDue,
+  parseBackfillWindow,
+  parseElectoralTerms,
+  parseProceedingCap,
+  parseRunHour,
+} from "../src/dip/schedule.js";
 import { liveStepsFetcher } from "../src/dip/steps.js";
 import { syncDipTerms } from "../src/dip/sync.js";
 import { liveVorgangFetcher } from "../src/dip/vorgang.js";
@@ -10,27 +17,39 @@ import { liveVorgangFetcher } from "../src/dip/vorgang.js";
 // needs neither Python nor Ollama. A failed scope exits non-zero, and its
 // checkpoint stays put so the next run's overlap window retries it.
 const now = new Date();
-const dueHour = process.env.DIP_RUN_HOUR?.trim();
-if (dueHour && berlinHour(now) !== Number(dueHour)) {
+// An explicit backfill window is an operator action, so it bypasses the
+// Berlin-hour gate instead of waiting for the next scheduled trigger.
+const window = parseBackfillWindow(
+  process.env.DIP_BACKFILL_FROM,
+  process.env.DIP_BACKFILL_TO,
+  now,
+);
+const runHour = parseRunHour(process.env.DIP_RUN_HOUR);
+if (!window && !isDue(now, runHour)) {
   console.log(
-    `not due: ${berlinHour(now)}:00 Europe/Berlin, waiting for ${dueHour}:00`,
+    `not due: ${now.toISOString()} is not ${runHour}:00 Europe/Berlin`,
   );
   process.exit(0);
 }
 
 const terms = parseElectoralTerms(process.env.DIP_ELECTORAL_TERMS);
-const runId =
-  process.env.DIP_RUN_ID?.trim() || `dip-${now.toISOString().slice(0, 10)}`;
+const proceedingCap = parseProceedingCap(process.env.DIP_PROCEEDING_CAP);
+const runId = process.env.DIP_RUN_ID?.trim() || defaultRunId(now);
 const apiKey = process.env.BUNDESTAG_API_KEY;
 if (!apiKey) throw new Error("BUNDESTAG_API_KEY is not configured");
 
 const prisma = database();
 try {
+  console.log(
+    `collecting ${terms.join(",")} as ${runId}${window ? ` in ${window.start?.toISOString() ?? "baseline"}..${window.end.toISOString()}` : ""}`,
+  );
   const steps = liveStepsFetcher(apiKey);
   const outcome = await syncDipTerms(prisma, {
     terms,
     runIdFor: (endpoint, term) => `${runId}:${endpoint}:${term}`,
     now,
+    proceedingCap,
+    window,
     fetchVorgangPage: liveVorgangFetcher(apiKey),
     fetchStepPage: steps.fetchPage,
     fetchVorgang: steps.fetchVorgang,

@@ -31,6 +31,8 @@ export async function isolatedDatabase() {
   schemas.push({ baseUrl, name: schema });
   const url = `${baseUrl}?schema=${schema}`;
   process.env.DATABASE_URL = url;
+  // Prisma migrate prefers DATABASE_URL_UNPOOLED when set (prisma.config.ts).
+  process.env.DATABASE_URL_UNPOOLED = url;
   const env = { ...process.env, DATABASE_URL: url };
   await promisify(execFile)("node_modules/.bin/prisma", ["migrate", "deploy"], {
     env,

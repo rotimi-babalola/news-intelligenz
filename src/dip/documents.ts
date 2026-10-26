@@ -166,16 +166,31 @@ export async function processNextDocument(
         reused = stored.reused;
         return stored.content;
       });
-    } else if (!content.isLatest) {
+    } else {
       const cached = content;
-      content = await prisma.$transaction(async (tx) => {
-        await lockDocumentReference(tx, referenceId);
-        await supersedeDocumentContents(tx, referenceId);
-        return tx.documentContent.update({
+      // Rows written before the object-storage move, or left by an upload that
+      // committed no key, still need their bytes archived. The fetched bytes
+      // are the same content-addressed variant, so upload with the same key.
+      if (!cached.objectKey) {
+        const objectKey = documentObjectKey(referenceId, byteHash);
+        await (options.putPdf ?? putDocumentPdf)(objectKey, fetched.bytes);
+        content = await prisma.documentContent.update({
           where: { id: cached.id },
-          data: { isLatest: true },
+          // The fetched bytes now live in object storage, so a legacy row no
+          // longer needs its database copy.
+          data: { objectKey, bytes: null },
         });
-      });
+      }
+      if (!cached.isLatest) {
+        content = await prisma.$transaction(async (tx) => {
+          await lockDocumentReference(tx, referenceId);
+          await supersedeDocumentContents(tx, referenceId);
+          return tx.documentContent.update({
+            where: { id: cached.id },
+            data: { isLatest: true },
+          });
+        });
+      }
     }
     const pageRows = await listDocumentPages(prisma, content.id);
     await prisma.$transaction(async (tx) => {

@@ -118,6 +118,8 @@ export type SyncDipTermsOptions = {
   followStoredParents?: boolean;
   scopeToStoredProceedings?: boolean;
   retryDelayMs?: (attempt: number, error: unknown) => number;
+  // Operator-selected recovery/backfill window applied to every listed scope.
+  window?: SyncWindow;
   fetchVorgangPage: FetchVorgangPage;
   fetchStepPage: FetchStepPage;
   fetchVorgang?: FetchVorgang;
@@ -144,6 +146,7 @@ export async function syncDipTerms(
           followStoredParents: options.followStoredParents,
           scopeToStoredProceedings: options.scopeToStoredProceedings,
           retryDelayMs: options.retryDelayMs,
+          window: options.window,
           fetchPage:
             endpoint === "/vorgang"
               ? options.fetchVorgangPage

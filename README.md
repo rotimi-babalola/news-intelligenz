@@ -73,9 +73,16 @@ pnpm collect:dip
 It collects `DIP_ELECTORAL_TERMS` (default `21,20`) for both endpoints and
 exits non-zero when any term or endpoint fails; the untouched checkpoint means
 the next run's overlap window retries it. Set `DIP_RUN_HOUR=7` on the deployed
-cron so only the trigger that lands on 07:00 Europe/Berlin collects; the second
-UTC trigger exists solely to absorb daylight saving. The script collects only —
-PDF fetching and embedding remain separate drains.
+cron and schedule two triggers, `0 5 * * *` and `0 6 * * *` (UTC): the
+Berlin-hour guard lets only the one that lands on 07:00 Europe/Berlin collect,
+so daylight saving needs no schedule edit. The script collects only — PDF
+fetching and embedding remain separate drains.
+
+To replay a missed or failed period, set `DIP_BACKFILL_FROM` (and optionally
+`DIP_BACKFILL_TO`, default now) and run `pnpm collect:dip`. An explicit window
+bypasses the hour guard and is used verbatim for every scope; the checkpoint
+still only moves forward. `DIP_PROCEEDING_CAP` optionally caps unique
+proceedings per term.
 
 Linked PDFs are extracted with [PyMuPDF](https://pymupdf.readthedocs.io/)
 through `scripts/extract_pdf.py`, so the `python3` on `PATH` needs that package
@@ -88,7 +95,10 @@ python3 -m pip install pymupdf
 PDF fetching is independent of DIP collection: only references dated within the
 previous 14 days are queued automatically, and `POST /api/drain-documents`
 processes one queued document per call. Fetched PDF bytes are archived in
-Cloudflare R2; extracted page text stays in PostgreSQL. DIP data use is governed by the
+Cloudflare R2; extracted page text stays in PostgreSQL. Rows written before the
+move can be archived in place with `pnpm backfill:documents` (`DRY_RUN=1`
+reports without uploading); the command re-fetches from `source_url` only when
+the row still holds no bytes. DIP data use is governed by the
 [official terms](https://dip.bundestag.de/documents/nutzungsbedingungen_dip.pdf),
 including source attribution, document reproduction rules, and possible
 third-party rights.

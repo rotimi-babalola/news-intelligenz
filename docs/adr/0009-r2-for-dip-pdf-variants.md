@@ -22,3 +22,12 @@ CI never reaches R2. Object upload happens before the database transaction:
 a failed upload retries the job, and a failed transaction leaves an object that
 the same content-addressed key overwrites on retry. Retained variants are not
 deleted automatically, matching the existing retention rule.
+
+The schema move is expand/contract. `document_contents.bytes` stays nullable
+and `object_key` is nullable, so a row captured before the move can still be
+archived: `pnpm backfill:documents` uploads its bytes (or re-fetches the source
+when bytes are gone), verifies the content-addressed hash and records the key.
+A null key means "needs archive"; new rows set the key and leave `bytes` null.
+The worker also repairs a null key when the same bytes are fetched again.
+A successful archive clears that row's `bytes`; the column is dropped only
+once no row needs it.
