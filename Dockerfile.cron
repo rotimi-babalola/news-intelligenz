@@ -1,0 +1,22 @@
+FROM node:24-bookworm-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv /opt/pdf-venv \
+    && /opt/pdf-venv/bin/pip install --no-cache-dir pymupdf==1.28.2 \
+    && npm install --global pnpm@10.18.3
+
+ENV PATH="/opt/pdf-venv/bin:${PATH}"
+
+COPY package.json pnpm-lock.yaml prisma.config.ts tsconfig.node.json tsconfig.collect.json ./
+COPY prisma ./prisma
+RUN DATABASE_URL=postgresql://build:build@127.0.0.1:5432/news pnpm install --frozen-lockfile
+
+COPY src ./src
+COPY scripts ./scripts
+RUN DATABASE_URL=postgresql://build:build@127.0.0.1:5432/news pnpm build:collect \
+    && python3 -c "import pymupdf"
+
+CMD ["node", "dist/scripts/drain-dip.js"]

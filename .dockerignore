@@ -1,0 +1,9 @@
+.git
+.env*
+.next
+.venv
+node_modules
+dist
+src/generated
+coverage
+.neon

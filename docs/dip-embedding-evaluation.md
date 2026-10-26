@@ -85,3 +85,35 @@ it consumes existing pending jobs without re-collecting. Use
 `DIP_REINDEX_SAMPLE_PERCENT=100 pnpm reindex:dip` when fully indexing another
 model. A hosted smoke test is opt-in with `HOSTED_EMBEDDING_QA=1` and the
 chosen provider environment.
+
+## Render PDF drain setup
+
+Create a second Render cron job from this repository with Docker runtime and
+`Dockerfile.cron`. The image includes Node 24, Python, PyMuPDF, and the compiled
+worker; its default command is `node dist/scripts/drain-dip.js`. For the
+initial document backlog, schedule `*/15 * * * *` UTC and set:
+
+```text
+DATABASE_URL=<Neon pooled connection string>
+R2_ENDPOINT=<the S3 API endpoint shown for your R2 bucket>
+R2_BUCKET=<bucket name>
+R2_ACCESS_KEY_ID=<bucket-scoped Object Read & Write key ID>
+R2_SECRET_ACCESS_KEY=<matching secret>
+DIP_DOCUMENT_DRAIN_CAP=25
+DIP_EMBEDDING_DRAIN_CAP=0
+```
+
+The bucket and its key must permit uploads. An EU-jurisdiction R2 bucket uses
+the `.eu.r2.cloudflarestorage.com` endpoint; a standard bucket uses
+`.r2.cloudflarestorage.com`. These are Render service environment variables,
+not Docker build arguments or values committed to Git. No embedding provider
+credentials are needed while the embedding cap is zero. The collector's
+`BUNDESTAG_API_KEY` and `DIP_RUN_HOUR` are not needed on this worker.
+
+Apply database migrations once before triggering the first run. The cron
+container has Prisma installed, so its temporary Render Shell can run
+`pnpm db:migrate` when `DATABASE_URL_UNPOOLED` is set to Neon's direct
+connection string. Then trigger one run and confirm `document_contents` and
+`document_pages` increase. After the backlog clears, an hourly
+`15 * * * *` schedule is sufficient for maintenance. Once a model is chosen,
+add its embedding variables and raise `DIP_EMBEDDING_DRAIN_CAP` above zero.
