@@ -1,0 +1,69 @@
+{
+  "reviewed": false,
+  "cases": [
+    {
+      "query": "Welche Vorhaben sollen die Baukosten für Wohnungen senken?",
+      "relevant": [{ "entity": "vorgang", "apiId": "339930" }]
+    },
+    {
+      "query": "What parliamentary item addresses lowering housing construction costs?",
+      "relevant": [{ "entity": "vorgang", "apiId": "339930" }]
+    },
+    {
+      "query": "Wie werden Deutschlands Emissionszuweisungen für die Jahre 2021 bis 2030 bilanziert?",
+      "relevant": [{ "entity": "vorgang", "apiId": "338509" }]
+    },
+    {
+      "query": "Which item reviews Germany's annual emissions allocations through 2030?",
+      "relevant": [{ "entity": "vorgang", "apiId": "338509" }]
+    },
+    {
+      "query": "Wie sollen sich die Netzentgelte für Strom bis 2045 entwickeln?",
+      "relevant": [{ "entity": "vorgang", "apiId": "340178" }]
+    },
+    {
+      "query": "What is being asked about future electricity grid charges?",
+      "relevant": [{ "entity": "vorgang", "apiId": "340178" }]
+    },
+    {
+      "query": "Wie nahmen Menschen mit Migrationshintergrund 2024 an Arbeitsförderung teil?",
+      "relevant": [{ "entity": "vorgang", "apiId": "323679" }]
+    },
+    {
+      "query": "How many people with a migration background joined employment support measures in 2024?",
+      "relevant": [{ "entity": "vorgang", "apiId": "323679" }]
+    },
+    {
+      "query": "Welche Belastungen könnten pflegende Angehörige durch die Abschaffung von Pflegegrad 1 tragen?",
+      "relevant": [{ "entity": "vorgang", "apiId": "327415" }]
+    },
+    {
+      "query": "Could removing the lowest care level increase pressure on family caregivers?",
+      "relevant": [{ "entity": "vorgang", "apiId": "327415" }]
+    },
+    {
+      "query": "Wie finanziert der Bund Hochschulen für angewandte Wissenschaften?",
+      "relevant": [{ "entity": "vorgang", "apiId": "340641" }]
+    },
+    {
+      "query": "What federal funding goes to universities of applied sciences?",
+      "relevant": [{ "entity": "vorgang", "apiId": "340641" }]
+    },
+    {
+      "query": "Wie soll die Finanzierung der Autobahn-Infrastrukturgesellschaft geändert werden?",
+      "relevant": [{ "entity": "vorgang", "apiId": "340174" }]
+    },
+    {
+      "query": "Which proposed law changes funding for the federal motorway infrastructure company?",
+      "relevant": [{ "entity": "vorgang", "apiId": "340174" }]
+    },
+    {
+      "query": "Wie werden Preise bei Beschaffungen der Bundeswehr kontrolliert?",
+      "relevant": [{ "entity": "vorgang", "apiId": "340267" }]
+    },
+    {
+      "query": "What scrutiny applies to prices in German military procurement?",
+      "relevant": [{ "entity": "vorgang", "apiId": "340267" }]
+    }
+  ]
+}

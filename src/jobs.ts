@@ -138,6 +138,8 @@ export async function claimNextJob(
     jobId?: string;
     excludeSourceKind?: SourceKind;
     operation?: string | string[];
+    payloadModel?: string;
+    includeModelLess?: boolean;
   } = {},
 ): Promise<ClaimedJob | null> {
   const params: unknown[] = [workerId, leaseMs / 1000];
@@ -159,6 +161,13 @@ export async function claimNextJob(
     filterClause += Array.isArray(filter.operation)
       ? ` AND operation = ANY($${params.length}::text[])`
       : ` AND operation = $${params.length}`;
+  }
+  if (filter.payloadModel) {
+    params.push(filter.payloadModel);
+    filterClause +=
+      filter.includeModelLess === false
+        ? ` AND payload->>'model' = $${params.length}`
+        : ` AND (payload->>'model' IS NULL OR payload->>'model' = $${params.length})`;
   }
   const jobsTable = qualifiedTable("processing_jobs");
   const rows = (await prisma.$queryRawUnsafe(

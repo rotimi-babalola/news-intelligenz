@@ -1,14 +1,14 @@
 import type { PrismaClient } from "../generated/prisma/client";
 import {
   assertEmbedding,
-  DOCUMENT_INSTRUCTION,
+  embeddingConfig,
+  embeddingInput,
   embedText,
-  EMBEDDING_MODEL,
+  QUERY_INSTRUCTION,
 } from "./embedding";
 import { searchDipEmbeddings } from "./repository";
 
-export const QUERY_INSTRUCTION =
-  "Given a German or English query, retrieve relevant German parliamentary proceedings and steps";
+export { QUERY_INSTRUCTION };
 
 export async function searchDip(
   prisma: PrismaClient,
@@ -16,14 +16,16 @@ export async function searchDip(
   limit: number,
   options: { embed?: (text: string) => Promise<number[]> } = {},
 ) {
-  const embedding = await (options.embed ?? embedText)(
-    `Instruct: ${QUERY_INSTRUCTION}\nQuery:${query}`,
-  );
+  const config = embeddingConfig();
+  const embedding = options.embed
+    ? await options.embed(embeddingInput(query, "query", config))
+    : await embedText(query, "query");
   assertEmbedding(embedding);
   const rows = await searchDipEmbeddings(prisma, {
     embedding,
-    model: EMBEDDING_MODEL,
-    documentInstruction: DOCUMENT_INSTRUCTION,
+    model: config.indexId,
+    documentInstruction: config.documentInstruction,
+    queryInstruction: config.queryInstruction,
     limit,
   });
   return rows.map((row) => {

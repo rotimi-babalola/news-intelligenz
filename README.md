@@ -78,6 +78,11 @@ Berlin-hour guard lets only the one that lands on 07:00 Europe/Berlin collect,
 so daylight saving needs no schedule edit. The script collects only — PDF
 fetching and embedding remain separate drains.
 
+To compare hosted embedding models before choosing one for production, see
+[DIP embedding comparison](docs/dip-embedding-evaluation.md). The comparison
+reindexes existing records under separate model identities, evaluates labeled
+German and English queries, and uses a batch drain for backfill.
+
 To replay a missed or failed period, set `DIP_BACKFILL_FROM` (and optionally
 `DIP_BACKFILL_TO`, default now) and run `pnpm collect:dip`. An explicit window
 bypasses the hour guard and is used verbatim for every scope; the checkpoint

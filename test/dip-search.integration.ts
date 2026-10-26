@@ -58,6 +58,7 @@ test("German and English queries return only current DIP source versions", async
         versionNo: sourceVersionNo,
         model: EMBEDDING_MODEL,
         documentInstruction: DOCUMENT_INSTRUCTION,
+        queryInstruction: QUERY_INSTRUCTION,
         embedding,
       });
     await save("vorgang", "123", 1, vector(1, 0));
@@ -174,6 +175,7 @@ test("document text returns the latest variant with page provenance", async () =
         sourcePage: 1,
         model: EMBEDDING_MODEL,
         documentInstruction: DOCUMENT_INSTRUCTION,
+        queryInstruction: QUERY_INSTRUCTION,
         embedding: vector(1, 0),
       });
 
