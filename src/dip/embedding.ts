@@ -1,5 +1,11 @@
 import type { PrismaClient } from "../generated/prisma/client";
-import { claimNextJob, completeJob, failJob } from "../jobs";
+import {
+  claimNextJob,
+  completeJob,
+  failJob,
+  parseRetryAfterMs,
+  RateLimitedError,
+} from "../jobs";
 import { EMBED_DOCUMENT, EMBED_PROCEEDING, EMBED_STEP } from "./jobs";
 import {
   findDocumentContent,
@@ -12,8 +18,59 @@ import {
 export const EMBEDDING_MODEL = "qwen3-embedding:0.6b";
 // Qwen3 embeds retrieval documents without a prefix.
 export const DOCUMENT_INSTRUCTION = "";
+export const QUERY_INSTRUCTION =
+  "Given a German or English query, retrieve relevant German parliamentary proceedings and steps";
+
+export function embeddingConfig() {
+  const baseUrl = process.env.EMBEDDING_BASE_URL?.trim();
+  const format =
+    process.env.EMBEDDING_API_FORMAT || (baseUrl ? "openai" : "ollama");
+  if (format !== "openai" && format !== "ollama" && format !== "voyage")
+    throw new Error("EMBEDDING_API_FORMAT must be openai, ollama, or voyage");
+  const port = Number(process.env.OLLAMA_PORT || "11434");
+  const model = process.env.EMBEDDING_MODEL?.trim() || EMBEDDING_MODEL;
+  return {
+    model,
+    indexId: process.env.EMBEDDING_INDEX_ID?.trim() || model,
+    baseUrl: baseUrl || `http://127.0.0.1:${port}`,
+    apiKey: process.env.EMBEDDING_API_KEY?.trim(),
+    format,
+    documentInstruction:
+      process.env.EMBEDDING_DOCUMENT_INSTRUCTION ?? DOCUMENT_INSTRUCTION,
+    queryInstruction:
+      process.env.EMBEDDING_QUERY_INSTRUCTION ??
+      (format === "ollama" ? QUERY_INSTRUCTION : ""),
+  };
+}
+
+export function embeddingInput(
+  text: string,
+  kind: "query" | "document",
+  config = embeddingConfig(),
+) {
+  const instruction =
+    kind === "query" ? config.queryInstruction : config.documentInstruction;
+  if (!instruction) return text;
+  return kind === "query"
+    ? `Instruct: ${instruction}\nQuery:${text}`
+    : `Instruct: ${instruction}\nDocument:${text}`;
+}
 
 type Embed = (text: string) => Promise<number[]>;
+let billedTokens = 0;
+let unmeteredRequests = 0;
+
+export function embeddingCost() {
+  const price = Number(process.env.EMBEDDING_PRICE_PER_MILLION_TOKENS);
+  return {
+    billedTokens,
+    unmeteredRequests,
+    estimatedCost:
+      unmeteredRequests === 0 && Number.isFinite(price) && price > 0
+        ? (billedTokens * price) / 1_000_000
+        : null,
+  };
+}
 
 export function assertEmbedding(embedding: number[]) {
   if (
@@ -24,32 +81,73 @@ export function assertEmbedding(embedding: number[]) {
     ) ||
     !embedding.some((value) => value !== 0)
   )
-    throw new Error("Ollama returned an invalid 1024-dimensional embedding");
+    throw new Error("Provider returned an invalid 1024-dimensional embedding");
 }
 
-export async function embedText(text: string): Promise<number[]> {
+export async function embedText(
+  text: string,
+  kind: "query" | "document" = "document",
+): Promise<number[]> {
+  const config = embeddingConfig();
   const port = Number(process.env.OLLAMA_PORT || "11434");
-  if (!Number.isInteger(port) || port < 1 || port > 65535)
+  if (
+    !process.env.EMBEDDING_BASE_URL &&
+    (!Number.isInteger(port) || port < 1 || port > 65535)
+  )
     throw new Error("OLLAMA_PORT must be a valid TCP port");
-  const response = await fetch(`http://127.0.0.1:${port}/api/embed`, {
+  const url = new URL(
+    config.format === "ollama" ? "api/embed" : "embeddings",
+    `${config.baseUrl.replace(/\/$/, "")}/`,
+  );
+  if (
+    url.protocol !== "https:" &&
+    url.hostname !== "127.0.0.1" &&
+    url.hostname !== "localhost"
+  )
+    throw new Error("Remote embedding endpoints must use HTTPS");
+  const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+    },
     body: JSON.stringify({
-      model: EMBEDDING_MODEL,
-      input: text,
-      truncate: false,
+      model: config.model,
+      input: embeddingInput(text, kind, config),
+      ...(config.format === "ollama"
+        ? { truncate: false }
+        : config.format === "voyage"
+          ? { input_type: kind, output_dimension: 1024, truncation: false }
+          : { dimensions: 1024, encoding_format: "float" }),
     }),
     signal: AbortSignal.timeout(120_000),
   });
-  if (!response.ok)
-    throw new Error(`Ollama embedding failed: HTTP ${response.status}`);
+  if (!response.ok) {
+    const message = `Embedding provider failed: HTTP ${response.status}`;
+    if (response.status === 429)
+      throw new RateLimitedError(
+        message,
+        parseRetryAfterMs(response.headers.get("retry-after")) ?? 60_000,
+      );
+    throw new Error(message);
+  }
   const body = (await response.json()) as {
     model?: string;
     embeddings?: number[][];
+    data?: { embedding: number[] }[];
+    usage?: { total_tokens?: number };
   };
-  if (body.model !== EMBEDDING_MODEL)
-    throw new Error("Ollama returned an unexpected embedding model");
-  return body.embeddings?.[0] ?? [];
+  if (body.model && body.model !== config.model)
+    throw new Error("Embedding provider returned an unexpected model");
+  const embedding =
+    config.format === "ollama"
+      ? body.embeddings?.[0]
+      : body.data?.[0]?.embedding;
+  assertEmbedding(embedding ?? []);
+  if (typeof body.usage?.total_tokens === "number")
+    billedTokens += body.usage.total_tokens;
+  else unmeteredRequests++;
+  return embedding!;
 }
 
 export async function processNextDipEmbedding(
@@ -60,8 +158,10 @@ export async function processNextDipEmbedding(
     jobId?: string;
     operation?:
       typeof EMBED_PROCEEDING | typeof EMBED_STEP | typeof EMBED_DOCUMENT;
+    reindexOnly?: boolean;
   } = {},
 ) {
+  const config = embeddingConfig();
   const job = await claimNextJob(prisma, workerId, undefined, {
     operation: options.operation ?? [
       EMBED_PROCEEDING,
@@ -69,6 +169,8 @@ export async function processNextDipEmbedding(
       EMBED_DOCUMENT,
     ],
     jobId: options.jobId,
+    payloadModel: config.indexId,
+    includeModelLess: !options.reindexOnly,
   });
   if (!job) return { status: "empty" as const };
   try {
@@ -109,8 +211,9 @@ export async function processNextDipEmbedding(
           apiId: payload.referenceId,
           versionNo: payload.variantNo,
           sourcePage: page.pageNo,
-          model: EMBEDDING_MODEL,
-          documentInstruction: DOCUMENT_INSTRUCTION,
+          model: config.indexId,
+          documentInstruction: config.documentInstruction,
+          queryInstruction: config.queryInstruction,
           embedding,
         });
       }
@@ -160,8 +263,9 @@ export async function processNextDipEmbedding(
         sourceOperation === EMBED_PROCEEDING ? "vorgang" : "vorgangsposition",
       apiId: payload.apiId,
       versionNo,
-      model: EMBEDDING_MODEL,
-      documentInstruction: DOCUMENT_INSTRUCTION,
+      model: config.indexId,
+      documentInstruction: config.documentInstruction,
+      queryInstruction: config.queryInstruction,
       embedding,
     });
     await completeJob(prisma, job, workerId);

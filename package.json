@@ -22,6 +22,9 @@
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "collect:dip": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/run-dip.js",
+    "reindex:dip": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/reindex-dip.js",
+    "evaluate:dip": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/evaluate-dip.js",
+    "drain:dip": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/drain-dip.js",
     "backfill:documents": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/backfill-document-objects.js"
   },
   "dependencies": {

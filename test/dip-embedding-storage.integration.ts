@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { QUERY_INSTRUCTION } from "../src/dip/embedding.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 
 test("DIP embeddings retain versions and reject duplicate model records", async () => {
@@ -34,13 +35,13 @@ test("DIP embeddings retain versions and reject duplicate model records", async 
       { source_version_no: 1, dimensions: 1024 },
       { source_version_no: 2, dimensions: 1024 },
     ]);
-    const queryInstructionColumns = await prisma.$queryRawUnsafe<
-      { column_name: string }[]
-    >(
-      `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'dip_embeddings' AND column_name = 'query_instruction'`,
-      schema,
+    const queryInstructions = await prisma.$queryRawUnsafe<
+      { query_instruction: string }[]
+    >(`SELECT query_instruction FROM ${table} ORDER BY source_version_no`);
+    assert.deepEqual(
+      queryInstructions.map((row) => row.query_instruction),
+      [QUERY_INSTRUCTION, QUERY_INSTRUCTION],
     );
-    assert.deepEqual(queryInstructionColumns, []);
   } finally {
     await prisma.$disconnect();
   }

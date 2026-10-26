@@ -298,6 +298,7 @@ model DipEmbedding {
   sourcePage          Int                 @map("source_page") @default(0)
   model               String              @db.Text
   documentInstruction String              @map("document_instruction") @db.Text
+  queryInstruction    String              @map("query_instruction") @db.Text
   embedding           Unsupported("vector(1024)")
   createdAt           DateTime            @map("created_at") @default(now()) @db.Timestamptz(6)
 
