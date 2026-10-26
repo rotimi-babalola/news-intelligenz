@@ -324,10 +324,11 @@ model DocumentReference {
   @@map("document_references")
 }
 
-// Fetched PDF bytes, content-addressed by document reference and byte hash.
+// Fetched PDF variants, content-addressed by document reference and byte hash.
 // Re-fetching identical bytes reuses the row; changed bytes become a new
 // variant, and earlier variants are retained. Only the latest variant is
-// searchable, so historical content never duplicates retrieval hits.
+// searchable, so historical content never duplicates retrieval hits. Bytes live
+// in object storage; the row keeps their content-addressed key and provenance.
 model DocumentContent {
   id          String         @id @default(uuid()) @db.Uuid
   referenceId String         @map("reference_id") @db.Text
@@ -335,7 +336,12 @@ model DocumentContent {
   byteHash    String         @map("byte_hash") @db.Text
   byteSize    Int            @map("byte_size")
   pageCount   Int            @map("page_count")
-  bytes       Bytes
+  // Null while a legacy row still needs its bytes archived; the backfill and
+  // document worker upload from `bytes` or the source url and set the key.
+  objectKey   String?        @map("object_key") @db.Text
+  // Retained for rows written before the object-storage move so they can be
+  // re-archived. New rows leave this null and archive on upload.
+  bytes       Bytes?
   sourceUrl   String?        @map("source_url") @db.Text
   fetchedAt   DateTime       @map("fetched_at") @default(now()) @db.Timestamptz(6)
   isLatest    Boolean        @map("is_latest") @default(true)

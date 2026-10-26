@@ -152,7 +152,7 @@ test("document text returns the latest variant with page provenance", async () =
           byteHash: `hash-${variantNo}`,
           byteSize: 4,
           pageCount: 1,
-          bytes: new Uint8Array([1, 2, 3, variantNo]),
+          objectKey: `documents/789/hash-${variantNo}.pdf`,
           isLatest,
         },
       });

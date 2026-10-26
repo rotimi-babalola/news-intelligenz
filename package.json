@@ -10,6 +10,7 @@
     "prepare": "prisma generate",
     "build": "prisma generate && next build",
     "build:test": "prisma generate && tsc -p tsconfig.node.json && node scripts/fix-dist-extensions.js",
+    "build:collect": "prisma generate && tsc -p tsconfig.collect.json && node scripts/fix-dist-extensions.js",
     "db:migrate": "prisma migrate deploy",
     "db:reset": "sh scripts/reset-db.sh",
     "dev": "pnpm db:migrate && next dev -H 127.0.0.1",
@@ -19,9 +20,12 @@
     "test:integration": "pnpm build:test && pnpm build && node --env-file-if-exists=.env --test dist/test/*.integration.js",
     "check": "prisma generate && tsc --noEmit -p tsconfig.node.json && tsc --noEmit",
     "format": "prettier --check .",
-    "format:write": "prettier --write ."
+    "format:write": "prettier --write .",
+    "collect:dip": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/run-dip.js",
+    "backfill:documents": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/backfill-document-objects.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1156.0",
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
     "@tailwindcss/postcss": "^4.3.3",
@@ -41,6 +45,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@neon/config": "^1.9.4",
     "@types/node": "^24.13.5",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",

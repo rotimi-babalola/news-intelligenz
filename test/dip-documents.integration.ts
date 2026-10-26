@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { retryJob } from "../src/admin/service.js";
+import { backfillDocumentObjects } from "../src/dip/backfill.js";
 import { processNextDocument, requestDocument } from "../src/dip/documents.js";
+import { documentObjectKey } from "../src/dip/object-store.js";
 import { processNextDipEmbedding } from "../src/dip/embedding.js";
 import { EMBED_DOCUMENT, ON_DEMAND_PRIORITY } from "../src/dip/jobs.js";
 import { collectSteps } from "../src/dip/steps.js";
@@ -11,6 +14,19 @@ import { isolatedDatabase } from "./dip-test-db.js";
 const NOW = new Date("2026-10-20T12:00:00+02:00");
 const PDF_URL = "https://dserver.bundestag.de/btd/21/010/2110010.pdf";
 const HOT = "2026-10-09";
+
+// Tests never reach R2; individual cases inject a recording putPdf.
+type ProcessOptions = NonNullable<Parameters<typeof processNextDocument>[2]>;
+function processDoc(
+  prisma: Parameters<typeof processNextDocument>[0],
+  workerId: string,
+  options: ProcessOptions = {},
+) {
+  return processNextDocument(prisma, workerId, {
+    putPdf: async () => {},
+    ...options,
+  });
+}
 
 function step(id: string, pdfUrl: string | null = PDF_URL) {
   return {
@@ -60,7 +76,7 @@ const pages = [
   { page: 2, text: "Anlage 1 Haushalt" },
 ];
 
-test("a document job caches bytes, stores pages and hands off embedding", async () => {
+test("a document job archives the PDF, stores pages and hands off embedding", async () => {
   const prisma = await isolatedDatabase();
   try {
     await collect(prisma, "doc-collect-1");
@@ -73,9 +89,13 @@ test("a document job caches bytes, stores pages and hands off embedding", async 
       },
     });
     const bytes = Buffer.from("%PDF-1.7 page text");
-    const result = await processNextDocument(prisma, "worker", {
+    const uploaded = new Map<string, Buffer>();
+    const result = await processDoc(prisma, "worker", {
       fetchPdf: async () => ({ ok: true, bytes, finalUrl: PDF_URL }),
       extract: async () => pages,
+      putPdf: async (key, body) => {
+        uploaded.set(key, body);
+      },
     });
     assert.equal(result.status, "succeeded");
     if (result.status !== "succeeded") return;
@@ -88,6 +108,11 @@ test("a document job caches bytes, stores pages and hands off embedding", async 
     assert.equal(content.byteSize, bytes.byteLength);
     assert.equal(content.pageCount, 2);
     assert.equal(content.isLatest, true);
+    assert.equal(
+      content.objectKey,
+      documentObjectKey("29701499", content.byteHash),
+    );
+    assert.deepEqual(uploaded.get(content.objectKey), bytes);
     assert.deepEqual(
       await prisma.documentPage.findMany({
         where: { contentId: content.id },
@@ -166,15 +191,14 @@ test("identical bytes reuse the cache and changed bytes add a retained variant",
 
     await collect(prisma, "doc-cache-1");
     assert.equal(
-      (await processNextDocument(prisma, "worker", { fetchPdf, extract }))
-        .status,
+      (await processDoc(prisma, "worker", { fetchPdf, extract })).status,
       "succeeded",
     );
 
     // A changed reference (new pdf_url) is new work, but identical bytes are
     // the same content variant: nothing is fetched twice into the cache.
     await collect(prisma, "doc-cache-2", step("701400", `${PDF_URL}?v=2`));
-    const reused = await processNextDocument(prisma, "worker", {
+    const reused = await processDoc(prisma, "worker", {
       fetchPdf,
       extract,
     });
@@ -187,7 +211,7 @@ test("identical bytes reuse the cache and changed bytes add a retained variant",
     // but no longer the searchable one.
     bytes = Buffer.from("%PDF variant two");
     await collect(prisma, "doc-cache-3", step("701400", `${PDF_URL}?v=3`));
-    const changed = await processNextDocument(prisma, "worker", {
+    const changed = await processDoc(prisma, "worker", {
       fetchPdf,
       extract,
     });
@@ -211,7 +235,7 @@ test("identical bytes reuse the cache and changed bytes add a retained variant",
     // Reverting to earlier bytes reuses variant 1 and makes it latest again.
     bytes = firstBytes;
     await collect(prisma, "doc-cache-4", step("701400", `${PDF_URL}?v=4`));
-    const reverted = await processNextDocument(prisma, "worker", {
+    const reverted = await processDoc(prisma, "worker", {
       fetchPdf,
       extract,
     });
@@ -238,7 +262,7 @@ test("missing and failed PDFs keep the reference and retry separately", async ()
   const prisma = await isolatedDatabase();
   try {
     await collect(prisma, "doc-missing", step("701400", null));
-    const missing = await processNextDocument(prisma, "worker", {
+    const missing = await processDoc(prisma, "worker", {
       fetchPdf: async () => {
         throw new Error("fetch must not run without a url");
       },
@@ -259,7 +283,7 @@ test("missing and failed PDFs keep the reference and retry separately", async ()
     await collect(prisma, "doc-failed", step("701401"));
     assert.equal(
       (
-        await processNextDocument(prisma, "worker", {
+        await processDoc(prisma, "worker", {
           fetchPdf: async () => ({ ok: false, reason: "HTTP 503" }),
         })
       ).status,
@@ -278,7 +302,7 @@ test("missing and failed PDFs keep the reference and retry separately", async ()
     });
     assert.equal(
       (
-        await processNextDocument(prisma, "worker", {
+        await processDoc(prisma, "worker", {
           fetchPdf: async () => ({
             ok: true,
             bytes: Buffer.from("%PDF recovered"),
@@ -343,7 +367,7 @@ test("an on-demand request returns metadata and jumps the queue", async () => {
     const fetched: string[] = [];
     assert.equal(
       (
-        await processNextDocument(prisma, "worker", {
+        await processDoc(prisma, "worker", {
           fetchPdf: async (url) => {
             fetched.push(url);
             return {
@@ -403,7 +427,7 @@ test("concurrent variants keep unique numbers and one latest row", async () => {
     assert.equal(jobs.length, 2);
     const results = await Promise.all(
       jobs.map((job, index) =>
-        processNextDocument(prisma, `worker-${index}`, {
+        processDoc(prisma, `worker-${index}`, {
           jobId: job.id,
           fetchPdf: async () => ({
             ok: true,
@@ -477,7 +501,7 @@ test("a worker restart resumes the claimed document job", async () => {
     assert.equal((await requeueStaleClaims(prisma)).count, 1);
     assert.equal(
       (
-        await processNextDocument(prisma, "new-worker", {
+        await processDoc(prisma, "new-worker", {
           fetchPdf: async () => ({
             ok: true,
             bytes: Buffer.from("%PDF after restart"),
@@ -523,6 +547,154 @@ test("admin retry reprocesses an exhausted document job", async () => {
     assert.equal(
       retried.lastError,
       "Document fetch failed: Blocked private/local destination",
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("an upload failure retries without storing a row and archives on retry", async () => {
+  const prisma = await isolatedDatabase();
+  try {
+    await collect(prisma, "doc-upload-fail");
+    const bytes = Buffer.from("%PDF upload retry");
+    let uploads = 0;
+    const failed = await processDoc(prisma, "worker", {
+      fetchPdf: async () => ({ ok: true, bytes, finalUrl: PDF_URL }),
+      extract: async () => pages,
+      putPdf: async () => {
+        uploads += 1;
+        throw new Error("R2 unavailable");
+      },
+    });
+    assert.equal(failed.status, "retrying");
+    assert.equal(uploads, 1);
+    // The row (and its pages) only appears after a successful upload, so a
+    // retry never leaves a cache entry pointing at a missing object.
+    assert.equal(await prisma.documentContent.count(), 0);
+    assert.equal(await prisma.documentPage.count(), 0);
+
+    await prisma.processingJob.updateMany({
+      data: { nextAttemptAt: new Date(0) },
+    });
+    const retried = await processDoc(prisma, "worker", {
+      fetchPdf: async () => ({ ok: true, bytes, finalUrl: PDF_URL }),
+      extract: async () => pages,
+    });
+    assert.equal(retried.status, "succeeded");
+    const stored = await prisma.documentContent.findFirstOrThrow();
+    assert.equal(
+      stored.objectKey,
+      documentObjectKey("29701499", stored.byteHash),
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("a legacy row with no object key is archived on the next fetch", async () => {
+  const prisma = await isolatedDatabase();
+  try {
+    const bytes = Buffer.from("%PDF legacy row");
+    const fetchPdf = async () => ({
+      ok: true as const,
+      bytes,
+      finalUrl: PDF_URL,
+    });
+    await collect(prisma, "doc-legacy-1");
+    assert.equal(
+      (
+        await processDoc(prisma, "worker", {
+          fetchPdf,
+          extract: async () => pages,
+        })
+      ).status,
+      "succeeded",
+    );
+    const stored = await prisma.documentContent.findFirstOrThrow();
+    await prisma.documentContent.update({
+      where: { id: stored.id },
+      data: { objectKey: null },
+    });
+
+    // A new reference revision enqueues new work; identical bytes hit the
+    // cache, which still needs its missing object archived.
+    await collect(prisma, "doc-legacy-2", step("701400", `${PDF_URL}?legacy`));
+    const uploaded: string[] = [];
+    const repaired = await processDoc(prisma, "worker", {
+      fetchPdf,
+      extract: async () => {
+        throw new Error("cache hit must not extract");
+      },
+      putPdf: async (key) => {
+        uploaded.push(key);
+      },
+    });
+    assert.equal(repaired.status, "succeeded");
+    if (repaired.status === "succeeded") assert.equal(repaired.reused, true);
+    const row = await prisma.documentContent.findUniqueOrThrow({
+      where: { id: stored.id },
+    });
+    assert.equal(row.objectKey, documentObjectKey("29701499", stored.byteHash));
+    assert.deepEqual(uploaded, [row.objectKey]);
+    assert.equal(await prisma.documentContent.count(), 1);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("backfill archives retained bytes and skips unrecoverable rows", async () => {
+  const prisma = await isolatedDatabase();
+  try {
+    const bytes = Buffer.from("%PDF retained");
+    const byteHash = createHash("sha256").update(bytes).digest("hex");
+    const archived = await prisma.documentContent.create({
+      data: {
+        referenceId: "legacy-with-bytes",
+        variantNo: 1,
+        byteHash,
+        byteSize: bytes.byteLength,
+        pageCount: 0,
+        objectKey: null,
+        bytes,
+      },
+    });
+    const skipped = await prisma.documentContent.create({
+      data: {
+        referenceId: "legacy-without-bytes",
+        variantNo: 1,
+        byteHash: "0".repeat(64),
+        byteSize: 0,
+        pageCount: 0,
+        objectKey: null,
+      },
+    });
+    const uploaded = new Map<string, Buffer>();
+    const result = await backfillDocumentObjects(prisma, {
+      putPdf: async (key, body) => {
+        uploaded.set(key, body);
+      },
+      fetchPdf: async () => {
+        throw new Error("no source url to fetch");
+      },
+    });
+    assert.deepEqual(result, { archived: 1, skipped: 1, failed: 0 });
+    const repaired = await prisma.documentContent.findUniqueOrThrow({
+      where: { id: archived.id },
+    });
+    assert.equal(
+      repaired.objectKey,
+      documentObjectKey("legacy-with-bytes", byteHash),
+    );
+    assert.equal(repaired.bytes, null);
+    assert.deepEqual(uploaded.get(repaired.objectKey), bytes);
+    assert.equal(
+      (
+        await prisma.documentContent.findUniqueOrThrow({
+          where: { id: skipped.id },
+        })
+      ).objectKey,
+      null,
     );
   } finally {
     await prisma.$disconnect();

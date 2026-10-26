@@ -43,6 +43,8 @@ test("collectAll shares identity across feeds and isolates failures", async () =
   await admin.query(`CREATE SCHEMA ${schema}`);
   const url = `${baseUrl}?schema=${schema}`;
   process.env.DATABASE_URL = url;
+  // Prisma migrate prefers DATABASE_URL_UNPOOLED when set (prisma.config.ts).
+  process.env.DATABASE_URL_UNPOOLED = url;
   const env = { ...process.env, DATABASE_URL: url };
   try {
     await promisify(execFile)(
