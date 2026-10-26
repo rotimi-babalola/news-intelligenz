@@ -42,7 +42,6 @@ export function pickCheckpointTarget(
 }
 
 const PAGE_FETCH_ATTEMPTS = 3;
-// shortcut: Failed pages can leave earlier batches committed, so retry version counts can underreport; persist per-run counts if exact retry totals become necessary.
 // Each record makes several sequential DB calls; keep interactive transactions short.
 export const PAGE_WRITE_BATCH_SIZE = 5;
 
@@ -118,7 +117,7 @@ export async function collectDipPages(
   if (options.scopeToStoredProceedings !== undefined)
     scope.scopeToStoredProceedings = options.scopeToStoredProceedings;
 
-  const replayed = await prisma.$transaction(async (tx) => {
+  const previousRun = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
     const previous = await findRun(tx, runId);
     if (previous) {
@@ -126,8 +125,7 @@ export async function collectDipPages(
         throw new Error(
           "Run ID already belongs to a different input; use a new run ID",
         );
-      if (previous.status === "completed" && previous.completedAt !== null)
-        return previous;
+      return previous;
     } else {
       await createRun(tx, {
         id: runId,
@@ -140,12 +138,12 @@ export async function collectDipPages(
     }
     return null;
   });
-  if (replayed)
+  if (previousRun?.status === "completed" && previousRun.completedAt !== null)
     return {
       runId,
       status: "completed" as const,
-      valid: replayed.validCount,
-      invalid: replayed.invalidCount,
+      valid: previousRun.validCount,
+      invalid: previousRun.invalidCount,
       stored: 0,
       versionsAdded: 0,
       capped: 0,
@@ -172,6 +170,18 @@ export async function collectDipPages(
     backfilled: 0,
   });
   const totals = zeroTotals();
+  if (previousRun) {
+    const proceedingVersions = await prisma.proceedingVersion.count({
+      where: { runId },
+    });
+    totals.versionsAdded = proceedingVersions;
+    if (endpoint === "/vorgangsposition") {
+      totals.versionsAdded += await prisma.proceedingStepVersion.count({
+        where: { runId },
+      });
+      totals.backfilled = proceedingVersions;
+    }
+  }
   const addTotals = (target: Totals, counts: Totals) => {
     target.valid += counts.valid;
     target.invalid += counts.invalid;
@@ -180,15 +190,12 @@ export async function collectDipPages(
     target.capped += counts.capped;
     target.backfilled += counts.backfilled;
   };
-  // A cursor restart recounts flow, but versions created before the failure
-  // persist in storage and stay credited to this run. Rolling back the flow
-  // counters alone avoids double counting them.
+  // A cursor restart recounts flow, but committed versions stay credited.
   const rollbackFlowTotals = (counts: Totals) => {
     totals.valid -= counts.valid;
     totals.invalid -= counts.invalid;
     totals.stored -= counts.stored;
     totals.capped -= counts.capped;
-    totals.backfilled -= counts.backfilled;
   };
   const retryDelayMs = options.retryDelayMs ?? defaultRetryDelayMs;
   // One filter group means a normal term-wide scan. Stored-proceeding step
@@ -237,8 +244,6 @@ export async function collectDipPages(
             restarted = true;
             cursor = undefined;
             itemIndex = groupStartIndex;
-            // Flow counts recount the final pass, but versions created before
-            // the failure persist in storage and stay credited to this run.
             rollbackFlowTotals(groupTotals);
             groupTotals = zeroTotals();
             continue;
@@ -267,11 +272,19 @@ export async function collectDipPages(
       }
     }
   } catch (error) {
+    // Earlier page batches may have committed before a later batch failed.
+    const candidates = { runId, itemIndex: { gte: 0 } };
+    const [count, valid] = await Promise.all([
+      prisma.candidate.count({ where: candidates }),
+      prisma.candidate.count({
+        where: { ...candidates, errors: { equals: [] } },
+      }),
+    ]);
     await prisma.$transaction(async (tx) => {
       await finalizeRun(tx, runId, {
         status: "failed",
-        validCount: totals.valid,
-        invalidCount: totals.invalid,
+        validCount: valid,
+        invalidCount: count - valid,
         completedAt: new Date(),
         error:
           error instanceof Error ? error.message.slice(0, 2000) : "unknown",
