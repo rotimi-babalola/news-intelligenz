@@ -91,6 +91,8 @@ export type DipSearchRow = {
   pdfUrl: string | null;
   stepId: string | null;
   pageNo: number | null;
+  chunkNo: number | null;
+  passage: string | null;
 };
 
 // Records join their current version; document text joins the citation and
@@ -119,7 +121,9 @@ export function searchDipEmbeddings(
       dr.document_number AS "documentNumber",
       dr.pdf_url AS "pdfUrl",
       dr.step_id AS "stepId",
-      CASE WHEN e.source_entity = 'dokument' THEN e.source_page END AS "pageNo"
+      CASE WHEN e.source_entity = 'dokument' THEN e.source_page END AS "pageNo",
+      CASE WHEN e.source_entity = 'dokument' THEN e.source_chunk END AS "chunkNo",
+      dc.text AS "passage"
      FROM ${qualifiedTable("dip_embeddings")} e
      LEFT JOIN ${qualifiedTable("proceedings")} p
        ON e.source_entity = 'vorgang' AND p.api_id = e.source_api_id
@@ -129,7 +133,7 @@ export function searchDipEmbeddings(
        AND s.latest_version_no = e.source_version_no
      LEFT JOIN LATERAL (
        SELECT r.reference_id, r.document_number, r.pdf_url, r.step_id,
-         r.proceeding_id
+         r.proceeding_id, c.id AS content_id
        FROM ${qualifiedTable("document_references")} r
        JOIN ${qualifiedTable("document_contents")} c
          ON c.reference_id = r.reference_id
@@ -138,8 +142,11 @@ export function searchDipEmbeddings(
        ORDER BY r.observed_at DESC
        LIMIT 1
      ) dr ON true
+     LEFT JOIN ${qualifiedTable("document_chunks")} dc
+       ON e.source_entity = 'dokument' AND dc.content_id = dr.content_id
+       AND dc.page_no = e.source_page AND dc.chunk_no = e.source_chunk
      WHERE e.model = $2 AND e.document_instruction = $3 AND e.query_instruction = $4
-       AND (p.api_id IS NOT NULL OR s.api_id IS NOT NULL OR dr.reference_id IS NOT NULL)
+       AND (p.api_id IS NOT NULL OR s.api_id IS NOT NULL OR dc.content_id IS NOT NULL)
      ORDER BY e.embedding <=> $1::public.vector, e.source_entity, e.source_api_id
      LIMIT $5`,
     JSON.stringify(input.embedding),

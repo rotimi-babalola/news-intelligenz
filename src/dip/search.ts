@@ -43,6 +43,8 @@ export async function searchDip(
         stepLabel: null,
         proceedingApiId: row.proceedingApiId,
         page: row.pageNo,
+        chunk: row.chunkNo,
+        passage: row.passage,
         document: {
           referenceId: row.referenceId ?? row.apiId,
           number: row.documentNumber,

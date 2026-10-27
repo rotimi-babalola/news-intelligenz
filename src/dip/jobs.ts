@@ -131,6 +131,7 @@ export function enqueueDocumentEmbedding(
     variantNo: number;
     pageNo: number;
     chunkNo: number;
+    model?: string;
     priority?: number;
   },
 ) {
@@ -142,6 +143,7 @@ export function enqueueDocumentEmbedding(
     runId: input.runId,
     itemIndex: input.itemIndex,
     dedupeKey: JSON.stringify([
+      ...(input.model ? ["reindex", input.model] : []),
       EMBED_DOCUMENT,
       input.referenceId,
       input.variantNo,
@@ -154,6 +156,7 @@ export function enqueueDocumentEmbedding(
       variantNo: input.variantNo,
       pageNo: input.pageNo,
       chunkNo: input.chunkNo,
+      ...(input.model ? { model: input.model } : {}),
     },
     priority: input.priority,
   });

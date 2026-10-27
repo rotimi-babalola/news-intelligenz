@@ -182,6 +182,7 @@ export async function processNextDipEmbedding(
         variantNo?: unknown;
         pageNo?: unknown;
         chunkNo?: unknown;
+        model?: unknown;
       };
       if (
         typeof payload.referenceId !== "string" ||
@@ -203,11 +204,16 @@ export async function processNextDipEmbedding(
       if (payload.chunkNo === undefined) {
         // Page jobs queued before chunking hand off to passage jobs.
         const page = await prisma.documentPage.findUnique({
-          where: { contentId_pageNo: { contentId: content.id, pageNo: payload.pageNo } },
+          where: {
+            contentId_pageNo: { contentId: content.id, pageNo: payload.pageNo },
+          },
         });
-        if (!page) throw new Error("Document page for embedding no longer exists");
+        if (!page)
+          throw new Error("Document page for embedding no longer exists");
         const chunks = await ensureDocumentChunks(prisma, content.id, [page]);
-        for (const chunk of chunks.filter((item) => item.pageNo === page.pageNo))
+        for (const chunk of chunks.filter(
+          (item) => item.pageNo === page.pageNo,
+        ))
           await enqueueDocumentEmbedding(prisma, {
             runId: job.runId,
             itemIndex: job.itemIndex,
@@ -216,10 +222,16 @@ export async function processNextDipEmbedding(
             variantNo: payload.variantNo,
             pageNo: page.pageNo,
             chunkNo: chunk.chunkNo,
+            model:
+              typeof payload.model === "string" ? payload.model : undefined,
             priority: job.priority,
           });
       } else {
-        if (typeof payload.chunkNo !== "number" || !Number.isInteger(payload.chunkNo) || payload.chunkNo < 1)
+        if (
+          typeof payload.chunkNo !== "number" ||
+          !Number.isInteger(payload.chunkNo) ||
+          payload.chunkNo < 1
+        )
           throw new Error("Document embedding job has an invalid chunk");
         const chunk = await prisma.documentChunk.findUnique({
           where: {
@@ -230,7 +242,8 @@ export async function processNextDipEmbedding(
             },
           },
         });
-        if (!chunk) throw new Error("Document chunk for embedding no longer exists");
+        if (!chunk)
+          throw new Error("Document chunk for embedding no longer exists");
         const embedding = await (options.embed ?? embedText)(chunk.text);
         assertEmbedding(embedding);
         await saveDipEmbedding(prisma, {
