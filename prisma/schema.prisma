@@ -296,13 +296,14 @@ model DipEmbedding {
   sourceApiId         String              @map("source_api_id") @db.Text
   sourceVersionNo     Int                 @map("source_version_no")
   sourcePage          Int                 @map("source_page") @default(0)
+  sourceChunk         Int                 @map("source_chunk") @default(0)
   model               String              @db.Text
   documentInstruction String              @map("document_instruction") @db.Text
   queryInstruction    String              @map("query_instruction") @db.Text
   embedding           Unsupported("vector(1024)")
   createdAt           DateTime            @map("created_at") @default(now()) @db.Timestamptz(6)
 
-  @@unique([sourceEntity, sourceApiId, sourceVersionNo, sourcePage, model, documentInstruction], map: "dip_embeddings_source_version_page_model_document_key")
+  @@unique([sourceEntity, sourceApiId, sourceVersionNo, sourcePage, sourceChunk, model, documentInstruction], map: "dip_embeddings_source_version_page_chunk_model_document_key")
   @@map("dip_embeddings")
 }
 
@@ -347,6 +348,7 @@ model DocumentContent {
   fetchedAt   DateTime       @map("fetched_at") @default(now()) @db.Timestamptz(6)
   isLatest    Boolean        @map("is_latest") @default(true)
   pages       DocumentPage[]
+  chunks      DocumentChunk[]
 
   @@unique([referenceId, byteHash])
   @@unique([referenceId, variantNo])
@@ -364,6 +366,17 @@ model DocumentPage {
 
   @@id([contentId, pageNo])
   @@map("document_pages")
+}
+
+model DocumentChunk {
+  contentId String          @map("content_id") @db.Uuid
+  content   DocumentContent @relation(fields: [contentId], references: [id])
+  pageNo    Int             @map("page_no")
+  chunkNo   Int             @map("chunk_no")
+  text      String          @db.Text
+
+  @@id([contentId, pageNo, chunkNo])
+  @@map("document_chunks")
 }
 
 // Distinct encounters between runs and parliamentary records: one row per
