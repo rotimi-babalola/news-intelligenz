@@ -159,7 +159,12 @@ test("a document job archives the PDF, stores pages and hands off embedding", as
       await prisma.dipEmbedding.findMany({
         where: { sourceEntity: "dokument" },
         orderBy: { sourcePage: "asc" },
-        select: { sourceApiId: true, sourceVersionNo: true, sourcePage: true, sourceChunk: true },
+        select: {
+          sourceApiId: true,
+          sourceVersionNo: true,
+          sourcePage: true,
+          sourceChunk: true,
+        },
       }),
       pages.map((page) => ({
         sourceApiId: "29701499",
@@ -192,27 +197,85 @@ test("long and empty PDF pages produce bounded passage jobs", async () => {
     await collect(prisma, "doc-chunks");
     const text = `${"Climate policy paragraph. ".repeat(80)}\n\n${"Budget paragraph. ".repeat(80)}`;
     assert.equal(
-      (await processDoc(prisma, "worker", {
-        fetchPdf: async () => ({ ok: true, bytes: Buffer.from("%PDF chunks"), finalUrl: PDF_URL }),
-        extract: async () => [{ page: 1, text }, { page: 2, text: "  " }],
-      })).status,
+      (
+        await processDoc(prisma, "worker", {
+          fetchPdf: async () => ({
+            ok: true,
+            bytes: Buffer.from("%PDF chunks"),
+            finalUrl: PDF_URL,
+          }),
+          extract: async () => [
+            { page: 1, text },
+            { page: 2, text: "  " },
+          ],
+        })
+      ).status,
       "succeeded",
     );
-    const chunks = await prisma.documentChunk.findMany({ orderBy: { chunkNo: "asc" } });
+    const chunks = await prisma.documentChunk.findMany({
+      orderBy: { chunkNo: "asc" },
+    });
     assert.ok(chunks.length > 2);
-    assert.ok(chunks.every((chunk) => chunk.pageNo === 1 && chunk.text.length <= 1200));
-    assert.equal(await prisma.processingJob.count({ where: { operation: EMBED_DOCUMENT } }), chunks.length);
+    assert.ok(
+      chunks.every((chunk) => chunk.pageNo === 1 && chunk.text.length <= 1200),
+    );
+    assert.equal(
+      await prisma.processingJob.count({
+        where: { operation: EMBED_DOCUMENT },
+      }),
+      chunks.length,
+    );
     const inputs: string[] = [];
     for (const chunk of chunks)
-      assert.equal((await processNextDipEmbedding(prisma, "worker", {
+      assert.equal(
+        (
+          await processNextDipEmbedding(prisma, "worker", {
+            operation: EMBED_DOCUMENT,
+            embed: async (input) => {
+              inputs.push(input);
+              return Array(1024).fill(0.1);
+            },
+          })
+        ).status,
+        "succeeded",
+      );
+    assert.deepEqual(
+      inputs,
+      chunks.map((chunk) => chunk.text),
+    );
+    assert.equal(
+      await prisma.dipEmbedding.count({ where: { sourceEntity: "dokument" } }),
+      chunks.length,
+    );
+    const legacy = await prisma.processingJob.create({
+      data: {
+        dedupeKey: "legacy-page-job",
+        sourceKind: "dip_endpoint",
+        sourceKey: "/vorgangsposition",
+        runId: "doc-chunks",
         operation: EMBED_DOCUMENT,
-        embed: async (input) => {
-          inputs.push(input);
-          return Array(1024).fill(0.1);
-        },
-      })).status, "succeeded");
-    assert.deepEqual(inputs, chunks.map((chunk) => chunk.text));
-    assert.equal(await prisma.dipEmbedding.count({ where: { sourceEntity: "dokument" } }), chunks.length);
+        payload: { referenceId: "29701499", variantNo: 1, pageNo: 1 },
+      },
+    });
+    assert.equal(
+      (
+        await processNextDipEmbedding(prisma, "worker", {
+          operation: EMBED_DOCUMENT,
+          jobId: legacy.id,
+        })
+      ).status,
+      "succeeded",
+    );
+    assert.equal(
+      await prisma.processingJob.count({
+        where: { operation: EMBED_DOCUMENT },
+      }),
+      chunks.length + 1,
+    );
+    assert.equal(
+      await prisma.dipEmbedding.count({ where: { sourceEntity: "dokument" } }),
+      chunks.length,
+    );
   } finally {
     await prisma.$disconnect();
   }

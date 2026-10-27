@@ -51,7 +51,7 @@ existing `news-data` volume is preserved when Compose recreates the database
 container with the pgvector image. If local Ollama already uses port 11434,
 set `OLLAMA_PORT=11435` in `.env` before starting Compose and the app. Once
 DIP proceedings and steps are collected, `POST /api/drain-dip` embeds one
-pending proceeding, step or extracted PDF page per call; failed jobs retain
+pending proceeding, step or extracted PDF passage per call; failed jobs retain
 their standard retry state.
 
 To import a selected term manually, set `BUNDESTAG_API_KEY` in `.env`
@@ -100,8 +100,9 @@ python3 -m pip install pymupdf
 PDF fetching is independent of DIP collection: only references dated within the
 previous 14 days are queued automatically, and `POST /api/drain-documents`
 processes one queued document per call. Fetched PDF bytes are archived in
-Cloudflare R2; extracted page text stays in PostgreSQL. Rows written before the
-move can be archived in place with `pnpm backfill:documents` (`DRY_RUN=1`
+Cloudflare R2; extracted page text and overlapping LangChain passages stay in
+PostgreSQL. Rows written before the move can be archived in place with
+`pnpm backfill:documents` (`DRY_RUN=1`
 reports without uploading); the command re-fetches from `source_url` only when
 the row still holds no bytes. DIP data use is governed by the
 [official terms](https://dip.bundestag.de/documents/nutzungsbedingungen_dip.pdf),
@@ -119,10 +120,10 @@ curl -X POST http://127.0.0.1:3000/api/search-dip \
 `limit` defaults to 10 and is capped at 20. Results include the source entity,
 API ID, current version number, title, available summary or step label, cosine
 similarity score, and a DIP API source reference. A record appears only after
-its current version's embedding job succeeds; extracted PDF pages appear as
-`dokument` results carrying the document reference, page number and original
-`pdf_url`, and only the latest fetched content variant is searchable. Search
-requires the local Ollama model; collection and stored source records remain
+its current version's embedding job succeeds; extracted PDF passages appear as
+`dokument` results carrying the matched passage, document reference, page and
+chunk numbers, and original `pdf_url`. Only the latest fetched content variant
+is searchable. Search requires the local Ollama model; collection and stored source records remain
 available if it is offline.
 
 Request a cited document on demand. This returns stored metadata and the

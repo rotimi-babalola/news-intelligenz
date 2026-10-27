@@ -10,5 +10,12 @@ test("PDF passages are bounded, overlapping, and deterministic", async () => {
   assert.deepEqual(chunks, await splitDocumentPage(text));
   assert.ok(chunks[0]!.includes("First topic."));
   assert.ok(chunks.at(-1)!.includes("Second topic."));
+  const numbered = Array.from({ length: 650 }, (_, index) =>
+    String(index).padStart(4, "0"),
+  ).join(" ");
+  const overlapping = await splitDocumentPage(numbered);
+  assert.ok(overlapping.length > 2);
+  assert.ok(overlapping[0]!.includes("0200 0201"));
+  assert.ok(overlapping[1]!.startsWith("0200 0201"));
   assert.deepEqual(await splitDocumentPage("  \n  "), []);
 });

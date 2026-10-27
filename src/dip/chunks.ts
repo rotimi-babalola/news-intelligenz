@@ -1,12 +1,14 @@
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import type { PrismaClient, Prisma } from "../generated/prisma/client";
 
+// shortcut: character bounds are not token bounds; use the model tokenizer if a provider rejects these passages.
 const splitter = new RecursiveCharacterTextSplitter({
   chunkSize: 1200,
   chunkOverlap: 200,
 });
 
-export const splitDocumentPage = (text: string) => splitter.splitText(text.trim());
+export const splitDocumentPage = (text: string) =>
+  splitter.splitText(text.trim());
 
 export async function ensureDocumentChunks(
   prisma: PrismaClient | Prisma.TransactionClient,
