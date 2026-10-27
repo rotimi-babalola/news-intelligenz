@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { ensureDocumentChunks } from "./chunks";
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { claimNextJob, completeJob, failJob } from "../jobs";
 import {
@@ -193,16 +194,17 @@ export async function processNextDocument(
       }
     }
     const pageRows = await listDocumentPages(prisma, content.id);
+    const chunks = await ensureDocumentChunks(prisma, content.id, pageRows);
     await prisma.$transaction(async (tx) => {
-      for (const page of pageRows) {
-        if (!page.text.trim()) continue;
+      for (const chunk of chunks) {
         await enqueueDocumentEmbedding(tx, {
           runId: job.runId,
           itemIndex: job.itemIndex,
           electoralTerm,
           referenceId,
           variantNo: content.variantNo,
-          pageNo: page.pageNo,
+          pageNo: chunk.pageNo,
+          chunkNo: chunk.chunkNo,
           priority: job.priority,
         });
       }

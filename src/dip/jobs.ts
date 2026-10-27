@@ -130,6 +130,7 @@ export function enqueueDocumentEmbedding(
     referenceId: string;
     variantNo: number;
     pageNo: number;
+    chunkNo: number;
     priority?: number;
   },
 ) {
@@ -145,12 +146,14 @@ export function enqueueDocumentEmbedding(
       input.referenceId,
       input.variantNo,
       input.pageNo,
+      input.chunkNo,
     ]),
     operation: EMBED_DOCUMENT,
     payload: {
       referenceId: input.referenceId,
       variantNo: input.variantNo,
       pageNo: input.pageNo,
+      chunkNo: input.chunkNo,
     },
     priority: input.priority,
   });

@@ -53,6 +53,7 @@ export function saveDipEmbedding(
     apiId: string;
     versionNo: number;
     sourcePage?: number;
+    sourceChunk?: number;
     model: string;
     documentInstruction: string;
     queryInstruction: string;
@@ -61,13 +62,14 @@ export function saveDipEmbedding(
 ) {
   return client.$executeRawUnsafe(
     `INSERT INTO ${qualifiedTable("dip_embeddings")}
-      (id, source_entity, source_api_id, source_version_no, source_page, model, document_instruction, query_instruction, embedding)
-     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8::public.vector)
-     ON CONFLICT (source_entity, source_api_id, source_version_no, source_page, model, document_instruction) DO NOTHING`,
+      (id, source_entity, source_api_id, source_version_no, source_page, source_chunk, model, document_instruction, query_instruction, embedding)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9::public.vector)
+     ON CONFLICT (source_entity, source_api_id, source_version_no, source_page, source_chunk, model, document_instruction) DO NOTHING`,
     input.sourceEntity,
     input.apiId,
     input.versionNo,
     input.sourcePage ?? 0,
+    input.sourceChunk ?? 0,
     input.model,
     input.documentInstruction,
     input.queryInstruction,

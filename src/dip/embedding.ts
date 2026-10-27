@@ -9,11 +9,12 @@ import {
 import { EMBED_DOCUMENT, EMBED_PROCEEDING, EMBED_STEP } from "./jobs";
 import {
   findDocumentContent,
-  findDocumentPage,
   findProceedingVersion,
   findStepVersion,
   saveDipEmbedding,
 } from "./repository";
+import { ensureDocumentChunks } from "./chunks";
+import { enqueueDocumentEmbedding } from "./jobs";
 
 export const EMBEDDING_MODEL = "qwen3-embedding:0.6b";
 // Qwen3 embeds retrieval documents without a prefix.
@@ -180,6 +181,7 @@ export async function processNextDipEmbedding(
         referenceId?: unknown;
         variantNo?: unknown;
         pageNo?: unknown;
+        chunkNo?: unknown;
       };
       if (
         typeof payload.referenceId !== "string" ||
@@ -198,19 +200,45 @@ export async function processNextDipEmbedding(
       );
       if (!content)
         throw new Error("Document variant for embedding no longer exists");
-      // One job covers one page, so one drain call embeds one extracted page.
-      const page = await findDocumentPage(prisma, content.id, payload.pageNo);
-      if (!page)
-        throw new Error("Document page for embedding no longer exists");
-      const text = page.text.trim();
-      if (text) {
-        const embedding = await (options.embed ?? embedText)(text);
+      if (payload.chunkNo === undefined) {
+        // Page jobs queued before chunking hand off to passage jobs.
+        const page = await prisma.documentPage.findUnique({
+          where: { contentId_pageNo: { contentId: content.id, pageNo: payload.pageNo } },
+        });
+        if (!page) throw new Error("Document page for embedding no longer exists");
+        const chunks = await ensureDocumentChunks(prisma, content.id, [page]);
+        for (const chunk of chunks.filter((item) => item.pageNo === page.pageNo))
+          await enqueueDocumentEmbedding(prisma, {
+            runId: job.runId,
+            itemIndex: job.itemIndex,
+            electoralTerm: null,
+            referenceId: payload.referenceId,
+            variantNo: payload.variantNo,
+            pageNo: page.pageNo,
+            chunkNo: chunk.chunkNo,
+            priority: job.priority,
+          });
+      } else {
+        if (typeof payload.chunkNo !== "number" || !Number.isInteger(payload.chunkNo) || payload.chunkNo < 1)
+          throw new Error("Document embedding job has an invalid chunk");
+        const chunk = await prisma.documentChunk.findUnique({
+          where: {
+            contentId_pageNo_chunkNo: {
+              contentId: content.id,
+              pageNo: payload.pageNo,
+              chunkNo: payload.chunkNo,
+            },
+          },
+        });
+        if (!chunk) throw new Error("Document chunk for embedding no longer exists");
+        const embedding = await (options.embed ?? embedText)(chunk.text);
         assertEmbedding(embedding);
         await saveDipEmbedding(prisma, {
           sourceEntity: "dokument",
           apiId: payload.referenceId,
           versionNo: payload.variantNo,
-          sourcePage: page.pageNo,
+          sourcePage: chunk.pageNo,
+          sourceChunk: chunk.chunkNo,
           model: config.indexId,
           documentInstruction: config.documentInstruction,
           queryInstruction: config.queryInstruction,
