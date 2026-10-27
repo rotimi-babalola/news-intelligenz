@@ -2,7 +2,7 @@
 
 Run the comparison against one fixed Neon branch or a paused collection window.
 The reindex command uses a stable hash sample of the latest stored proceedings,
-steps, and extracted PDF pages. Its default sample is 10%, the same IDs for
+steps, and extracted PDF passages. Its default sample is 10%, the same IDs for
 every model. Set `DIP_REINDEX_SAMPLE_PERCENT=100` for the full corpus. It does
 not fetch DIP records or PDFs. Document pages only exist after
 `process_document` jobs finish.
@@ -65,6 +65,19 @@ pnpm reindex:dip
 DIP_DOCUMENT_DRAIN_CAP=0 DIP_EMBEDDING_REINDEX_ONLY=1 pnpm drain:dip
 pnpm evaluate:dip -- path/to/labels.json
 ```
+
+After deploying the passage migration, run
+
+```sh
+DIP_REINDEX_SAMPLE_PERCENT=100 pnpm reindex:dip
+DIP_DOCUMENT_DRAIN_CAP=0 DIP_EMBEDDING_REINDEX_ONLY=1 pnpm drain:dip
+```
+
+Repeat the drain until empty. Reindexing splits retained page text without
+fetching PDFs again. Search excludes legacy whole-page vectors immediately, so
+PDF results return as passage jobs complete. The command also queues current
+proceeding and step versions; already stored vectors are retained, but those
+jobs still call the embedding provider.
 
 Repeat the drain until it reports no work. Reindex-only mode leaves the existing
 unscoped production backlog untouched during comparison. Label examples from

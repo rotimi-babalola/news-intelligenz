@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
+import { ensureDocumentChunks } from "./chunks";
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { claimNextJob, completeJob, failJob } from "../jobs";
 import {
   documentJobKey,
-  enqueueDocumentEmbedding,
+  enqueueDocumentEmbeddings,
   enqueueDocumentProcessing,
   PROCESS_DOCUMENT,
   raiseDocumentJob,
@@ -29,7 +30,7 @@ import {
 
 // PDF processing is downstream of DIP collection and never part of it: the
 // document job fetches bytes, caches a content variant, extracts page text and
-// hands embedding to durable per-page jobs. A failure here leaves the source
+// hands embedding to durable per-passage jobs. A failure here leaves the source
 // reference, its metadata and its original link intact and never holds an
 // endpoint checkpoint open.
 //
@@ -193,19 +194,15 @@ export async function processNextDocument(
       }
     }
     const pageRows = await listDocumentPages(prisma, content.id);
-    await prisma.$transaction(async (tx) => {
-      for (const page of pageRows) {
-        if (!page.text.trim()) continue;
-        await enqueueDocumentEmbedding(tx, {
-          runId: job.runId,
-          itemIndex: job.itemIndex,
-          electoralTerm,
-          referenceId,
-          variantNo: content.variantNo,
-          pageNo: page.pageNo,
-          priority: job.priority,
-        });
-      }
+    const chunks = await ensureDocumentChunks(prisma, content.id, pageRows);
+    await enqueueDocumentEmbeddings(prisma, {
+      runId: job.runId,
+      itemIndex: job.itemIndex,
+      electoralTerm,
+      referenceId,
+      variantNo: content.variantNo,
+      chunks,
+      priority: job.priority,
     });
     await completeJob(prisma, job, workerId);
     return {

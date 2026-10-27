@@ -34,27 +34,27 @@ test("reindex queues each model once and keeps both vector spaces separate", asy
     assert.deepEqual(await enqueueDipReindex(prisma, "model-sample", 10), {
       proceedings: 0,
       steps: 0,
-      pages: 0,
+      chunks: 0,
     });
     assert.deepEqual(await enqueueDipReindex(prisma, "model-sample", 100), {
       proceedings: 1,
       steps: 0,
-      pages: 0,
+      chunks: 0,
     });
     assert.deepEqual(await enqueueDipReindex(prisma, "model-a"), {
       proceedings: 1,
       steps: 0,
-      pages: 0,
+      chunks: 0,
     });
     assert.deepEqual(await enqueueDipReindex(prisma, "model-a"), {
       proceedings: 0,
       steps: 0,
-      pages: 0,
+      chunks: 0,
     });
     assert.deepEqual(await enqueueDipReindex(prisma, "model-b"), {
       proceedings: 1,
       steps: 0,
-      pages: 0,
+      chunks: 0,
     });
     process.env.EMBEDDING_BASE_URL = "https://example.com/v1";
     process.env.EMBEDDING_API_FORMAT = "openai";
@@ -137,12 +137,13 @@ test("reindex queues each model once and keeps both vector spaces separate", asy
     assert.deepEqual(await enqueueDipReindex(prisma, "model-c"), {
       proceedings: 1,
       steps: 0,
-      pages: 2,
+      chunks: 2,
     });
+    assert.equal(await prisma.documentChunk.count(), 2);
     assert.deepEqual(await enqueueDipReindex(prisma, "model-c"), {
       proceedings: 0,
       steps: 0,
-      pages: 0,
+      chunks: 0,
     });
     const otherModelJob = await prisma.processingJob.findFirstOrThrow({
       where: {

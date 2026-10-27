@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "../generated/prisma/client";
 import { EMBED_DOCUMENT, EMBED_PROCEEDING, EMBED_STEP } from "./jobs";
+import { ensureDocumentChunks } from "./chunks";
 
 // A model gets its own jobs, while source versions and extracted pages stay shared.
 export async function enqueueDipReindex(
@@ -31,7 +32,7 @@ export async function enqueueDipReindex(
       completedAt: new Date(),
     },
   });
-  const counts = { proceedings: 0, steps: 0, pages: 0 };
+  const counts = { proceedings: 0, steps: 0, chunks: 0 };
   let cursor: string | undefined;
   do {
     const rows = await prisma.proceeding.findMany({
@@ -120,38 +121,46 @@ export async function enqueueDipReindex(
     );
     if (contents.size) {
       const pages = await prisma.documentPage.findMany({
-        where: { contentId: { in: [...contents.keys()] }, text: { not: "" } },
-        select: { contentId: true, pageNo: true },
+        where: { contentId: { in: [...contents.keys()] } },
+        select: { contentId: true, pageNo: true, text: true },
       });
-      const jobs = pages.map((page) => {
-        const content = contents.get(page.contentId)!;
-        return {
-          dedupeKey: JSON.stringify([
-            "reindex",
-            model,
-            EMBED_DOCUMENT,
-            content.referenceId,
-            content.variantNo,
-            page.pageNo,
-          ]),
-          sourceKind: "dip_endpoint" as const,
-          sourceKey: "/vorgangsposition",
-          runId,
-          operation: EMBED_DOCUMENT,
-          payload: {
-            referenceId: content.referenceId,
-            variantNo: content.variantNo,
-            pageNo: page.pageNo,
-            model,
-          },
-        };
-      });
+      const jobs = [];
+      for (const content of contents.values()) {
+        const chunks = await ensureDocumentChunks(
+          prisma,
+          content.id,
+          pages.filter((page) => page.contentId === content.id),
+        );
+        for (const chunk of chunks)
+          jobs.push({
+            dedupeKey: JSON.stringify([
+              "reindex",
+              model,
+              EMBED_DOCUMENT,
+              content.referenceId,
+              content.variantNo,
+              chunk.pageNo,
+              chunk.chunkNo,
+            ]),
+            sourceKind: "dip_endpoint" as const,
+            sourceKey: "/vorgangsposition",
+            runId,
+            operation: EMBED_DOCUMENT,
+            payload: {
+              referenceId: content.referenceId,
+              variantNo: content.variantNo,
+              pageNo: chunk.pageNo,
+              chunkNo: chunk.chunkNo,
+              model,
+            },
+          });
+      }
       for (let i = 0; i < jobs.length; i += 500) {
         const result = await prisma.processingJob.createMany({
           data: jobs.slice(i, i + 500),
           skipDuplicates: true,
         });
-        counts.pages += result.count;
+        counts.chunks += result.count;
       }
     }
     cursor = rows.at(-1)!.id;

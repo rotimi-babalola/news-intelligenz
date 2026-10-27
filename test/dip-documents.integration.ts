@@ -6,7 +6,11 @@ import { backfillDocumentObjects } from "../src/dip/backfill.js";
 import { processNextDocument, requestDocument } from "../src/dip/documents.js";
 import { documentObjectKey } from "../src/dip/object-store.js";
 import { processNextDipEmbedding } from "../src/dip/embedding.js";
-import { EMBED_DOCUMENT, ON_DEMAND_PRIORITY } from "../src/dip/jobs.js";
+import {
+  EMBED_DOCUMENT,
+  enqueueDocumentEmbeddings,
+  ON_DEMAND_PRIORITY,
+} from "../src/dip/jobs.js";
 import { collectSteps } from "../src/dip/steps.js";
 import { claimNextJob, requeueStaleClaims } from "../src/jobs.js";
 import { isolatedDatabase } from "./dip-test-db.js";
@@ -122,7 +126,15 @@ test("a document job archives the PDF, stores pages and hands off embedding", as
       pages.map((page) => ({ pageNo: page.page, text: page.text })),
     );
 
-    // One durable embedding job per page, through the shared pipeline.
+    assert.deepEqual(
+      await prisma.documentChunk.findMany({
+        where: { contentId: content.id },
+        orderBy: [{ pageNo: "asc" }, { chunkNo: "asc" }],
+        select: { pageNo: true, chunkNo: true, text: true },
+      }),
+      pages.map((page) => ({ pageNo: page.page, chunkNo: 1, text: page.text })),
+    );
+    // One durable embedding job per passage, through the shared pipeline.
     assert.equal(
       await prisma.processingJob.count({
         where: { operation: EMBED_DOCUMENT, status: "pending" },
@@ -151,12 +163,18 @@ test("a document job archives the PDF, stores pages and hands off embedding", as
       await prisma.dipEmbedding.findMany({
         where: { sourceEntity: "dokument" },
         orderBy: { sourcePage: "asc" },
-        select: { sourceApiId: true, sourceVersionNo: true, sourcePage: true },
+        select: {
+          sourceApiId: true,
+          sourceVersionNo: true,
+          sourcePage: true,
+          sourceChunk: true,
+        },
       }),
       pages.map((page) => ({
         sourceApiId: "29701499",
         sourceVersionNo: 1,
         sourcePage: page.page,
+        sourceChunk: 1,
       })),
     );
 
@@ -171,6 +189,116 @@ test("a document job archives the PDF, stores pages and hands off embedding", as
         },
       }),
       checkpoint,
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("long and empty PDF pages produce bounded passage jobs", async () => {
+  const prisma = await isolatedDatabase();
+  try {
+    await collect(prisma, "doc-chunks");
+    const text = `${"Climate policy paragraph. ".repeat(80)}\n\n${"Budget paragraph. ".repeat(80)}`;
+    assert.equal(
+      (
+        await processDoc(prisma, "worker", {
+          fetchPdf: async () => ({
+            ok: true,
+            bytes: Buffer.from("%PDF chunks"),
+            finalUrl: PDF_URL,
+          }),
+          extract: async () => [
+            { page: 1, text },
+            { page: 2, text: "  " },
+          ],
+        })
+      ).status,
+      "succeeded",
+    );
+    const chunks = await prisma.documentChunk.findMany({
+      orderBy: { chunkNo: "asc" },
+    });
+    assert.ok(chunks.length > 2);
+    assert.ok(
+      chunks.every((chunk) => chunk.pageNo === 1 && chunk.text.length <= 1200),
+    );
+    assert.equal(
+      await prisma.processingJob.count({
+        where: { operation: EMBED_DOCUMENT },
+      }),
+      chunks.length,
+    );
+    const inputs: string[] = [];
+    for (const chunk of chunks)
+      assert.equal(
+        (
+          await processNextDipEmbedding(prisma, "worker", {
+            operation: EMBED_DOCUMENT,
+            embed: async (input) => {
+              inputs.push(input);
+              return Array(1024).fill(0.1);
+            },
+          })
+        ).status,
+        "succeeded",
+      );
+    assert.deepEqual(
+      inputs,
+      chunks.map((chunk) => chunk.text),
+    );
+    assert.equal(
+      await prisma.dipEmbedding.count({ where: { sourceEntity: "dokument" } }),
+      chunks.length,
+    );
+    const legacy = await prisma.processingJob.create({
+      data: {
+        dedupeKey: "legacy-page-job",
+        sourceKind: "dip_endpoint",
+        sourceKey: "/vorgangsposition",
+        runId: "doc-chunks",
+        operation: EMBED_DOCUMENT,
+        payload: { referenceId: "29701499", variantNo: 1, pageNo: 1 },
+      },
+    });
+    assert.equal(
+      (
+        await processNextDipEmbedding(prisma, "worker", {
+          operation: EMBED_DOCUMENT,
+          jobId: legacy.id,
+        })
+      ).status,
+      "succeeded",
+    );
+    assert.equal(
+      await prisma.processingJob.count({
+        where: { operation: EMBED_DOCUMENT },
+      }),
+      chunks.length + 1,
+    );
+    assert.equal(
+      await prisma.dipEmbedding.count({ where: { sourceEntity: "dokument" } }),
+      chunks.length,
+    );
+    const batch = {
+      runId: "doc-chunks",
+      itemIndex: null,
+      electoralTerm: null,
+      referenceId: "29701499",
+      variantNo: 1,
+      model: "batch-test",
+      chunks: Array.from({ length: 501 }, (_, index) => ({
+        pageNo: 1,
+        chunkNo: index + 1,
+      })),
+    };
+    await enqueueDocumentEmbeddings(prisma, batch);
+    await enqueueDocumentEmbeddings(prisma, batch);
+    assert.equal(
+      await prisma.processingJob.count({
+        where: { payload: { path: ["model"], equals: "batch-test" } },
+      }),
+      501,
     );
   } finally {
     await prisma.$disconnect();
