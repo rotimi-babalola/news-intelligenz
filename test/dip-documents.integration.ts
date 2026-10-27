@@ -6,7 +6,11 @@ import { backfillDocumentObjects } from "../src/dip/backfill.js";
 import { processNextDocument, requestDocument } from "../src/dip/documents.js";
 import { documentObjectKey } from "../src/dip/object-store.js";
 import { processNextDipEmbedding } from "../src/dip/embedding.js";
-import { EMBED_DOCUMENT, ON_DEMAND_PRIORITY } from "../src/dip/jobs.js";
+import {
+  EMBED_DOCUMENT,
+  enqueueDocumentEmbeddings,
+  ON_DEMAND_PRIORITY,
+} from "../src/dip/jobs.js";
 import { collectSteps } from "../src/dip/steps.js";
 import { claimNextJob, requeueStaleClaims } from "../src/jobs.js";
 import { isolatedDatabase } from "./dip-test-db.js";
@@ -275,6 +279,26 @@ test("long and empty PDF pages produce bounded passage jobs", async () => {
     assert.equal(
       await prisma.dipEmbedding.count({ where: { sourceEntity: "dokument" } }),
       chunks.length,
+    );
+    const batch = {
+      runId: "doc-chunks",
+      itemIndex: null,
+      electoralTerm: null,
+      referenceId: "29701499",
+      variantNo: 1,
+      model: "batch-test",
+      chunks: Array.from({ length: 501 }, (_, index) => ({
+        pageNo: 1,
+        chunkNo: index + 1,
+      })),
+    };
+    await enqueueDocumentEmbeddings(prisma, batch);
+    await enqueueDocumentEmbeddings(prisma, batch);
+    assert.equal(
+      await prisma.processingJob.count({
+        where: { payload: { path: ["model"], equals: "batch-test" } },
+      }),
+      501,
     );
   } finally {
     await prisma.$disconnect();

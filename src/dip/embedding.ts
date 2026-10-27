@@ -14,7 +14,7 @@ import {
   saveDipEmbedding,
 } from "./repository";
 import { ensureDocumentChunks } from "./chunks";
-import { enqueueDocumentEmbedding } from "./jobs";
+import { enqueueDocumentEmbeddings } from "./jobs";
 
 export const EMBEDDING_MODEL = "qwen3-embedding:0.6b";
 // Qwen3 embeds retrieval documents without a prefix.
@@ -211,21 +211,16 @@ export async function processNextDipEmbedding(
         if (!page)
           throw new Error("Document page for embedding no longer exists");
         const chunks = await ensureDocumentChunks(prisma, content.id, [page]);
-        for (const chunk of chunks.filter(
-          (item) => item.pageNo === page.pageNo,
-        ))
-          await enqueueDocumentEmbedding(prisma, {
-            runId: job.runId,
-            itemIndex: job.itemIndex,
-            electoralTerm: null,
-            referenceId: payload.referenceId,
-            variantNo: payload.variantNo,
-            pageNo: page.pageNo,
-            chunkNo: chunk.chunkNo,
-            model:
-              typeof payload.model === "string" ? payload.model : undefined,
-            priority: job.priority,
-          });
+        await enqueueDocumentEmbeddings(prisma, {
+          runId: job.runId,
+          itemIndex: job.itemIndex,
+          electoralTerm: null,
+          referenceId: payload.referenceId,
+          variantNo: payload.variantNo,
+          chunks: chunks.filter((item) => item.pageNo === page.pageNo),
+          model: typeof payload.model === "string" ? payload.model : undefined,
+          priority: job.priority,
+        });
       } else {
         if (
           typeof payload.chunkNo !== "number" ||

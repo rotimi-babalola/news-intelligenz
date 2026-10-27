@@ -119,47 +119,51 @@ export function enqueueDocumentProcessing(
   });
 }
 
-// Page embeddings run as their own durable job per document variant page, so
-// a model outage retries one page without re-downloading or re-extracting.
-export function enqueueDocumentEmbedding(
-  tx: Prisma.TransactionClient,
+// Each passage gets a durable job, so provider retries never repeat PDF work.
+export async function enqueueDocumentEmbeddings(
+  db: PrismaClient | Prisma.TransactionClient,
   input: {
     runId: string;
     itemIndex: number | null;
     electoralTerm: number | null;
     referenceId: string;
     variantNo: number;
-    pageNo: number;
-    chunkNo: number;
+    chunks: { pageNo: number; chunkNo: number }[];
     model?: string;
     priority?: number;
   },
 ) {
-  return enqueueJob(tx, {
-    source: dipSource(
-      "/vorgangsposition",
-      input.electoralTerm === null ? undefined : String(input.electoralTerm),
-    ),
-    runId: input.runId,
-    itemIndex: input.itemIndex,
-    dedupeKey: JSON.stringify([
-      ...(input.model ? ["reindex", input.model] : []),
-      EMBED_DOCUMENT,
-      input.referenceId,
-      input.variantNo,
-      input.pageNo,
-      input.chunkNo,
-    ]),
-    operation: EMBED_DOCUMENT,
-    payload: {
-      referenceId: input.referenceId,
-      variantNo: input.variantNo,
-      pageNo: input.pageNo,
-      chunkNo: input.chunkNo,
-      ...(input.model ? { model: input.model } : {}),
-    },
-    priority: input.priority,
-  });
+  for (let i = 0; i < input.chunks.length; i += 500)
+    await db.processingJob.createMany({
+      data: input.chunks.slice(i, i + 500).map((chunk) => ({
+        sourceKind: "dip_endpoint" as const,
+        sourceKey: "/vorgangsposition",
+        sourceScope:
+          input.electoralTerm === null
+            ? undefined
+            : { electoralTerm: String(input.electoralTerm) },
+        runId: input.runId,
+        itemIndex: input.itemIndex,
+        dedupeKey: JSON.stringify([
+          ...(input.model ? ["reindex", input.model] : []),
+          EMBED_DOCUMENT,
+          input.referenceId,
+          input.variantNo,
+          chunk.pageNo,
+          chunk.chunkNo,
+        ]),
+        operation: EMBED_DOCUMENT,
+        payload: {
+          referenceId: input.referenceId,
+          variantNo: input.variantNo,
+          pageNo: chunk.pageNo,
+          chunkNo: chunk.chunkNo,
+          ...(input.model ? { model: input.model } : {}),
+        },
+        priority: input.priority ?? 0,
+      })),
+      skipDuplicates: true,
+    });
 }
 
 // On-demand requests raise the priority of work that already exists instead of
