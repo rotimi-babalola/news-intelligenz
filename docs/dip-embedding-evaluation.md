@@ -10,12 +10,22 @@ retrieved evidence units and cite their DIP source and PDF page.
 
 For candidate models, run the 10% reindex and reindex-only drain commands
 below. Review German and English queries with both proceeding and PDF page
-labels. For the selected 1024-dimensional model, drain the existing pending
-jobs with `DIP_DOCUMENT_DRAIN_CAP=0 pnpm drain:dip` until empty; those jobs
-cover the current production backlog and create passages from extracted pages.
-Run a 100% reindex later only if you need to fill gaps: it queues work even
-for sources already embedded, so the provider may be billed again. Use the
-same provider, model, and instruction settings for reindex, drain, and search.
+labels. Before deploying a search configuration with a new index ID, run the
+new code against the target database with the selected provider settings to
+queue and drain a 100% reindex:
+
+```sh
+DIP_REINDEX_SAMPLE_PERCENT=100 pnpm reindex:dip
+DIP_DOCUMENT_DRAIN_CAP=0 DIP_EMBEDDING_REINDEX_ONLY=1 pnpm drain:dip
+```
+
+Repeat the drain until no reindex jobs remain, then switch the search service
+to the same configuration. A 10% sample and the existing pending jobs do not
+cover sources already embedded under the previous index ID. After switching,
+drain the unscoped production backlog with `pnpm drain:dip`; legacy page jobs
+create passage jobs as they run. The full reindex may bill the provider again
+for sources already embedded. Use the same provider, model, and instruction
+settings for reindex, drain, and search.
 Each distinct model or instruction combination needs its own index ID
 and vector jobs. Local Ollama must run on the machine executing the drain; a
 remote Render worker cannot reach Ollama on your laptop's `127.0.0.1`.
@@ -102,15 +112,15 @@ honor `Retry-After`; the drain stops after a retrying embedding job so an outage
 does not consume the rest of the queue's retry budget. The existing admin DIP
 page shows pending, retrying, and exhausted jobs.
 
-After selecting a model, apply migrations and run `pnpm drain:dip` as a
-separate Render cron. An hourly `15 * * * *` UTC schedule starts after the
-existing daily collection trigger. Configure the pooled `DATABASE_URL`, R2
+After selecting a model, apply migrations, complete the full reindex above,
+then run `pnpm drain:dip` as a separate Render cron. An hourly `15 * * * *` UTC
+schedule starts after the existing daily collection trigger. Configure the
+pooled `DATABASE_URL`, R2
 object storage, Python/PyMuPDF, and the chosen embedding provider on that
 service. Leave `DIP_EMBEDDING_REINDEX_ONLY` unset. The document drain runs
 first, then the embedding drain. Run the same command manually for backfill;
-it consumes existing pending jobs without re-collecting. Use
-`DIP_REINDEX_SAMPLE_PERCENT=100 pnpm reindex:dip` when fully indexing another
-model. A hosted smoke test is opt-in with `HOSTED_EMBEDDING_QA=1` and the
+it consumes existing pending jobs without re-collecting. A hosted smoke test
+is opt-in with `HOSTED_EMBEDDING_QA=1` and the
 chosen provider environment.
 
 ## Render PDF drain setup

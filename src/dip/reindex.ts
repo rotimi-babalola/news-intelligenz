@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "../generated/prisma/client";
-import { EMBED_DOCUMENT, EMBED_PROCEEDING, EMBED_STEP } from "./jobs";
+import {
+  EMBED_PROCEEDING,
+  EMBED_STEP,
+  enqueueDocumentEmbeddings,
+} from "./jobs";
 import { ensureDocumentChunks } from "./chunks";
 
 // A model gets its own jobs, while source versions and extracted pages stay shared.
@@ -114,54 +118,22 @@ export async function enqueueDipReindex(
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       });
     if (!rows.length) break;
-    const contents = new Map(
-      rows
-        .filter((content) => selected("dokument", content.referenceId))
-        .map((content) => [content.id, content]),
-    );
-    if (contents.size) {
+    for (const content of rows) {
+      if (!selected("dokument", content.referenceId)) continue;
       const pages = await prisma.documentPage.findMany({
-        where: { contentId: { in: [...contents.keys()] } },
-        select: { contentId: true, pageNo: true, text: true },
+        where: { contentId: content.id },
+        select: { pageNo: true, text: true },
       });
-      const jobs = [];
-      for (const content of contents.values()) {
-        const chunks = await ensureDocumentChunks(
-          prisma,
-          content.id,
-          pages.filter((page) => page.contentId === content.id),
-        );
-        for (const chunk of chunks)
-          jobs.push({
-            dedupeKey: JSON.stringify([
-              "reindex",
-              model,
-              EMBED_DOCUMENT,
-              content.referenceId,
-              content.variantNo,
-              chunk.pageNo,
-              chunk.chunkNo,
-            ]),
-            sourceKind: "dip_endpoint" as const,
-            sourceKey: "/vorgangsposition",
-            runId,
-            operation: EMBED_DOCUMENT,
-            payload: {
-              referenceId: content.referenceId,
-              variantNo: content.variantNo,
-              pageNo: chunk.pageNo,
-              chunkNo: chunk.chunkNo,
-              model,
-            },
-          });
-      }
-      for (let i = 0; i < jobs.length; i += 500) {
-        const result = await prisma.processingJob.createMany({
-          data: jobs.slice(i, i + 500),
-          skipDuplicates: true,
-        });
-        counts.chunks += result.count;
-      }
+      const chunks = await ensureDocumentChunks(prisma, content.id, pages);
+      counts.chunks += await enqueueDocumentEmbeddings(prisma, {
+        runId,
+        itemIndex: null,
+        electoralTerm: null,
+        referenceId: content.referenceId,
+        variantNo: content.variantNo,
+        chunks,
+        model,
+      });
     }
     cursor = rows.at(-1)!.id;
     if (rows.length < 100) break;

@@ -133,8 +133,9 @@ export async function enqueueDocumentEmbeddings(
     priority?: number;
   },
 ) {
-  for (let i = 0; i < input.chunks.length; i += 500)
-    await db.processingJob.createMany({
+  let added = 0;
+  for (let i = 0; i < input.chunks.length; i += 500) {
+    const result = await db.processingJob.createMany({
       data: input.chunks.slice(i, i + 500).map((chunk) => ({
         sourceKind: "dip_endpoint" as const,
         sourceKey: "/vorgangsposition",
@@ -164,6 +165,9 @@ export async function enqueueDocumentEmbeddings(
       })),
       skipDuplicates: true,
     });
+    added += result.count;
+  }
+  return added;
 }
 
 // On-demand requests raise the priority of work that already exists instead of

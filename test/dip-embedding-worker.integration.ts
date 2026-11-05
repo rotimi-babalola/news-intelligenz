@@ -269,6 +269,8 @@ test("step jobs embed saved labels and available descriptions for each version",
 test("admin retry of a DIP job preserves the completed collection run", async () => {
   const prisma = await isolatedDatabase();
   const previousPort = process.env.OLLAMA_PORT;
+  const previousFormat = process.env.EMBEDDING_API_FORMAT;
+  const previousBaseUrl = process.env.EMBEDDING_BASE_URL;
   try {
     await collect(prisma, "embed-admin-retry", "Wohnraumgesetz");
     const runBefore = await prisma.run.findUniqueOrThrow({
@@ -281,12 +283,18 @@ test("admin retry of a DIP job preserves the completed collection run", async ()
       where: { id: job.id },
       data: { status: "exhausted", attempts: 5, lastError: "model offline" },
     });
+    process.env.EMBEDDING_API_FORMAT = "ollama";
+    delete process.env.EMBEDDING_BASE_URL;
     process.env.OLLAMA_PORT = "0";
     await retryJob(job.id);
     const retried = await prisma.processingJob.findUniqueOrThrow({
       where: { id: job.id },
     });
     assert.equal(retried.status, "retrying");
+    assert.match(
+      retried.lastError ?? "",
+      /OLLAMA_PORT must be a valid TCP port/,
+    );
     assert.deepEqual(
       await prisma.run.findUniqueOrThrow({
         where: { id: "embed-admin-retry" },
@@ -296,6 +304,10 @@ test("admin retry of a DIP job preserves the completed collection run", async ()
   } finally {
     if (previousPort === undefined) delete process.env.OLLAMA_PORT;
     else process.env.OLLAMA_PORT = previousPort;
+    if (previousFormat === undefined) delete process.env.EMBEDDING_API_FORMAT;
+    else process.env.EMBEDDING_API_FORMAT = previousFormat;
+    if (previousBaseUrl === undefined) delete process.env.EMBEDDING_BASE_URL;
+    else process.env.EMBEDDING_BASE_URL = previousBaseUrl;
     await prisma.$disconnect();
   }
 });

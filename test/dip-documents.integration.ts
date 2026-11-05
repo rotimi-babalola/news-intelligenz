@@ -292,8 +292,8 @@ test("long and empty PDF pages produce bounded passage jobs", async () => {
         chunkNo: index + 1,
       })),
     };
-    await enqueueDocumentEmbeddings(prisma, batch);
-    await enqueueDocumentEmbeddings(prisma, batch);
+    assert.equal(await enqueueDocumentEmbeddings(prisma, batch), 501);
+    assert.equal(await enqueueDocumentEmbeddings(prisma, batch), 0);
     assert.equal(
       await prisma.processingJob.count({
         where: { payload: { path: ["model"], equals: "batch-test" } },
