@@ -38,8 +38,16 @@ neon deploy
 Migrations use `DATABASE_URL_UNPOOLED`; application queries use the pooled
 `DATABASE_URL`. PDFs stay in Cloudflare R2.
 
-For the optional local DIP embedding model, start Ollama and download the
-0.6B model once (about 639 MB):
+The DIP embedding worker defaults to OpenAI `text-embedding-3-small`, requesting
+1024 dimensions to match the existing pgvector column. Set `OPENAI_API_KEY`
+or the provider-neutral `EMBEDDING_API_KEY` in a private environment file.
+The provider protocol, endpoint, model, and instructions are configurable;
+changing them creates a separate index identity automatically. See
+[DIP embedding configuration](docs/dip-embedding-evaluation.md) before
+switching models so the new index can be backfilled.
+
+To use optional local Ollama instead, set `EMBEDDING_API_FORMAT=ollama` and
+`EMBEDDING_MODEL=qwen3-embedding:0.6b`, then download the model:
 
 ```sh
 docker compose --profile embeddings up -d --wait
@@ -123,8 +131,8 @@ similarity score, and a DIP API source reference. A record appears only after
 its current version's embedding job succeeds; extracted PDF passages appear as
 `dokument` results carrying the matched passage, document reference, page and
 chunk numbers, and original `pdf_url`. Only the latest fetched content variant
-is searchable. Search requires the local Ollama model; collection and stored source records remain
-available if it is offline.
+is searchable. Search requires the configured embedding provider; collection
+and stored source records remain available if it is offline.
 
 Request a cited document on demand. This returns stored metadata and the
 original `pdf_url` immediately, and raises an unprocessed document to the front

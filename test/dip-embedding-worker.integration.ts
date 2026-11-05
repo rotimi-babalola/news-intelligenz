@@ -3,8 +3,7 @@ import { test } from "node:test";
 import { retryJob } from "../src/admin/service.js";
 import {
   processNextDipEmbedding,
-  EMBEDDING_MODEL,
-  DOCUMENT_INSTRUCTION,
+  embeddingConfig,
 } from "../src/dip/embedding.js";
 import { EMBED_PROCEEDING, EMBED_STEP } from "../src/dip/jobs.js";
 import { collectVorgang } from "../src/dip/vorgang.js";
@@ -88,8 +87,8 @@ test("proceeding jobs embed exact versions once and leave step jobs alone", asyn
         sourceVersionNo,
         sourceEntity: "vorgang",
         sourceApiId: "123",
-        model: EMBEDDING_MODEL,
-        documentInstruction: DOCUMENT_INSTRUCTION,
+        model: embeddingConfig().indexId,
+        documentInstruction: embeddingConfig().documentInstruction,
       })),
     );
 
@@ -252,8 +251,8 @@ test("step jobs embed saved labels and available descriptions for each version",
         sourceEntity: "vorgangsposition",
         sourceApiId: "456",
         sourceVersionNo,
-        model: EMBEDDING_MODEL,
-        documentInstruction: DOCUMENT_INSTRUCTION,
+        model: embeddingConfig().indexId,
+        documentInstruction: embeddingConfig().documentInstruction,
       })),
     );
     assert.equal(

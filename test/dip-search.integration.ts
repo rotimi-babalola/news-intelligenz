@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import {
-  DOCUMENT_INSTRUCTION,
-  EMBEDDING_MODEL,
+  embeddingConfig,
+  embeddingInput,
   processNextDipEmbedding,
 } from "../src/dip/embedding.js";
 import { saveDipEmbedding } from "../src/dip/repository.js";
-import { QUERY_INSTRUCTION, searchDip } from "../src/dip/search.js";
+import { searchDip } from "../src/dip/search.js";
 import { EMBED_PROCEEDING } from "../src/dip/jobs.js";
 import type { VorgangPage } from "../src/dip/types.js";
 import { collectVorgang } from "../src/dip/vorgang.js";
@@ -56,9 +56,9 @@ test("German and English queries return only current DIP source versions", async
         sourceEntity,
         apiId: sourceApiId,
         versionNo: sourceVersionNo,
-        model: EMBEDDING_MODEL,
-        documentInstruction: DOCUMENT_INSTRUCTION,
-        queryInstruction: QUERY_INSTRUCTION,
+        model: embeddingConfig().indexId,
+        documentInstruction: embeddingConfig().documentInstruction,
+        queryInstruction: embeddingConfig().queryInstruction,
         embedding,
       });
     await save("vorgang", "123", 1, vector(1, 0));
@@ -82,8 +82,8 @@ test("German and English queries return only current DIP source versions", async
       /invalid 1024-dimensional embedding/,
     );
     assert.deepEqual(queries, [
-      `Instruct: ${QUERY_INSTRUCTION}\nQuery:Erdölreserven freigeben`,
-      `Instruct: ${QUERY_INSTRUCTION}\nQuery:release petroleum reserves`,
+      embeddingInput("Erdölreserven freigeben", "query"),
+      embeddingInput("release petroleum reserves", "query"),
     ]);
     for (const matches of [german, english]) {
       assert.deepEqual(
@@ -191,9 +191,9 @@ test("document text returns the latest variant with page provenance", async () =
         versionNo: variantNo,
         sourcePage: 1,
         sourceChunk: 1,
-        model: EMBEDDING_MODEL,
-        documentInstruction: DOCUMENT_INSTRUCTION,
-        queryInstruction: QUERY_INSTRUCTION,
+        model: embeddingConfig().indexId,
+        documentInstruction: embeddingConfig().documentInstruction,
+        queryInstruction: embeddingConfig().queryInstruction,
         embedding: variantNo === 1 ? vector(1, 0) : vector(0, 1),
       });
 
@@ -203,9 +203,9 @@ test("document text returns the latest variant with page provenance", async () =
       versionNo: 2,
       sourcePage: 1,
       sourceChunk: 2,
-      model: EMBEDDING_MODEL,
-      documentInstruction: DOCUMENT_INSTRUCTION,
-      queryInstruction: QUERY_INSTRUCTION,
+      model: embeddingConfig().indexId,
+      documentInstruction: embeddingConfig().documentInstruction,
+      queryInstruction: embeddingConfig().queryInstruction,
       embedding: vector(1, 0),
     });
     // Legacy whole-page vectors remain stored but must not enter passage search.
@@ -214,9 +214,9 @@ test("document text returns the latest variant with page provenance", async () =
       apiId: "789",
       versionNo: 2,
       sourcePage: 1,
-      model: EMBEDDING_MODEL,
-      documentInstruction: DOCUMENT_INSTRUCTION,
-      queryInstruction: QUERY_INSTRUCTION,
+      model: embeddingConfig().indexId,
+      documentInstruction: embeddingConfig().documentInstruction,
+      queryInstruction: embeddingConfig().queryInstruction,
       embedding: vector(1, 0),
     });
 
