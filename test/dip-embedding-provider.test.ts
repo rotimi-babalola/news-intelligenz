@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { embedText, embeddingConfig, embeddingInput } from "../src/dip/embedding.js";
+import {
+  embedText,
+  embeddingConfig,
+  embeddingInput,
+} from "../src/dip/embedding.js";
 import { RateLimitedError } from "../src/jobs.js";
 
 test("OpenAI-compatible provider uses configured model and 1024 dimensions", async () => {
