@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import {
-  DOCUMENT_INSTRUCTION,
-  EMBEDDING_MODEL,
+  embeddingConfig,
+  embeddingInput,
   processNextDipEmbedding,
 } from "../src/dip/embedding.js";
 import { saveDipEmbedding } from "../src/dip/repository.js";
-import { QUERY_INSTRUCTION, searchDip } from "../src/dip/search.js";
+import { searchDip } from "../src/dip/search.js";
 import { EMBED_PROCEEDING } from "../src/dip/jobs.js";
 import type { VorgangPage } from "../src/dip/types.js";
 import { collectVorgang } from "../src/dip/vorgang.js";
@@ -56,9 +56,9 @@ test("German and English queries return only current DIP source versions", async
         sourceEntity,
         apiId: sourceApiId,
         versionNo: sourceVersionNo,
-        model: EMBEDDING_MODEL,
-        documentInstruction: DOCUMENT_INSTRUCTION,
-        queryInstruction: QUERY_INSTRUCTION,
+        model: embeddingConfig().indexId,
+        documentInstruction: embeddingConfig().documentInstruction,
+        queryInstruction: embeddingConfig().queryInstruction,
         embedding,
       });
     await save("vorgang", "123", 1, vector(1, 0));
@@ -82,8 +82,8 @@ test("German and English queries return only current DIP source versions", async
       /invalid 1024-dimensional embedding/,
     );
     assert.deepEqual(queries, [
-      `Instruct: ${QUERY_INSTRUCTION}\nQuery:Erdölreserven freigeben`,
-      `Instruct: ${QUERY_INSTRUCTION}\nQuery:release petroleum reserves`,
+      embeddingInput("Erdölreserven freigeben", "query"),
+      embeddingInput("release petroleum reserves", "query"),
     ]);
     for (const matches of [german, english]) {
       assert.deepEqual(
@@ -164,6 +164,23 @@ test("document text returns the latest variant with page provenance", async () =
           text: `Haushalt Fassung ${variantNo}`,
         },
       });
+      await prisma.documentChunk.create({
+        data: {
+          contentId: content.id,
+          pageNo: 1,
+          chunkNo: 1,
+          text: `Haushalt Fassung ${variantNo}`,
+        },
+      });
+      if (variantNo === 2)
+        await prisma.documentChunk.create({
+          data: {
+            contentId: content.id,
+            pageNo: 1,
+            chunkNo: 2,
+            text: "Target budget passage",
+          },
+        });
     };
     await variant(1, false);
     await variant(2, true);
@@ -173,13 +190,37 @@ test("document text returns the latest variant with page provenance", async () =
         apiId: "789",
         versionNo: variantNo,
         sourcePage: 1,
-        model: EMBEDDING_MODEL,
-        documentInstruction: DOCUMENT_INSTRUCTION,
-        queryInstruction: QUERY_INSTRUCTION,
-        embedding: vector(1, 0),
+        sourceChunk: 1,
+        model: embeddingConfig().indexId,
+        documentInstruction: embeddingConfig().documentInstruction,
+        queryInstruction: embeddingConfig().queryInstruction,
+        embedding: variantNo === 1 ? vector(1, 0) : vector(0, 1),
       });
 
-    const results = await searchDip(prisma, "Haushalt", 10, {
+    await saveDipEmbedding(prisma, {
+      sourceEntity: "dokument",
+      apiId: "789",
+      versionNo: 2,
+      sourcePage: 1,
+      sourceChunk: 2,
+      model: embeddingConfig().indexId,
+      documentInstruction: embeddingConfig().documentInstruction,
+      queryInstruction: embeddingConfig().queryInstruction,
+      embedding: vector(1, 0),
+    });
+    // Legacy whole-page vectors remain stored but must not enter passage search.
+    await saveDipEmbedding(prisma, {
+      sourceEntity: "dokument",
+      apiId: "789",
+      versionNo: 2,
+      sourcePage: 1,
+      model: embeddingConfig().indexId,
+      documentInstruction: embeddingConfig().documentInstruction,
+      queryInstruction: embeddingConfig().queryInstruction,
+      embedding: vector(1, 0),
+    });
+
+    const results = await searchDip(prisma, "Haushalt", 1, {
       embed: async () => vector(1, 0),
     });
     const documents = results.filter((result) => result.entity === "dokument");
@@ -188,6 +229,8 @@ test("document text returns the latest variant with page provenance", async () =
     if (!document || document.entity !== "dokument") return;
     assert.equal(document.versionNo, 2);
     assert.equal(document.page, 1);
+    assert.equal(document.chunk, 2);
+    assert.equal(document.passage, "Target budget passage");
     assert.equal(document.proceedingApiId, "123");
     assert.deepEqual(document.document, {
       referenceId: "789",

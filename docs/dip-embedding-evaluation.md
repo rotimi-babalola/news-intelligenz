@@ -1,8 +1,38 @@
 # DIP embedding comparison
 
+## From PDFs to retrieval
+
+Cloudflare R2 stores the original PDF bytes. Neon stores extracted page text,
+passages, and pgvector embeddings. Retrieval combines current proceedings,
+steps, and PDF passages; a PDF hit includes its document reference and page.
+No answer-generation layer is present yet. A RAG answer should use these
+retrieved evidence units and cite their DIP source and PDF page.
+
+For candidate models, run the 10% reindex and reindex-only drain commands
+below. Review German and English queries with both proceeding and PDF page
+labels. Before deploying a search configuration with a new index ID, run the
+new code against the target database with the selected provider settings to
+queue and drain a 100% reindex:
+
+```sh
+DIP_REINDEX_SAMPLE_PERCENT=100 pnpm reindex:dip
+DIP_DOCUMENT_DRAIN_CAP=0 DIP_EMBEDDING_REINDEX_ONLY=1 pnpm drain:dip
+```
+
+Repeat the drain until no reindex jobs remain, then switch the search service
+to the same configuration. A 10% sample and the existing pending jobs do not
+cover sources already embedded under the previous index ID. After switching,
+drain the unscoped production backlog with `pnpm drain:dip`; legacy page jobs
+create passage jobs as they run. The full reindex may bill the provider again
+for sources already embedded. Use the same provider, model, and instruction
+settings for reindex, drain, and search.
+Each distinct model or instruction combination needs its own index ID
+and vector jobs. Local Ollama must run on the machine executing the drain; a
+remote Render worker cannot reach Ollama on your laptop's `127.0.0.1`.
+
 Run the comparison against one fixed Neon branch or a paused collection window.
 The reindex command uses a stable hash sample of the latest stored proceedings,
-steps, and extracted PDF pages. Its default sample is 10%, the same IDs for
+steps, and extracted PDF passages. Its default sample is 10%, the same IDs for
 every model. Set `DIP_REINDEX_SAMPLE_PERCENT=100` for the full corpus. It does
 not fetch DIP records or PDFs. Document pages only exist after
 `process_document` jobs finish.
@@ -42,19 +72,20 @@ evaluator refuses an unreviewed file.
 
 For each candidate, set these variables in the shell or a private env file:
 
-| Variable                             | Meaning                                                                                                         |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `EMBEDDING_MODEL`                    | Provider's model name; defaults to local `qwen3-embedding:0.6b`                                                 |
-| `EMBEDDING_INDEX_ID`                 | Stable identity for this provider, model, and instruction combination; defaults to the model name               |
-| `EMBEDDING_BASE_URL`                 | API base URL ending at `/v1` for OpenAI-compatible or Voyage APIs; omit for local Ollama                        |
-| `EMBEDDING_API_KEY`                  | Hosted provider secret; never commit it                                                                         |
-| `EMBEDDING_API_FORMAT`               | `openai`, `voyage`, or `ollama`; defaults to `openai` when a base URL is set, otherwise `ollama`                |
-| `EMBEDDING_QUERY_INSTRUCTION`        | Optional query prefix; local Qwen keeps its existing default                                                    |
-| `EMBEDDING_DOCUMENT_INSTRUCTION`     | Optional document prefix; defaults to empty                                                                     |
-| `EMBEDDING_PRICE_PER_MILLION_TOKENS` | Optional input token price in your chosen currency for an estimated cost; verify billed usage with the provider |
+| Variable                             | Meaning                                                                                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `EMBEDDING_MODEL`                    | Provider's model name; defaults to `text-embedding-3-small`                                                              |
+| `EMBEDDING_INDEX_ID`                 | Optional stable override for the index identity; otherwise derived from format, URL, model, dimensions, and instructions |
+| `EMBEDDING_BASE_URL`                 | API base URL ending at `/v1`; defaults to OpenAI's URL for `openai`, localhost for `ollama`; required for `voyage`       |
+| `EMBEDDING_API_KEY`                  | Provider secret; defaults to `OPENAI_API_KEY` only for the default OpenAI endpoint; never commit it                      |
+| `EMBEDDING_API_FORMAT`               | Wire format: `openai`, `voyage`, or `ollama`; defaults to `openai`                                                       |
+| `EMBEDDING_QUERY_INSTRUCTION`        | Optional query prefix; defaults to empty for hosted models and the existing instruction for Ollama                       |
+| `EMBEDDING_DOCUMENT_INSTRUCTION`     | Optional document prefix; defaults to empty                                                                              |
+| `EMBEDDING_PRICE_PER_MILLION_TOKENS` | Optional input token price in your chosen currency for an estimated cost; verify billed usage with the provider          |
 
-`EMBEDDING_INDEX_ID` must change if the provider, model revision, dimensions, or
-instructions change. The current database accepts only 1024-dimensional vectors.
+The derived index ID changes when the format, endpoint, model, or instructions
+change. If you override it, change the override whenever the embedding space
+changes. The current database accepts only 1024-dimensional vectors.
 The provider client checks this before saving. The `model` column stores the
 index ID, and each row records both instructions, so candidate indexes coexist.
 Search filters by index ID and instructions and never mixes their vectors. For an operator comparison, change the environment
@@ -66,6 +97,12 @@ DIP_DOCUMENT_DRAIN_CAP=0 DIP_EMBEDDING_REINDEX_ONLY=1 pnpm drain:dip
 pnpm evaluate:dip -- path/to/labels.json
 ```
 
+Reindexing splits retained page text without fetching PDFs again. Search
+excludes legacy whole-page vectors, so PDF results return as passage jobs
+complete. The command also queues current proceeding and step versions;
+already stored vectors are retained, but those jobs still call the embedding
+provider.
+
 Repeat the drain until it reports no work. Reindex-only mode leaves the existing
 unscoped production backlog untouched during comparison. Label examples from
 the sampled index so all candidates see the same evidence. `DIP_DOCUMENT_DRAIN_CAP`
@@ -75,15 +112,15 @@ honor `Retry-After`; the drain stops after a retrying embedding job so an outage
 does not consume the rest of the queue's retry budget. The existing admin DIP
 page shows pending, retrying, and exhausted jobs.
 
-After selecting a model, apply migrations and run `pnpm drain:dip` as a
-separate Render cron. An hourly `15 * * * *` UTC schedule starts after the
-existing daily collection trigger. Configure the pooled `DATABASE_URL`, R2
+After selecting a model, apply migrations, complete the full reindex above,
+then run `pnpm drain:dip` as a separate Render cron. An hourly `15 * * * *` UTC
+schedule starts after the existing daily collection trigger. Configure the
+pooled `DATABASE_URL`, R2
 object storage, Python/PyMuPDF, and the chosen embedding provider on that
 service. Leave `DIP_EMBEDDING_REINDEX_ONLY` unset. The document drain runs
 first, then the embedding drain. Run the same command manually for backfill;
-it consumes existing pending jobs without re-collecting. Use
-`DIP_REINDEX_SAMPLE_PERCENT=100 pnpm reindex:dip` when fully indexing another
-model. A hosted smoke test is opt-in with `HOSTED_EMBEDDING_QA=1` and the
+it consumes existing pending jobs without re-collecting. A hosted smoke test
+is opt-in with `HOSTED_EMBEDDING_QA=1` and the
 chosen provider environment.
 
 ## Render PDF drain setup

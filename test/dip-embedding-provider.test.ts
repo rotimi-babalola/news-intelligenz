@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { embedText, embeddingConfig } from "../src/dip/embedding.js";
+import {
+  embedText,
+  embeddingConfig,
+  embeddingInput,
+} from "../src/dip/embedding.js";
 import { RateLimitedError } from "../src/jobs.js";
 
 test("OpenAI-compatible provider uses configured model and 1024 dimensions", async () => {
@@ -29,7 +33,10 @@ test("OpenAI-compatible provider uses configured model and 1024 dimensions", asy
         usage: { total_tokens: 3 },
       });
     };
-    assert.equal(embeddingConfig().indexId, "candidate-a");
+    assert.match(
+      embeddingConfig().indexId,
+      /^openai:candidate-a:[a-f0-9]{12}$/,
+    );
     assert.equal((await embedText("Hallo Bundestag")).length, 1024);
     globalThis.fetch = async () =>
       new Response("", { status: 429, headers: { "Retry-After": "2" } });
@@ -37,6 +44,67 @@ test("OpenAI-compatible provider uses configured model and 1024 dimensions", asy
       embedText("Hallo"),
       (error) =>
         error instanceof RateLimitedError && error.retryAfterMs === 2000,
+    );
+  } finally {
+    globalThis.fetch = fetchBefore;
+    process.env = previous;
+  }
+});
+
+test("default OpenAI settings and provider changes select separate indexes", () => {
+  const previous = { ...process.env };
+  try {
+    delete process.env.EMBEDDING_API_FORMAT;
+    delete process.env.EMBEDDING_MODEL;
+    delete process.env.EMBEDDING_BASE_URL;
+    delete process.env.EMBEDDING_API_KEY;
+    delete process.env.EMBEDDING_INDEX_ID;
+    delete process.env.EMBEDDING_QUERY_INSTRUCTION;
+    delete process.env.EMBEDDING_DOCUMENT_INSTRUCTION;
+    process.env.OPENAI_API_KEY = "openai-test-key";
+    const selected = embeddingConfig();
+    assert.equal(selected.format, "openai");
+    assert.equal(selected.model, "text-embedding-3-small");
+    assert.equal(selected.baseUrl, "https://api.openai.com/v1");
+    assert.equal(selected.apiKey, "openai-test-key");
+    assert.equal(selected.queryInstruction, "");
+    process.env.OPENAI_API_KEY = "rotated-key";
+    assert.equal(embeddingConfig().indexId, selected.indexId);
+    process.env.EMBEDDING_BASE_URL = "https://api.openai.com/v1/";
+    assert.equal(embeddingConfig().indexId, selected.indexId);
+    delete process.env.EMBEDDING_BASE_URL;
+    process.env.EMBEDDING_MODEL = "text-embedding-3-large";
+    assert.notEqual(embeddingConfig().indexId, selected.indexId);
+    process.env.EMBEDDING_MODEL = selected.model;
+    process.env.EMBEDDING_QUERY_INSTRUCTION = "Find parliamentary evidence";
+    assert.notEqual(embeddingConfig().indexId, selected.indexId);
+    delete process.env.EMBEDDING_QUERY_INSTRUCTION;
+    process.env.EMBEDDING_API_FORMAT = "ollama";
+    process.env.EMBEDDING_MODEL = "qwen3-embedding:0.6b";
+    assert.equal(embeddingConfig().baseUrl, "http://127.0.0.1:11434");
+    assert.match(embeddingInput("Frage", "query"), /^Instruct: /);
+    assert.notEqual(embeddingConfig().indexId, selected.indexId);
+    process.env.EMBEDDING_API_FORMAT = "voyage";
+    assert.throws(() => embeddingConfig(), /EMBEDDING_BASE_URL/);
+  } finally {
+    process.env = previous;
+  }
+});
+
+test("default OpenAI endpoint requires a key before requesting an embedding", async () => {
+  const previous = { ...process.env };
+  const fetchBefore = globalThis.fetch;
+  try {
+    delete process.env.EMBEDDING_API_FORMAT;
+    delete process.env.EMBEDDING_BASE_URL;
+    delete process.env.EMBEDDING_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    globalThis.fetch = async () => {
+      throw new Error("Unexpected request");
+    };
+    await assert.rejects(
+      embedText("test"),
+      /OPENAI_API_KEY or EMBEDDING_API_KEY/,
     );
   } finally {
     globalThis.fetch = fetchBefore;

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { PrismaClient } from "../generated/prisma/client";
 import {
   claimNextJob,
@@ -9,37 +10,64 @@ import {
 import { EMBED_DOCUMENT, EMBED_PROCEEDING, EMBED_STEP } from "./jobs";
 import {
   findDocumentContent,
-  findDocumentPage,
   findProceedingVersion,
   findStepVersion,
   saveDipEmbedding,
 } from "./repository";
+import { ensureDocumentChunks } from "./chunks";
+import { enqueueDocumentEmbeddings } from "./jobs";
 
-export const EMBEDDING_MODEL = "qwen3-embedding:0.6b";
-// Qwen3 embeds retrieval documents without a prefix.
+export const EMBEDDING_MODEL = "text-embedding-3-small";
 export const DOCUMENT_INSTRUCTION = "";
 export const QUERY_INSTRUCTION =
   "Given a German or English query, retrieve relevant German parliamentary proceedings and steps";
 
 export function embeddingConfig() {
-  const baseUrl = process.env.EMBEDDING_BASE_URL?.trim();
-  const format =
-    process.env.EMBEDDING_API_FORMAT || (baseUrl ? "openai" : "ollama");
+  const format = process.env.EMBEDDING_API_FORMAT?.trim() || "openai";
   if (format !== "openai" && format !== "ollama" && format !== "voyage")
     throw new Error("EMBEDDING_API_FORMAT must be openai, ollama, or voyage");
+  if (format === "voyage" && !process.env.EMBEDDING_BASE_URL?.trim())
+    throw new Error("EMBEDDING_BASE_URL is required for Voyage");
   const port = Number(process.env.OLLAMA_PORT || "11434");
   const model = process.env.EMBEDDING_MODEL?.trim() || EMBEDDING_MODEL;
+  const baseUrl = (
+    process.env.EMBEDDING_BASE_URL?.trim() ||
+    (format === "ollama"
+      ? `http://127.0.0.1:${port}`
+      : "https://api.openai.com/v1")
+  ).replace(/\/$/, "");
+  const documentInstruction =
+    process.env.EMBEDDING_DOCUMENT_INSTRUCTION ?? DOCUMENT_INSTRUCTION;
+  const queryInstruction =
+    process.env.EMBEDDING_QUERY_INSTRUCTION ??
+    (format === "ollama" ? QUERY_INSTRUCTION : "");
+  const identity = createHash("sha256")
+    .update(
+      JSON.stringify([
+        format,
+        baseUrl,
+        model,
+        1024,
+        documentInstruction,
+        queryInstruction,
+      ]),
+    )
+    .digest("hex")
+    .slice(0, 12);
   return {
     model,
-    indexId: process.env.EMBEDDING_INDEX_ID?.trim() || model,
-    baseUrl: baseUrl || `http://127.0.0.1:${port}`,
-    apiKey: process.env.EMBEDDING_API_KEY?.trim(),
+    indexId:
+      process.env.EMBEDDING_INDEX_ID?.trim() ||
+      `${format}:${model}:${identity}`,
+    baseUrl,
+    apiKey:
+      process.env.EMBEDDING_API_KEY?.trim() ||
+      (format === "openai" && baseUrl === "https://api.openai.com/v1"
+        ? process.env.OPENAI_API_KEY?.trim()
+        : undefined),
     format,
-    documentInstruction:
-      process.env.EMBEDDING_DOCUMENT_INSTRUCTION ?? DOCUMENT_INSTRUCTION,
-    queryInstruction:
-      process.env.EMBEDDING_QUERY_INSTRUCTION ??
-      (format === "ollama" ? QUERY_INSTRUCTION : ""),
+    documentInstruction,
+    queryInstruction,
   };
 }
 
@@ -89,8 +117,11 @@ export async function embedText(
   kind: "query" | "document" = "document",
 ): Promise<number[]> {
   const config = embeddingConfig();
+  if (config.baseUrl === "https://api.openai.com/v1" && !config.apiKey)
+    throw new Error("OPENAI_API_KEY or EMBEDDING_API_KEY is required");
   const port = Number(process.env.OLLAMA_PORT || "11434");
   if (
+    config.format === "ollama" &&
     !process.env.EMBEDDING_BASE_URL &&
     (!Number.isInteger(port) || port < 1 || port > 65535)
   )
@@ -180,6 +211,8 @@ export async function processNextDipEmbedding(
         referenceId?: unknown;
         variantNo?: unknown;
         pageNo?: unknown;
+        chunkNo?: unknown;
+        model?: unknown;
       };
       if (
         typeof payload.referenceId !== "string" ||
@@ -198,19 +231,52 @@ export async function processNextDipEmbedding(
       );
       if (!content)
         throw new Error("Document variant for embedding no longer exists");
-      // One job covers one page, so one drain call embeds one extracted page.
-      const page = await findDocumentPage(prisma, content.id, payload.pageNo);
-      if (!page)
-        throw new Error("Document page for embedding no longer exists");
-      const text = page.text.trim();
-      if (text) {
-        const embedding = await (options.embed ?? embedText)(text);
+      if (payload.chunkNo === undefined) {
+        // Page jobs queued before chunking hand off to passage jobs.
+        const page = await prisma.documentPage.findUnique({
+          where: {
+            contentId_pageNo: { contentId: content.id, pageNo: payload.pageNo },
+          },
+        });
+        if (!page)
+          throw new Error("Document page for embedding no longer exists");
+        const chunks = await ensureDocumentChunks(prisma, content.id, [page]);
+        await enqueueDocumentEmbeddings(prisma, {
+          runId: job.runId,
+          itemIndex: job.itemIndex,
+          electoralTerm: null,
+          referenceId: payload.referenceId,
+          variantNo: payload.variantNo,
+          chunks: chunks.filter((item) => item.pageNo === page.pageNo),
+          model: typeof payload.model === "string" ? payload.model : undefined,
+          priority: job.priority,
+        });
+      } else {
+        if (
+          typeof payload.chunkNo !== "number" ||
+          !Number.isInteger(payload.chunkNo) ||
+          payload.chunkNo < 1
+        )
+          throw new Error("Document embedding job has an invalid chunk");
+        const chunk = await prisma.documentChunk.findUnique({
+          where: {
+            contentId_pageNo_chunkNo: {
+              contentId: content.id,
+              pageNo: payload.pageNo,
+              chunkNo: payload.chunkNo,
+            },
+          },
+        });
+        if (!chunk)
+          throw new Error("Document chunk for embedding no longer exists");
+        const embedding = await (options.embed ?? embedText)(chunk.text);
         assertEmbedding(embedding);
         await saveDipEmbedding(prisma, {
           sourceEntity: "dokument",
           apiId: payload.referenceId,
           versionNo: payload.variantNo,
-          sourcePage: page.pageNo,
+          sourcePage: chunk.pageNo,
+          sourceChunk: chunk.chunkNo,
           model: config.indexId,
           documentInstruction: config.documentInstruction,
           queryInstruction: config.queryInstruction,

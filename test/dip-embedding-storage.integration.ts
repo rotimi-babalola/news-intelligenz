@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { QUERY_INSTRUCTION } from "../src/dip/embedding.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 
 test("DIP embeddings retain versions and reject duplicate model records", async () => {
@@ -12,8 +11,8 @@ test("DIP embeddings retain versions and reject duplicate model records", async 
     const table = `"${schema}"."dip_embeddings"`;
     const insert = (version: number) =>
       prisma.$executeRawUnsafe(
-        `INSERT INTO ${table} (id, source_entity, source_api_id, source_version_no, model, document_instruction, embedding)
-         VALUES (gen_random_uuid(), 'vorgang', '123', $1, 'qwen3-embedding:0.6b', '', array_fill(0.1::real, ARRAY[1024])::public.vector)`,
+        `INSERT INTO ${table} (id, source_entity, source_api_id, source_version_no, model, document_instruction, query_instruction, embedding)
+         VALUES (gen_random_uuid(), 'vorgang', '123', $1, 'candidate-model', '', '', array_fill(0.1::real, ARRAY[1024])::public.vector)`,
         version,
       );
 
@@ -22,8 +21,8 @@ test("DIP embeddings retain versions and reject duplicate model records", async 
     await assert.rejects(insert(2));
     await assert.rejects(
       prisma.$executeRawUnsafe(
-        `INSERT INTO ${table} (id, source_entity, source_api_id, source_version_no, model, document_instruction, embedding)
-         VALUES (gen_random_uuid(), 'vorgang', '124', 1, 'qwen3-embedding:0.6b', '', '[0.1,0.2,0.3]'::public.vector)`,
+        `INSERT INTO ${table} (id, source_entity, source_api_id, source_version_no, model, document_instruction, query_instruction, embedding)
+         VALUES (gen_random_uuid(), 'vorgang', '124', 1, 'candidate-model', '', '', '[0.1,0.2,0.3]'::public.vector)`,
       ),
     );
     const rows = await prisma.$queryRawUnsafe<
@@ -40,7 +39,7 @@ test("DIP embeddings retain versions and reject duplicate model records", async 
     >(`SELECT query_instruction FROM ${table} ORDER BY source_version_no`);
     assert.deepEqual(
       queryInstructions.map((row) => row.query_instruction),
-      [QUERY_INSTRUCTION, QUERY_INSTRUCTION],
+      ["", ""],
     );
   } finally {
     await prisma.$disconnect();
