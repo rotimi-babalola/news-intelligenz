@@ -142,7 +142,7 @@ test("document text returns the latest variant with page provenance", async () =
         documentNumber: "21/1001",
         pdfUrl: "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
         documentDate: new Date("2026-10-09"),
-        metadata: {},
+        metadata: { herausgeber: "BT", dokumentart: "Drucksache" },
       },
     });
     const variant = async (variantNo: number, isLatest: boolean) => {
@@ -154,6 +154,7 @@ test("document text returns the latest variant with page provenance", async () =
           byteSize: 4,
           pageCount: 1,
           objectKey: `documents/789/hash-${variantNo}.pdf`,
+          requestedUrl: "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
           isLatest,
         },
       });
@@ -231,6 +232,16 @@ test("document text returns the latest variant with page provenance", async () =
     assert.equal(document.page, 1);
     assert.equal(document.chunk, 2);
     assert.equal(document.passage, "Target budget passage");
+    assert.deepEqual(document.excerpt, {
+      status: "excerpt-eligible",
+      reason: "Confirmed official parliamentary document",
+      source: "Deutscher Bundestag/Bundesrat – DIP",
+      document: "BT-Drs. 21/1001",
+      originalUrl: "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
+      page: 1,
+      text: "Target budget passage",
+      changes: "Text extracted from PDF and excerpted",
+    });
     assert.equal(document.proceedingApiId, "123");
     assert.deepEqual(document.document, {
       referenceId: "789",
@@ -242,6 +253,39 @@ test("document text returns the latest variant with page provenance", async () =
       endpoint: "/vorgangsposition",
       apiId: "456",
       url: "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
+    });
+    await prisma.documentReference.update({
+      where: { stepApiId: "456" },
+      data: { metadata: { herausgeber: "Dritte", dokumentart: "Drucksache" } },
+    });
+    const linkedThirdParty = await searchDip(prisma, "Haushalt", 1, {
+      embed: async () => vector(1, 0),
+    });
+    const restricted = linkedThirdParty[0];
+    assert.equal(restricted?.entity, "dokument");
+    if (!restricted || restricted.entity !== "dokument") return;
+    assert.equal(restricted.passage, null);
+    assert.deepEqual(restricted.excerpt, {
+      status: "metadata-only",
+      reason: "Unconfirmed official issuer",
+    });
+    assert.equal("bytes" in restricted, false);
+    await prisma.documentReference.update({
+      where: { stepApiId: "456" },
+      data: {
+        pdfUrl: "https://dserver.bundestag.de/btd/21/010/new.pdf",
+        metadata: { herausgeber: "BT", dokumentart: "Drucksache" },
+      },
+    });
+    const changedUrl = await searchDip(prisma, "Haushalt", 1, {
+      embed: async () => vector(1, 0),
+    });
+    assert.equal(changedUrl[0]?.entity, "dokument");
+    if (changedUrl[0]?.entity !== "dokument") return;
+    assert.equal(changedUrl[0].passage, null);
+    assert.deepEqual(changedUrl[0].excerpt, {
+      status: "metadata-only",
+      reason: "Document revision has not been processed",
     });
   } finally {
     await prisma.$disconnect();

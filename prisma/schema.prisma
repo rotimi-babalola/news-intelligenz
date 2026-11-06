@@ -345,6 +345,7 @@ model DocumentContent {
   // re-archived. New rows leave this null and archive on upload.
   bytes       Bytes?
   sourceUrl   String?        @map("source_url") @db.Text
+  requestedUrl String?      @map("requested_url") @db.Text
   fetchedAt   DateTime       @map("fetched_at") @default(now()) @db.Timestamptz(6)
   isLatest    Boolean        @map("is_latest") @default(true)
   pages       DocumentPage[]

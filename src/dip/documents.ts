@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { ensureDocumentChunks } from "./chunks";
+import { classifyDocumentReference } from "./excerpts";
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { claimNextJob, completeJob, failJob } from "../jobs";
 import {
@@ -195,6 +196,10 @@ export async function processNextDocument(
     }
     const pageRows = await listDocumentPages(prisma, content.id);
     const chunks = await ensureDocumentChunks(prisma, content.id, pageRows);
+    await prisma.documentContent.update({
+      where: { id: content.id },
+      data: { requestedUrl: pdfUrl },
+    });
     await enqueueDocumentEmbeddings(prisma, {
       runId: job.runId,
       itemIndex: job.itemIndex,
@@ -269,6 +274,13 @@ export async function requestDocument(
     job = (await raiseDocumentJob(prisma, key)) ?? job;
   }
   return {
+    eligibility: classifyDocumentReference({
+      institution: reference.step.institution,
+      documentType: reference.step.documentType,
+      documentNumber: reference.documentNumber,
+      pdfUrl: reference.pdfUrl,
+      metadata: reference.metadata,
+    }),
     reference: {
       referenceId,
       stepApiId: reference.stepApiId,

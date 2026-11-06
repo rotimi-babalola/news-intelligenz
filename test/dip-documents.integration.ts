@@ -109,6 +109,7 @@ test("a document job archives the PDF, stores pages and hands off embedding", as
     const content = await prisma.documentContent.findFirstOrThrow({
       where: { referenceId: "29701499" },
     });
+    assert.equal(content.requestedUrl, PDF_URL);
     assert.equal(content.byteSize, bytes.byteLength);
     assert.equal(content.pageCount, 2);
     assert.equal(content.isLatest, true);
@@ -478,6 +479,18 @@ test("an on-demand request returns metadata and jumps the queue", async () => {
     if (!requested) return;
     assert.equal(requested.reference.pdfUrl, PDF_URL);
     assert.equal(requested.reference.documentNumber, "21/1001");
+    assert.deepEqual(requested.eligibility, {
+      status: "metadata-only",
+      reason: "Unconfirmed official issuer",
+    });
+    await prisma.documentReference.update({
+      where: { stepApiId: "701410" },
+      data: { metadata: { herausgeber: "BT", dokumentart: "Drucksache" } },
+    });
+    assert.equal(
+      (await requestDocument(prisma, "29701499"))?.eligibility.status,
+      "excerpt-eligible",
+    );
     assert.equal(requested.processed, false);
     assert.equal(requested.job?.priority, ON_DEMAND_PRIORITY);
     assert.equal(requested.job?.status, "pending");

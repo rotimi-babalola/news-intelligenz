@@ -7,6 +7,7 @@ import {
   QUERY_INSTRUCTION,
 } from "./embedding";
 import { searchDipEmbeddings } from "./repository";
+import { readDocumentExcerpt } from "./excerpts";
 
 export { QUERY_INSTRUCTION };
 
@@ -33,6 +34,23 @@ export async function searchDip(
       row.entity === "vorgang" ? "/vorgang" : "/vorgangsposition";
     if (row.entity === "dokument") {
       const stepApiId = row.stepId ?? "";
+      const excerpt =
+        row.requestedUrl !== row.pdfUrl
+          ? {
+              status: "metadata-only" as const,
+              reason: "Document revision has not been processed",
+            }
+          : readDocumentExcerpt(
+              {
+                institution: row.institution,
+                documentType: row.documentType,
+                documentNumber: row.documentNumber,
+                pdfUrl: row.pdfUrl,
+                metadata: row.referenceMetadata,
+              },
+              row.pageNo,
+              row.passage,
+            );
       return {
         entity: row.entity,
         apiId: row.apiId,
@@ -44,7 +62,8 @@ export async function searchDip(
         proceedingApiId: row.proceedingApiId,
         page: row.pageNo,
         chunk: row.chunkNo,
-        passage: row.passage,
+        passage: excerpt.status === "excerpt-eligible" ? excerpt.text : null,
+        excerpt,
         document: {
           referenceId: row.referenceId ?? row.apiId,
           number: row.documentNumber,
