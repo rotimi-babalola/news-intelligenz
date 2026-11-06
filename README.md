@@ -142,14 +142,7 @@ chunk numbers, and original `pdf_url`. Only the latest fetched content variant
 is searchable. Search requires the configured embedding provider; collection
 and stored source records remain available if it is offline.
 
-For local MCP clients, run `pnpm mcp` and connect to
-`http://127.0.0.1:3001/mcp`. The read-only `get_proceeding` tool accepts a
-numeric `apiId` and returns the stored proceeding, ordered steps, and linked
-document references. `search_dip_evidence` accepts a German or English `query`
-and an optional `limit` (default 10, maximum 20), returning current DIP
-proceedings, steps, and document page evidence with scores, versions, and source
-links. Search requires the configured embedding provider and DIP index. The
-server listens on loopback only.
+To query the same evidence from an LLM, see [MCP server](#mcp-server).
 
 Request a cited document on demand. This returns stored metadata and the
 original `pdf_url` immediately, and raises an unprocessed document to the front
@@ -248,6 +241,51 @@ your database. Database outages roll back the current transaction; retry the sam
 run after restoring connectivity. Malformed feeds receive a persisted failed run
 result; SQL/connection failures are reported with a 500 response and roll
 back all writes. Durable retry jobs are deferred.
+
+## MCP server
+
+The read-only MCP server lets a local LLM client search stored DIP evidence and
+inspect proceedings. It listens only on `http://127.0.0.1:3001/mcp`; it does
+not collect records or queue PDF processing. Start it from the repository root
+with a configured `DATABASE_URL` in `.env`:
+
+```sh
+pnpm mcp
+```
+
+The server exposes two tools:
+
+| Tool                  | Input                                                                              | Result                                                           |
+| --------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `search_dip_evidence` | German or English `query` (1–1000 characters); optional `limit` (1–20, default 10) | Ranked current proceedings, steps, and document page evidence    |
+| `get_proceeding`      | Numeric proceeding `apiId` as a string                                             | Stored proceeding, ordered steps, and linked document references |
+
+Search results use `entity` for the evidence type: `vorgang` is a proceeding,
+`vorgangsposition` is a step within a proceeding, and `dokument` is a document
+page. `apiId` identifies the matched evidence; `proceedingApiId` links a step or
+document to its proceeding. For document results, `document.referenceId` is
+the document ID and `source.apiId` is the linked step ID. Each result includes
+`versionNo`, cosine similarity `score`, and `source.url`; document results also
+include `page` when available. Search returns only current indexed versions,
+not historical versions or news records.
+
+To test with Codex, add the local server once (or confirm it is already listed
+with `codex mcp list`), then restart Codex after starting `pnpm mcp`:
+
+```sh
+codex mcp add news-intelligenz --url http://127.0.0.1:3001/mcp
+```
+
+In a Codex chat, use `/mcp` to check the connection, then ask:
+
+> Use the `news-intelligenz` MCP tool `search_dip_evidence` to search for
+> “Erdölreserven” with limit 5. Show the evidence type, IDs, version, score,
+> page if present, and source URL. Report any tool error.
+
+Search needs the embedding provider configured in `.env` and a matching DIP
+index. Provider or database failures return a tool error; an empty result set
+can mean no matching current embeddings are stored. The server is for local
+development only; public access is not enabled.
 
 ## Phase 1: parliamentary collection
 
