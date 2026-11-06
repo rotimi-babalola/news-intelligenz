@@ -4,7 +4,6 @@ import {
   EMBED_PROCEEDING,
   EMBED_STEP,
   enqueueDocumentEmbeddings,
-  enqueueRecordReindex,
 } from "./jobs";
 import { ensureDocumentChunks } from "./chunks";
 
@@ -47,13 +46,26 @@ export async function enqueueDipReindex(
       ...(cursor ? { cursor: { apiId: cursor }, skip: 1 } : {}),
     });
     if (!rows.length) break;
-    const result = await enqueueRecordReindex(prisma, {
-      runId,
-      model,
-      operation: EMBED_PROCEEDING,
-      rows: rows.filter(
-        (row) => row.latestVersionNo > 0 && selected("vorgang", row.apiId),
-      ),
+    const result = await prisma.processingJob.createMany({
+      data: rows
+        .filter(
+          (row) => row.latestVersionNo > 0 && selected("vorgang", row.apiId),
+        )
+        .map((row) => ({
+          dedupeKey: JSON.stringify([
+            "reindex",
+            model,
+            EMBED_PROCEEDING,
+            row.apiId,
+            row.latestVersionNo,
+          ]),
+          sourceKind: "dip_endpoint" as const,
+          sourceKey: "/vorgang",
+          runId,
+          operation: EMBED_PROCEEDING,
+          payload: { apiId: row.apiId, versionNo: row.latestVersionNo, model },
+        })),
+      skipDuplicates: true,
     });
     counts.proceedings += result.count;
     cursor = rows.at(-1)!.apiId;
@@ -69,14 +81,27 @@ export async function enqueueDipReindex(
         ...(cursor ? { cursor: { apiId: cursor }, skip: 1 } : {}),
       });
     if (!rows.length) break;
-    const result = await enqueueRecordReindex(prisma, {
-      runId,
-      model,
-      operation: EMBED_STEP,
-      rows: rows.filter(
-        (row) =>
-          row.latestVersionNo > 0 && selected("vorgangsposition", row.apiId),
-      ),
+    const result = await prisma.processingJob.createMany({
+      data: rows
+        .filter(
+          (row) =>
+            row.latestVersionNo > 0 && selected("vorgangsposition", row.apiId),
+        )
+        .map((row) => ({
+          dedupeKey: JSON.stringify([
+            "reindex",
+            model,
+            EMBED_STEP,
+            row.apiId,
+            row.latestVersionNo,
+          ]),
+          sourceKind: "dip_endpoint" as const,
+          sourceKey: "/vorgangsposition",
+          runId,
+          operation: EMBED_STEP,
+          payload: { apiId: row.apiId, versionNo: row.latestVersionNo, model },
+        })),
+      skipDuplicates: true,
     });
     counts.steps += result.count;
     cursor = rows.at(-1)!.apiId;
