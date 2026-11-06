@@ -38,6 +38,14 @@ neon deploy
 Migrations use `DATABASE_URL_UNPOOLED`; application queries use the pooled
 `DATABASE_URL`. PDFs stay in Cloudflare R2.
 
+The [CI workflow](.github/workflows/ci.yml) runs committed migrations on the
+existing Neon production branch after checks pass on a push to `main`. Add a
+repository Actions secret named `PRODUCTION_DATABASE_URL_UNPOOLED` containing
+that branch's **direct** connection string (without `-pooler` in the hostname).
+The migration job fails clearly if the secret is missing. It runs `pnpm
+db:migrate`, so repeated runs only apply pending migrations. A manual workflow
+run from `main` can retry a failed deployment.
+
 The DIP embedding worker defaults to OpenAI `text-embedding-3-small`, requesting
 1024 dimensions to match the existing pgvector column. Set `OPENAI_API_KEY`
 or the provider-neutral `EMBEDDING_API_KEY` in a private environment file.
