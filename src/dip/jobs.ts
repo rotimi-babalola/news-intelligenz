@@ -25,6 +25,76 @@ function dipJobKey(
   return JSON.stringify([runId, operation, apiId, version]);
 }
 
+function recordEmbeddingJob(input: {
+  runId: string;
+  itemIndex: number | null;
+  electoralTerm: number | null;
+  operation: typeof EMBED_PROCEEDING | typeof EMBED_STEP;
+  apiId: string;
+  versionNo: number;
+  model?: string;
+}) {
+  const endpoint =
+    input.operation === EMBED_PROCEEDING ? "/vorgang" : "/vorgangsposition";
+  return {
+    source: dipSource(
+      endpoint,
+      input.electoralTerm === null ? undefined : String(input.electoralTerm),
+    ),
+    runId: input.runId,
+    itemIndex: input.itemIndex,
+    dedupeKey:
+      input.model !== undefined
+        ? JSON.stringify([
+            "reindex",
+            input.model,
+            input.operation,
+            input.apiId,
+            input.versionNo,
+          ])
+        : dipJobKey(input.runId, input.operation, input.apiId, input.versionNo),
+    operation: input.operation,
+    payload: {
+      apiId: input.apiId,
+      versionNo: input.versionNo,
+      ...(input.model === undefined ? {} : { model: input.model }),
+    },
+  };
+}
+
+export function enqueueRecordReindex(
+  db: PrismaClient,
+  input: {
+    runId: string;
+    model: string;
+    operation: typeof EMBED_PROCEEDING | typeof EMBED_STEP;
+    rows: { apiId: string; latestVersionNo: number }[];
+  },
+) {
+  return db.processingJob.createMany({
+    data: input.rows.map((row) => {
+      const job = recordEmbeddingJob({
+        runId: input.runId,
+        itemIndex: null,
+        electoralTerm: null,
+        operation: input.operation,
+        apiId: row.apiId,
+        versionNo: row.latestVersionNo,
+        model: input.model,
+      });
+      return {
+        dedupeKey: job.dedupeKey,
+        sourceKind: job.source.kind,
+        sourceKey: job.source.key,
+        runId: job.runId,
+        operation: job.operation,
+        payload: job.payload,
+      };
+    }),
+    skipDuplicates: true,
+  });
+}
+
 // Document work is keyed by the document it processes rather than the run that
 // noticed it, so the background hot subset and an on-demand request converge
 // on one job. A changed reference (url or date) is a new revision and gets its
@@ -52,19 +122,10 @@ export function enqueueProceedingEmbedding(
     versionNo: number;
   },
 ) {
-  return enqueueJob(tx, {
-    source: dipSource("/vorgang", String(input.electoralTerm)),
-    runId: input.runId,
-    itemIndex: input.itemIndex,
-    dedupeKey: dipJobKey(
-      input.runId,
-      EMBED_PROCEEDING,
-      input.apiId,
-      input.versionNo,
-    ),
-    operation: EMBED_PROCEEDING,
-    payload: { apiId: input.apiId, versionNo: input.versionNo },
-  });
+  return enqueueJob(
+    tx,
+    recordEmbeddingJob({ ...input, operation: EMBED_PROCEEDING }),
+  );
 }
 
 export function enqueueStepEmbedding(
@@ -77,14 +138,10 @@ export function enqueueStepEmbedding(
     versionNo: number;
   },
 ) {
-  return enqueueJob(tx, {
-    source: dipSource("/vorgangsposition", String(input.electoralTerm)),
-    runId: input.runId,
-    itemIndex: input.itemIndex,
-    dedupeKey: dipJobKey(input.runId, EMBED_STEP, input.apiId, input.versionNo),
-    operation: EMBED_STEP,
-    payload: { apiId: input.apiId, versionNo: input.versionNo },
-  });
+  return enqueueJob(
+    tx,
+    recordEmbeddingJob({ ...input, operation: EMBED_STEP }),
+  );
 }
 
 export function enqueueDocumentProcessing(
