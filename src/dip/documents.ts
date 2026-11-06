@@ -196,6 +196,10 @@ export async function processNextDocument(
     }
     const pageRows = await listDocumentPages(prisma, content.id);
     const chunks = await ensureDocumentChunks(prisma, content.id, pageRows);
+    await prisma.documentContent.update({
+      where: { id: content.id },
+      data: { requestedUrl: pdfUrl },
+    });
     await enqueueDocumentEmbeddings(prisma, {
       runId: job.runId,
       itemIndex: job.itemIndex,

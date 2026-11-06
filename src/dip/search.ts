@@ -34,17 +34,23 @@ export async function searchDip(
       row.entity === "vorgang" ? "/vorgang" : "/vorgangsposition";
     if (row.entity === "dokument") {
       const stepApiId = row.stepId ?? "";
-      const excerpt = readDocumentExcerpt(
-        {
-          institution: row.institution,
-          documentType: row.documentType,
-          documentNumber: row.documentNumber,
-          pdfUrl: row.pdfUrl,
-          metadata: row.referenceMetadata,
-        },
-        row.pageNo,
-        row.passage,
-      );
+      const excerpt =
+        row.requestedUrl !== row.pdfUrl
+          ? {
+              status: "metadata-only" as const,
+              reason: "Document revision has not been processed",
+            }
+          : readDocumentExcerpt(
+              {
+                institution: row.institution,
+                documentType: row.documentType,
+                documentNumber: row.documentNumber,
+                pdfUrl: row.pdfUrl,
+                metadata: row.referenceMetadata,
+              },
+              row.pageNo,
+              row.passage,
+            );
       return {
         entity: row.entity,
         apiId: row.apiId,

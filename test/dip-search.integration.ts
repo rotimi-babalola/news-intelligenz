@@ -154,6 +154,7 @@ test("document text returns the latest variant with page provenance", async () =
           byteSize: 4,
           pageCount: 1,
           objectKey: `documents/789/hash-${variantNo}.pdf`,
+          requestedUrl: "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
           isLatest,
         },
       });
@@ -269,6 +270,23 @@ test("document text returns the latest variant with page provenance", async () =
       reason: "Unconfirmed official issuer",
     });
     assert.equal("bytes" in restricted, false);
+    await prisma.documentReference.update({
+      where: { stepApiId: "456" },
+      data: {
+        pdfUrl: "https://dserver.bundestag.de/btd/21/010/new.pdf",
+        metadata: { herausgeber: "BT", dokumentart: "Drucksache" },
+      },
+    });
+    const changedUrl = await searchDip(prisma, "Haushalt", 1, {
+      embed: async () => vector(1, 0),
+    });
+    assert.equal(changedUrl[0]?.entity, "dokument");
+    if (changedUrl[0]?.entity !== "dokument") return;
+    assert.equal(changedUrl[0].passage, null);
+    assert.deepEqual(changedUrl[0].excerpt, {
+      status: "metadata-only",
+      reason: "Document revision has not been processed",
+    });
   } finally {
     await prisma.$disconnect();
   }

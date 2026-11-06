@@ -109,6 +109,7 @@ test("a document job archives the PDF, stores pages and hands off embedding", as
     const content = await prisma.documentContent.findFirstOrThrow({
       where: { referenceId: "29701499" },
     });
+    assert.equal(content.requestedUrl, PDF_URL);
     assert.equal(content.byteSize, bytes.byteLength);
     assert.equal(content.pageCount, 2);
     assert.equal(content.isLatest, true);

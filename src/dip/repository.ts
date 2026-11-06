@@ -89,6 +89,7 @@ export type DipSearchRow = {
   referenceId: string | null;
   documentNumber: string | null;
   pdfUrl: string | null;
+  requestedUrl: string | null;
   institution: string | null;
   documentType: string | null;
   referenceMetadata: Prisma.JsonValue | null;
@@ -123,6 +124,7 @@ export function searchDipEmbeddings(
       dr.reference_id AS "referenceId",
       dr.document_number AS "documentNumber",
       dr.pdf_url AS "pdfUrl",
+      dr.requested_url AS "requestedUrl",
       dr.institution AS "institution",
       dr.document_type AS "documentType",
       dr.metadata AS "referenceMetadata",
@@ -140,6 +142,7 @@ export function searchDipEmbeddings(
      LEFT JOIN LATERAL (
        SELECT r.reference_id, r.document_number, r.pdf_url, r.step_id,
          r.proceeding_id, r.metadata, rs.institution, rs.document_type,
+         c.requested_url,
          c.id AS content_id
        FROM ${qualifiedTable("document_references")} r
        JOIN ${qualifiedTable("proceeding_steps")} rs ON rs.api_id = r.step_id
