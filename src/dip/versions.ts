@@ -1,13 +1,18 @@
 import type { Prisma } from "../generated/prisma/client";
-import { enqueueProceedingEmbedding } from "./jobs";
+import { enqueueProceedingEmbedding, enqueueStepEmbedding } from "./jobs";
 import {
   createProceeding,
   createProceedingVersion,
+  createStep,
+  createStepVersion,
+  findStep,
   latestProceedingVersion,
+  latestStepVersion,
   updateProceeding,
+  updateStep,
 } from "./repository";
-import type { StoredDoc } from "./types";
-import { contentHash, isUniqueViolation } from "./util";
+import type { StoredDoc, StoredStep } from "./types";
+import { contentHash, isUniqueViolation, stepContentHash } from "./util";
 
 type Outcome = { created: boolean; versionAdded: boolean; duplicate: boolean };
 
@@ -96,6 +101,64 @@ export async function captureProceedingVersion(
         runId,
         itemIndex: index,
         electoralTerm: doc.wahlperiode,
+        apiId: doc.id,
+        versionNo,
+      }),
+  });
+}
+
+export async function captureStepVersion(
+  tx: Prisma.TransactionClient,
+  runId: string,
+  { doc, raw, fundstelleRest, index }: StoredStep,
+  electoralTerm: number,
+): Promise<Outcome> {
+  const fundstelle = { ...doc.fundstelle, ...fundstelleRest };
+  const hash = stepContentHash(doc, raw, fundstelleRest);
+  const sourceUpdatedAt = new Date(doc.aktualisiert);
+  const data = {
+    proceedingApiId: doc.vorgang_id,
+    institution: doc.zuordnung,
+    stepLabel: doc.vorgangsposition,
+    title: doc.titel,
+    documentType: doc.dokumentart,
+    documentDate: new Date(doc.datum),
+    sourceUpdatedAt,
+    metadata: raw as Prisma.InputJsonValue,
+    lastObservedAt: new Date(),
+  };
+  const known = await findStep(tx, doc.id);
+  const latest = await latestStepVersion(tx, doc.id);
+  return captureVersion(known !== null, latest, hash, {
+    createRecord: () =>
+      createStep(tx, { apiId: doc.id, ...data, latestVersionNo: 1 }),
+    createVersion: (versionNo) =>
+      createStepVersion(tx, {
+        stepApiId: doc.id,
+        versionNo,
+        contentHash: hash,
+        snapshot: {
+          ...data,
+          metadata: raw,
+          fundstelle,
+        } as Prisma.InputJsonValue,
+        sourceUpdatedAt,
+        runId,
+      }),
+    latestVersion: () => latestStepVersion(tx, doc.id),
+    updateRecord: (versionNo) =>
+      updateStep(
+        tx,
+        doc.id,
+        versionNo === undefined
+          ? data
+          : { ...data, latestVersionNo: versionNo },
+      ),
+    enqueueEmbedding: (versionNo) =>
+      enqueueStepEmbedding(tx, {
+        runId,
+        itemIndex: index,
+        electoralTerm,
         apiId: doc.id,
         versionNo,
       }),

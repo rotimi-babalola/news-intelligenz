@@ -1,19 +1,14 @@
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { RateLimitedError, parseRetryAfterMs } from "../jobs";
 import {
-  createStep,
-  createStepVersion,
   findDocumentReference,
   findProceeding,
-  findStep,
-  latestStepVersion,
   listProceedingApiIdsByTerm,
-  updateStep,
   upsertDipCandidate,
   upsertDocumentReference,
   upsertParliamentaryDiscovery,
 } from "./repository";
-import { enqueueDocumentProcessing, enqueueStepEmbedding } from "./jobs";
+import { enqueueDocumentProcessing } from "./jobs";
 import {
   PAGE_WRITE_BATCH_SIZE,
   TerminalPageError,
@@ -25,14 +20,9 @@ import type {
   StoredDoc,
   StoredStep,
 } from "./types";
-import {
-  isHotDocument,
-  isUniqueViolation,
-  stepContentHash,
-  toStored,
-  toStoredStep,
-} from "./util";
+import { isHotDocument, toStored, toStoredStep } from "./util";
 import { storeProceedingPage, VORGANG_ENDPOINT } from "./vorgang";
+import { captureStepVersion } from "./versions";
 
 export type {
   CollectStepsOptions,
@@ -88,81 +78,14 @@ async function storeStepsPage(
       await upsertDipCandidate(tx, runId, index, candidateMeta, []);
       continue;
     }
-    const fundstelle = { ...doc.fundstelle, ...fundstelleRest };
-    const hash = stepContentHash(doc, raw, fundstelleRest);
-    const sourceUpdatedAt = new Date(doc.aktualisiert);
-    const documentDate = new Date(doc.datum);
-    const data = {
-      proceedingApiId: doc.vorgang_id,
-      institution: doc.zuordnung,
-      stepLabel: doc.vorgangsposition,
-      title: doc.titel,
-      documentType: doc.dokumentart,
-      documentDate,
-      sourceUpdatedAt,
-      metadata: raw as Prisma.InputJsonValue,
-      lastObservedAt: new Date(),
-    };
-    const known = await findStep(tx, doc.id);
-    const latest = await latestStepVersion(tx, doc.id);
-    // Embed jobs submit only for versions this run creates; unchanged
-    // observations add no work.
-    let embeddedVersion: number | null = null;
-    if (!known) {
-      await createStep(tx, { apiId: doc.id, ...data, latestVersionNo: 1 });
-      await createStepVersion(tx, {
-        stepApiId: doc.id,
-        versionNo: 1,
-        contentHash: hash,
-        snapshot: {
-          ...data,
-          metadata: raw,
-          fundstelle,
-        } as Prisma.InputJsonValue,
-        sourceUpdatedAt,
-        runId,
-      });
-      embeddedVersion = 1;
-      versionsAdded += 1;
-    } else if (latest && latest.contentHash === hash) {
-      await updateStep(tx, doc.id, data);
-    } else {
-      const versionNo = (latest?.versionNo ?? 0) + 1;
-      try {
-        await createStepVersion(tx, {
-          stepApiId: doc.id,
-          versionNo,
-          contentHash: hash,
-          snapshot: {
-            ...data,
-            metadata: raw,
-            fundstelle,
-          } as Prisma.InputJsonValue,
-          sourceUpdatedAt,
-          runId,
-        });
-      } catch (error) {
-        // A concurrent same-run writer stored this version first; reread and
-        // reconcile instead of duplicating it.
-        if (!isUniqueViolation(error)) throw error;
-        const current = await latestStepVersion(tx, doc.id);
-        if (!current || current.contentHash !== hash) throw error;
-        await updateStep(tx, doc.id, data);
-        continue;
-      }
-      await updateStep(tx, doc.id, { ...data, latestVersionNo: versionNo });
-      embeddedVersion = versionNo;
-      versionsAdded += 1;
-    }
-    if (embeddedVersion !== null) {
-      await enqueueStepEmbedding(tx, {
-        runId,
-        itemIndex: index,
-        electoralTerm: parent.electoralTerm,
-        apiId: doc.id,
-        versionNo: embeddedVersion,
-      });
-    }
+    const outcome = await captureStepVersion(
+      tx,
+      runId,
+      { doc, raw, fundstelleRest, index },
+      parent.electoralTerm,
+    );
+    if (outcome.duplicate) continue;
+    if (outcome.versionAdded) versionsAdded += 1;
     // Document references persist eagerly with the step; PDF bytes are never
     // fetched here. Only new or changed hot-subset references queue document
     // work; older references wait for an on-demand request (later slice).
