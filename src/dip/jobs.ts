@@ -43,20 +43,21 @@ function recordEmbeddingJob(input: {
     ),
     runId: input.runId,
     itemIndex: input.itemIndex,
-    dedupeKey: input.model
-      ? JSON.stringify([
-          "reindex",
-          input.model,
-          input.operation,
-          input.apiId,
-          input.versionNo,
-        ])
-      : dipJobKey(input.runId, input.operation, input.apiId, input.versionNo),
+    dedupeKey:
+      input.model !== undefined
+        ? JSON.stringify([
+            "reindex",
+            input.model,
+            input.operation,
+            input.apiId,
+            input.versionNo,
+          ])
+        : dipJobKey(input.runId, input.operation, input.apiId, input.versionNo),
     operation: input.operation,
     payload: {
       apiId: input.apiId,
       versionNo: input.versionNo,
-      ...(input.model ? { model: input.model } : {}),
+      ...(input.model === undefined ? {} : { model: input.model }),
     },
   };
 }
