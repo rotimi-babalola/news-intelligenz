@@ -145,7 +145,11 @@ and stored source records remain available if it is offline.
 For local MCP clients, run `pnpm mcp` and connect to
 `http://127.0.0.1:3001/mcp`. The read-only `get_proceeding` tool accepts a
 numeric `apiId` and returns the stored proceeding, ordered steps, and linked
-document references. The server listens on loopback only.
+document references. `search_dip_evidence` accepts a German or English `query`
+and an optional `limit` (default 10, maximum 20), returning current DIP
+proceedings, steps, and document page evidence with scores, versions, and source
+links. Search requires the configured embedding provider and DIP index. The
+server listens on loopback only.
 
 Request a cited document on demand. This returns stored metadata and the
 original `pdf_url` immediately, and raises an unprocessed document to the front
