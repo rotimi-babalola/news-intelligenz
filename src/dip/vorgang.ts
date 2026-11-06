@@ -2,15 +2,10 @@ import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { RateLimitedError, parseRetryAfterMs } from "../jobs";
 import {
   countProceedingsByTerm,
-  createProceeding,
-  createProceedingVersion,
   findProceeding,
-  latestProceedingVersion,
-  updateProceeding,
   upsertDipCandidate,
   upsertParliamentaryDiscovery,
 } from "./repository";
-import { enqueueProceedingEmbedding } from "./jobs";
 import {
   PAGE_WRITE_BATCH_SIZE,
   TerminalPageError,
@@ -22,7 +17,8 @@ import type {
   FetchVorgangPage,
   StoredDoc,
 } from "./types";
-import { contentHash, isUniqueViolation, toStored } from "./util";
+import { toStored } from "./util";
+import { captureProceedingVersion } from "./versions";
 
 export type {
   CollectVorgangOptions,
@@ -80,81 +76,16 @@ export async function storeProceedingPage(
       );
       continue;
     }
-    const hash = contentHash(doc, raw);
-    const sourceUpdatedAt = new Date(doc.aktualisiert);
-    const documentDate = doc.datum ? new Date(doc.datum) : null;
-    const data = {
-      title: doc.titel,
-      proceedingType: doc.vorgangstyp,
-      electoralTerm: doc.wahlperiode,
-      deliberationState: doc.beratungsstand ?? null,
-      documentDate,
-      sourceUpdatedAt,
-      metadata: raw as Prisma.InputJsonValue,
-      lastObservedAt: new Date(),
-    };
-    const latest = await latestProceedingVersion(tx, doc.id);
-    if (!known) {
-      await createProceeding(tx, {
-        apiId: doc.id,
-        ...data,
-        latestVersionNo: 1,
-      });
-      if (remaining !== null)
-        remainingByTerm.set(doc.wahlperiode, remaining - 1);
-      await createProceedingVersion(tx, {
-        proceedingApiId: doc.id,
-        versionNo: 1,
-        contentHash: hash,
-        snapshot: { ...data, metadata: raw } as Prisma.InputJsonValue,
-        sourceUpdatedAt,
-        runId,
-      });
-      // Downstream embedding submits here but runs independently; the
-      // checkpoint never waits for it.
-      await enqueueProceedingEmbedding(tx, {
-        runId,
-        itemIndex: index,
-        electoralTerm: doc.wahlperiode,
-        apiId: doc.id,
-        versionNo: 1,
-      });
-      versionsAdded += 1;
-    } else if (latest && latest.contentHash === hash) {
-      await updateProceeding(tx, doc.id, data);
-    } else {
-      const versionNo = (latest?.versionNo ?? 0) + 1;
-      try {
-        await createProceedingVersion(tx, {
-          proceedingApiId: doc.id,
-          versionNo,
-          contentHash: hash,
-          snapshot: { ...data, metadata: raw } as Prisma.InputJsonValue,
-          sourceUpdatedAt,
-          runId,
-        });
-      } catch (error) {
-        // A concurrent same-run writer stored this version first; reread and
-        // reconcile instead of duplicating it.
-        if (!isUniqueViolation(error)) throw error;
-        const current = await latestProceedingVersion(tx, doc.id);
-        if (!current || current.contentHash !== hash) throw error;
-        await updateProceeding(tx, doc.id, data);
-        continue;
-      }
-      await updateProceeding(tx, doc.id, {
-        ...data,
-        latestVersionNo: versionNo,
-      });
-      await enqueueProceedingEmbedding(tx, {
-        runId,
-        itemIndex: index,
-        electoralTerm: doc.wahlperiode,
-        apiId: doc.id,
-        versionNo,
-      });
-      versionsAdded += 1;
-    }
+    const outcome = await captureProceedingVersion(
+      tx,
+      runId,
+      { doc, raw, index },
+      known !== null,
+    );
+    if (outcome.created && remaining !== null)
+      remainingByTerm.set(doc.wahlperiode, remaining - 1);
+    if (outcome.duplicate) continue;
+    if (outcome.versionAdded) versionsAdded += 1;
     await upsertDipCandidate(
       tx,
       runId,
