@@ -89,6 +89,9 @@ export type DipSearchRow = {
   referenceId: string | null;
   documentNumber: string | null;
   pdfUrl: string | null;
+  institution: string | null;
+  documentType: string | null;
+  referenceMetadata: Prisma.JsonValue | null;
   stepId: string | null;
   pageNo: number | null;
   chunkNo: number | null;
@@ -120,6 +123,9 @@ export function searchDipEmbeddings(
       dr.reference_id AS "referenceId",
       dr.document_number AS "documentNumber",
       dr.pdf_url AS "pdfUrl",
+      dr.institution AS "institution",
+      dr.document_type AS "documentType",
+      dr.metadata AS "referenceMetadata",
       dr.step_id AS "stepId",
       CASE WHEN e.source_entity = 'dokument' THEN e.source_page END AS "pageNo",
       CASE WHEN e.source_entity = 'dokument' THEN e.source_chunk END AS "chunkNo",
@@ -133,8 +139,10 @@ export function searchDipEmbeddings(
        AND s.latest_version_no = e.source_version_no
      LEFT JOIN LATERAL (
        SELECT r.reference_id, r.document_number, r.pdf_url, r.step_id,
-         r.proceeding_id, c.id AS content_id
+         r.proceeding_id, r.metadata, rs.institution, rs.document_type,
+         c.id AS content_id
        FROM ${qualifiedTable("document_references")} r
+       JOIN ${qualifiedTable("proceeding_steps")} rs ON rs.api_id = r.step_id
        JOIN ${qualifiedTable("document_contents")} c
          ON c.reference_id = r.reference_id
          AND c.variant_no = e.source_version_no AND c.is_latest
