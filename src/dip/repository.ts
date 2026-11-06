@@ -16,6 +16,23 @@ export function findProceeding(client: Client, apiId: string) {
   return client.proceeding.findUnique({ where: { apiId } });
 }
 
+export async function readProceedingTimeline(client: Client, apiId: string) {
+  const [proceeding, steps] = await Promise.all([
+    client.proceeding.findUnique({
+      where: { apiId },
+      include: { versions: { orderBy: { versionNo: "desc" }, take: 1 } },
+    }),
+    client.proceedingStep.findMany({
+      where: { proceedingApiId: apiId },
+      include: {
+        versions: { orderBy: { versionNo: "desc" }, take: 1 },
+        documentReference: true,
+      },
+    }),
+  ]);
+  return { proceeding, steps };
+}
+
 export function latestProceedingVersion(
   client: Client,
   proceedingApiId: string,

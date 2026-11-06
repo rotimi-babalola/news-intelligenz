@@ -142,6 +142,11 @@ chunk numbers, and original `pdf_url`. Only the latest fetched content variant
 is searchable. Search requires the configured embedding provider; collection
 and stored source records remain available if it is offline.
 
+For local MCP clients, run `pnpm mcp` and connect to
+`http://127.0.0.1:3001/mcp`. The read-only `get_proceeding` tool accepts a
+numeric `apiId` and returns the stored proceeding, ordered steps, and linked
+document references. The server listens on loopback only.
+
 Request a cited document on demand. This returns stored metadata and the
 original `pdf_url` immediately, and raises an unprocessed document to the front
 of the processing queue:
