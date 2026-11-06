@@ -137,14 +137,10 @@ export function enqueueStepEmbedding(
     versionNo: number;
   },
 ) {
-  return enqueueJob(tx, {
-    source: dipSource("/vorgangsposition", String(input.electoralTerm)),
-    runId: input.runId,
-    itemIndex: input.itemIndex,
-    dedupeKey: dipJobKey(input.runId, EMBED_STEP, input.apiId, input.versionNo),
-    operation: EMBED_STEP,
-    payload: { apiId: input.apiId, versionNo: input.versionNo },
-  });
+  return enqueueJob(
+    tx,
+    recordEmbeddingJob({ ...input, operation: EMBED_STEP }),
+  );
 }
 
 export function enqueueDocumentProcessing(

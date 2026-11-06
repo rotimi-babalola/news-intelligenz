@@ -173,6 +173,38 @@ test("reindex queues each model once and keeps both vector spaces separate", asy
       /requires embedding index model-c/,
     );
     assert.match(errors.join(" "), /requires embedding index model-c/);
+    await prisma.proceedingStep.create({
+      data: {
+        apiId: "step-reindex",
+        proceedingApiId: "123",
+        institution: "BT",
+        stepLabel: "Beratung",
+        title: "Wohnraumgesetz",
+        documentType: "Drucksache",
+        sourceUpdatedAt: new Date("2026-10-14T10:00:00Z"),
+        metadata: {},
+        latestVersionNo: 1,
+        versions: {
+          create: {
+            versionNo: 1,
+            contentHash: "step-reindex",
+            snapshot: { title: "Wohnraumgesetz", stepLabel: "Beratung" },
+            sourceUpdatedAt: new Date("2026-10-14T10:00:00Z"),
+          },
+        },
+      },
+    });
+    assert.equal((await enqueueDipReindex(prisma, "model-step")).steps, 1);
+    assert.equal((await enqueueDipReindex(prisma, "model-step")).steps, 0);
+    const stepJob = await prisma.processingJob.findFirstOrThrow({
+      where: { operation: "embed_step", runId: "embedding-reindex:model-step" },
+    });
+    assert.equal(stepJob.sourceKey, "/vorgangsposition");
+    assert.deepEqual(stepJob.payload, {
+      apiId: "step-reindex",
+      versionNo: 1,
+      model: "model-step",
+    });
   } finally {
     if (previousModel === undefined) delete process.env.EMBEDDING_MODEL;
     else process.env.EMBEDDING_MODEL = previousModel;
