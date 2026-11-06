@@ -396,6 +396,7 @@ export function findDocumentReferenceById(client: Client, referenceId: string) {
   return client.documentReference.findFirst({
     where: { referenceId },
     orderBy: { observedAt: "desc" },
+    include: { step: { select: { institution: true, documentType: true } } },
   });
 }
 

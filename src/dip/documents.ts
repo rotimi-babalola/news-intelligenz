@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { ensureDocumentChunks } from "./chunks";
+import { classifyDocumentReference } from "./excerpts";
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { claimNextJob, completeJob, failJob } from "../jobs";
 import {
@@ -269,6 +270,13 @@ export async function requestDocument(
     job = (await raiseDocumentJob(prisma, key)) ?? job;
   }
   return {
+    eligibility: classifyDocumentReference({
+      institution: reference.step.institution,
+      documentType: reference.step.documentType,
+      documentNumber: reference.documentNumber,
+      pdfUrl: reference.pdfUrl,
+      metadata: reference.metadata,
+    }),
     reference: {
       referenceId,
       stepApiId: reference.stepApiId,
