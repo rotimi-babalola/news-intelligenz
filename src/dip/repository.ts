@@ -489,6 +489,20 @@ export function listDocumentPages(client: Client, contentId: string) {
   });
 }
 
+export function listBoundedDocumentPages(
+  client: Client,
+  contentId: string,
+  startPage: number,
+  limit: number,
+) {
+  return client.documentPage.findMany({
+    where: { contentId, pageNo: { gte: startPage } },
+    orderBy: { pageNo: "asc" },
+    take: limit,
+    select: { pageNo: true, text: true },
+  });
+}
+
 export function findDocumentPage(
   client: Client,
   contentId: string,

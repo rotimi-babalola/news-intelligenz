@@ -245,7 +245,7 @@ back all writes. Durable retry jobs are deferred.
 ## MCP server
 
 The read-only MCP server lets a local LLM client search stored DIP evidence and
-inspect proceedings. By default, it listens at `http://127.0.0.1:3001/mcp`;
+inspect proceedings and eligible stored document pages. By default, it listens at `http://127.0.0.1:3001/mcp`;
 set `MCP_PORT` to change the port. It does not collect records or queue PDF
 processing. Start it from the repository root with a configured `DATABASE_URL`
 in `.env`:
@@ -254,12 +254,13 @@ in `.env`:
 pnpm mcp
 ```
 
-The server exposes two tools:
+The server exposes three tools:
 
-| Tool                  | Input                                                                              | Result                                                           |
-| --------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `search_dip_evidence` | German or English `query` (1–1000 characters); optional `limit` (1–20, default 10) | Ranked current proceedings, steps, and document page evidence    |
-| `get_proceeding`      | Numeric proceeding `apiId` as a string                                             | Stored proceeding, ordered steps, and linked document references |
+| Tool                  | Input                                                                              | Result                                                                                                                                                                                                     |
+| --------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_dip_evidence` | German or English `query` (1–1000 characters); optional `limit` (1–20, default 10) | Ranked current proceedings, steps, and document page evidence                                                                                                                                              |
+| `get_proceeding`      | Numeric proceeding `apiId` as a string                                             | Stored proceeding, ordered steps, and linked document references                                                                                                                                           |
+| `get_document_pages`  | Numeric `referenceId`; optional `startPage` (default 1), `limit` (1–3, default 3)  | Latest eligible PDF variant, with up to 2,000 characters per page, page numbers, source links, and attribution. Unknown or ineligible references return metadata only; missing pages return `unavailable`. |
 
 Search results use `entity` for the evidence type: `vorgang` is a proceeding,
 `vorgangsposition` is a step within a proceeding, and `dokument` is a document

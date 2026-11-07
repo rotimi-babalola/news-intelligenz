@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { PrismaClient } from "../generated/prisma/client";
 import { getProceeding } from "../dip/proceeding";
 import { searchDip } from "../dip/search";
+import { getDocumentPages } from "../dip/document-pages";
 
 export function proceedingHandler(prisma: PrismaClient) {
   return createMcpHandler(() => {
@@ -28,6 +29,28 @@ export function proceedingHandler(prisma: PrismaClient) {
               isError: true,
             };
       },
+    );
+    server.registerTool(
+      "get_document_pages",
+      {
+        description:
+          "Read up to 3 stored pages from the latest eligible DIP document variant. Each page excerpt is at most 2000 characters; unavailable documents are never fetched or queued.",
+        inputSchema: z.object({
+          referenceId: z.string().regex(/^\d+$/),
+          startPage: z.number().int().min(1).default(1),
+          limit: z.number().int().min(1).max(3).default(3),
+        }),
+      },
+      async ({ referenceId, startPage, limit }) => ({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              await getDocumentPages(prisma, referenceId, startPage, limit),
+            ),
+          },
+        ],
+      }),
     );
     server.registerTool(
       "search_dip_evidence",
