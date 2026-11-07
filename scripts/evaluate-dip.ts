@@ -27,7 +27,7 @@ const labels = z.object({
     .min(1),
 });
 
-const path = process.argv[2];
+const path = process.argv[2] === "--" ? process.argv[3] : process.argv[2];
 if (!path) throw new Error("Usage: pnpm evaluate:dip -- path/to/labels.json");
 const { cases } = labels.parse(JSON.parse(await readFile(path, "utf8")));
 const prisma = database();
