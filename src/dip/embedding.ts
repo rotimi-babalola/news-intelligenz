@@ -283,7 +283,8 @@ export async function processNextDipEmbedding(
           embedding,
         });
       }
-      await completeJob(prisma, job, workerId);
+      if (!(await completeJob(prisma, job, workerId)))
+        return { status: "stale" as const, jobId: job.id };
       return { status: "succeeded" as const, jobId: job.id };
     }
     if (sourceOperation !== EMBED_PROCEEDING && sourceOperation !== EMBED_STEP)
@@ -334,17 +335,22 @@ export async function processNextDipEmbedding(
       queryInstruction: config.queryInstruction,
       embedding,
     });
-    await completeJob(prisma, job, workerId);
+    if (!(await completeJob(prisma, job, workerId)))
+      return { status: "stale" as const, jobId: job.id };
     return { status: "succeeded" as const, jobId: job.id };
   } catch (error) {
-    const { exhausted } = await failJob(
+    const { exhausted, stale } = await failJob(
       prisma,
       job,
       workerId,
       error instanceof Error ? error : new Error("DIP embedding failed"),
     );
     return {
-      status: exhausted ? ("exhausted" as const) : ("retrying" as const),
+      status: stale
+        ? ("stale" as const)
+        : exhausted
+          ? ("exhausted" as const)
+          : ("retrying" as const),
       jobId: job.id,
     };
   }

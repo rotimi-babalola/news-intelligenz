@@ -164,6 +164,94 @@ test("concurrent claims hand each job to exactly one worker", async () => {
   }
 });
 
+test("a reclaimed attempt cannot overwrite its successor", async () => {
+  const { prisma, done } = await isolatedDb();
+  try {
+    await collectIntake(prisma, "handoff", xml(["h"]), feed);
+    const first = await claimNextJob(prisma, "worker-a", undefined, {
+      runId: "handoff",
+    });
+    assert.ok(first);
+    await prisma.processingJob.update({
+      where: { id: first.id },
+      data: { leaseExpiresAt: new Date(0) },
+    });
+    const second = await claimNextJob(prisma, "worker-b", undefined, {
+      jobId: first.id,
+    });
+    assert.equal(second?.attempts, 2);
+    assert.equal(await completeJob(prisma, first, "worker-a"), false);
+    assert.deepEqual(
+      (await failJob(prisma, first, "worker-a", new Error("late failure")))
+        .stale,
+      true,
+    );
+    assert.equal(
+      (
+        await prisma.processingJob.findUniqueOrThrow({
+          where: { id: first.id },
+        })
+      ).status,
+      "claimed",
+    );
+    assert.equal(await completeJob(prisma, second!, "worker-b"), true);
+    assert.equal(
+      (
+        await prisma.processingJob.findUniqueOrThrow({
+          where: { id: first.id },
+        })
+      ).status,
+      "succeeded",
+    );
+    const attempts = await prisma.jobAttempt.findMany({
+      where: { jobId: first.id },
+      orderBy: { attemptNo: "asc" },
+    });
+    assert.deepEqual(
+      attempts.map((attempt) => attempt.outcome),
+      ["abandoned", "succeeded"],
+    );
+  } finally {
+    await prisma.$disconnect();
+    await done();
+  }
+});
+
+test("an expired final attempt exhausts instead of exceeding its budget", async () => {
+  const { prisma, done } = await isolatedDb();
+  try {
+    await collectIntake(prisma, "crash-budget", xml(["b"]), feed);
+    const first = await claimNextJob(prisma, "worker-a", undefined, {
+      runId: "crash-budget",
+    });
+    assert.ok(first);
+    await prisma.processingJob.update({
+      where: { id: first.id },
+      data: { maxAttempts: 1, leaseExpiresAt: new Date(0) },
+    });
+    assert.equal(
+      await claimNextJob(prisma, "worker-b", undefined, { jobId: first.id }),
+      null,
+    );
+    const job = await prisma.processingJob.findUniqueOrThrow({
+      where: { id: first.id },
+    });
+    assert.equal(job.status, "exhausted");
+    assert.equal(job.attempts, 1);
+    assert.equal(
+      (
+        await prisma.jobAttempt.findUniqueOrThrow({
+          where: { jobId_attemptNo: { jobId: first.id, attemptNo: 1 } },
+        })
+      ).outcome,
+      "exhausted",
+    );
+  } finally {
+    await prisma.$disconnect();
+    await done();
+  }
+});
+
 test("expired leases are reclaimed and failures exhaust with visible state", async () => {
   const { prisma, done } = await isolatedDb();
   try {

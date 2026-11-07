@@ -209,7 +209,8 @@ export async function processNextDocument(
       chunks,
       priority: job.priority,
     });
-    await completeJob(prisma, job, workerId);
+    if (!(await completeJob(prisma, job, workerId)))
+      return { status: "stale" as const, jobId: job.id };
     return {
       status: "succeeded" as const,
       jobId: job.id,
@@ -217,14 +218,18 @@ export async function processNextDocument(
       reused,
     };
   } catch (error) {
-    const { exhausted } = await failJob(
+    const { exhausted, stale } = await failJob(
       prisma,
       job,
       workerId,
       error instanceof Error ? error : new Error("Document processing failed"),
     );
     return {
-      status: exhausted ? ("exhausted" as const) : ("retrying" as const),
+      status: stale
+        ? ("stale" as const)
+        : exhausted
+          ? ("exhausted" as const)
+          : ("retrying" as const),
       jobId: job.id,
     };
   }

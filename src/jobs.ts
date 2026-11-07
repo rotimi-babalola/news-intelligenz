@@ -126,6 +126,21 @@ export type ClaimedJob = {
   priority: number;
 };
 
+async function exhaustExpiredClaims(tx: Prisma.TransactionClient) {
+  const jobs = qualifiedTable("processing_jobs");
+  const attempts = qualifiedTable("job_attempts");
+  await tx.$executeRawUnsafe(`WITH expired AS (
+    UPDATE ${jobs} SET status = 'exhausted',
+      last_error = 'Lease expired after maximum attempts', updated_at = now()
+    WHERE status = 'claimed' AND lease_expires_at <= now()
+      AND attempts >= max_attempts
+    RETURNING id, attempts
+  ) UPDATE ${attempts} AS log SET finished_at = now(),
+    outcome = 'exhausted', error = 'Lease expired after maximum attempts'
+    FROM expired WHERE log.job_id = expired.id
+      AND log.attempt_no = expired.attempts AND log.finished_at IS NULL`);
+}
+
 // One atomic claim: exactly one worker wins each ready job. Stale leases
 // (worker died mid-processing) are reclaimable by any worker, which is how
 // restarts recover without a separate recovery pass.
@@ -170,8 +185,10 @@ export async function claimNextJob(
         : ` AND (payload->>'model' IS NULL OR payload->>'model' = $${params.length})`;
   }
   const jobsTable = qualifiedTable("processing_jobs");
-  const rows = (await prisma.$queryRawUnsafe(
-    `UPDATE ${jobsTable} SET
+  return prisma.$transaction(async (tx) => {
+    await exhaustExpiredClaims(tx);
+    const rows = (await tx.$queryRawUnsafe(
+      `UPDATE ${jobsTable} SET
       status = 'claimed',
       claimed_at = now(),
       claimed_by = $1,
@@ -180,7 +197,7 @@ export async function claimNextJob(
       updated_at = now()
     WHERE id = (
       SELECT id FROM ${jobsTable}
-      WHERE next_attempt_at <= now() ${filterClause} AND (
+      WHERE next_attempt_at <= now() AND attempts < max_attempts ${filterClause} AND (
         status IN ('pending', 'retrying') OR
         (status = 'claimed' AND lease_expires_at IS NOT NULL AND lease_expires_at <= now())
       )
@@ -196,14 +213,20 @@ export async function claimNextJob(
       source_scope AS "sourceScope", run_id AS "runId",
       item_index AS "itemIndex", operation, payload, attempts, max_attempts AS "maxAttempts",
       priority`,
-    ...params,
-  )) as ClaimedJob[];
-  const job = rows[0] ?? null;
-  if (!job) return null;
-  await prisma.jobAttempt.create({
-    data: { jobId: job.id, attemptNo: job.attempts, workerId },
+      ...params,
+    )) as ClaimedJob[];
+    const job = rows[0] ?? null;
+    if (!job) return null;
+    if (job.attempts > 1)
+      await tx.jobAttempt.updateMany({
+        where: { jobId: job.id, attemptNo: job.attempts - 1, finishedAt: null },
+        data: { finishedAt: new Date(), outcome: "abandoned" },
+      });
+    await tx.jobAttempt.create({
+      data: { jobId: job.id, attemptNo: job.attempts, workerId },
+    });
+    return job;
   });
-  return job;
 }
 
 export async function completeJob(
@@ -211,15 +234,22 @@ export async function completeJob(
   job: ClaimedJob,
   workerId: string,
 ) {
-  await prisma.$transaction(async (tx) => {
-    await tx.processingJob.update({
-      where: { id: job.id },
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.processingJob.updateMany({
+      where: {
+        id: job.id,
+        status: "claimed",
+        attempts: job.attempts,
+        claimedBy: workerId,
+      },
       data: { status: "succeeded", lastError: null },
     });
+    if (!updated.count) return false;
     await tx.jobAttempt.update({
       where: { jobId_attemptNo: { jobId: job.id, attemptNo: job.attempts } },
       data: { finishedAt: new Date(), outcome: "succeeded", workerId },
     });
+    return true;
   });
 }
 
@@ -241,15 +271,21 @@ export async function failJob(
   const nextAttemptAt = exhausted
     ? null
     : new Date(Date.now() + (retryAfterMs ?? backoffMs(job.attempts)));
-  await prisma.$transaction(async (tx) => {
-    await tx.processingJob.update({
-      where: { id: job.id },
+  const settled = await prisma.$transaction(async (tx) => {
+    const updated = await tx.processingJob.updateMany({
+      where: {
+        id: job.id,
+        status: "claimed",
+        attempts: job.attempts,
+        claimedBy: workerId,
+      },
       data: {
         status: exhausted ? "exhausted" : "retrying",
         ...(nextAttemptAt ? { nextAttemptAt } : {}),
         lastError: error.message.slice(0, 2000),
       },
     });
+    if (!updated.count) return false;
     await tx.jobAttempt.update({
       where: { jobId_attemptNo: { jobId: job.id, attemptNo: job.attempts } },
       data: {
@@ -259,8 +295,13 @@ export async function failJob(
         workerId,
       },
     });
+    return true;
   });
-  return { exhausted, nextAttemptAt };
+  return {
+    stale: !settled,
+    exhausted: settled && exhausted,
+    nextAttemptAt: settled ? nextAttemptAt : null,
+  };
 }
 
 // Explicit restart recovery: stale claims become immediately reclaimable
@@ -268,12 +309,14 @@ export async function failJob(
 // Epoch makes "now" independent of clock agreement between the app and
 // PostgreSQL, so a restart always reclaims its own work first.
 export async function requeueStaleClaims(prisma: PrismaClient) {
-  return prisma.processingJob.updateMany({
-    where: {
-      status: "claimed",
-      leaseExpiresAt: { lte: new Date() },
-    },
-    data: { status: "retrying", nextAttemptAt: new Date(0) },
+  return prisma.$transaction(async (tx) => {
+    await exhaustExpiredClaims(tx);
+    const count =
+      await tx.$executeRawUnsafe(`UPDATE ${qualifiedTable("processing_jobs")}
+      SET status = 'retrying', next_attempt_at = to_timestamp(0), updated_at = now()
+      WHERE status = 'claimed' AND lease_expires_at <= now()
+        AND attempts < max_attempts`);
+    return { count };
   });
 }
 
