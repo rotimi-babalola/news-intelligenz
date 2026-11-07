@@ -559,17 +559,17 @@ export async function drainJobs(
     if (!job) return outcome;
     try {
       await processJob(prisma, job, fetchArticle);
-      await completeJob(prisma, job, workerId);
-      outcome.succeeded++;
+      if (await completeJob(prisma, job, workerId)) outcome.succeeded++;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Job processing failed";
-      const { exhausted } = await failJob(
+      const { exhausted, stale } = await failJob(
         prisma,
         job,
         workerId,
         error instanceof Error ? error : new Error("Job processing failed"),
       );
+      if (stale) continue;
       if (exhausted) {
         outcome.exhausted++;
         // An exhausted extraction still leaves a visible metadata-only
