@@ -182,6 +182,27 @@ test("document text returns the latest variant with page provenance", async () =
             text: "Target budget passage",
           },
         });
+      if (variantNo === 2) {
+        await prisma.documentPage.create({
+          data: { contentId: content.id, pageNo: 2, text: "Second page" },
+        });
+        await prisma.documentChunk.createMany({
+          data: [
+            {
+              contentId: content.id,
+              pageNo: 1,
+              chunkNo: 3,
+              text: "Other passage",
+            },
+            {
+              contentId: content.id,
+              pageNo: 2,
+              chunkNo: 1,
+              text: "Second page",
+            },
+          ],
+        });
+      }
     };
     await variant(1, false);
     await variant(2, true);
@@ -209,6 +230,21 @@ test("document text returns the latest variant with page provenance", async () =
       queryInstruction: embeddingConfig().queryInstruction,
       embedding: vector(1, 0),
     });
+    for (const [page, chunk, embedding] of [
+      [1, 3, vector(0.9, 0.435)],
+      [2, 1, vector(0.8, 0.6)],
+    ] as const)
+      await saveDipEmbedding(prisma, {
+        sourceEntity: "dokument",
+        apiId: "789",
+        versionNo: 2,
+        sourcePage: page,
+        sourceChunk: chunk,
+        model: embeddingConfig().indexId,
+        documentInstruction: embeddingConfig().documentInstruction,
+        queryInstruction: embeddingConfig().queryInstruction,
+        embedding,
+      });
     // Legacy whole-page vectors remain stored but must not enter passage search.
     await saveDipEmbedding(prisma, {
       sourceEntity: "dokument",
@@ -254,6 +290,23 @@ test("document text returns the latest variant with page provenance", async () =
       apiId: "456",
       url: "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
     });
+    const distinctPages = await searchDip(prisma, "Haushalt", 2, {
+      embed: async () => vector(1, 0),
+    });
+    assert.deepEqual(
+      distinctPages.map((result) =>
+        result.entity === "dokument"
+          ? [result.document.referenceId, result.page, result.chunk]
+          : [result.entity, result.apiId],
+      ),
+      [
+        ["789", 1, 2],
+        ["789", 2, 1],
+      ],
+    );
+    assert.equal(distinctPages[1]?.entity, "dokument");
+    if (distinctPages[1]?.entity === "dokument")
+      assert.equal(distinctPages[1].passage, "Second page");
     await prisma.documentReference.update({
       where: { stepApiId: "456" },
       data: { metadata: { herausgeber: "Dritte", dokumentart: "Drucksache" } },
