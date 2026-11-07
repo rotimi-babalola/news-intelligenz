@@ -104,15 +104,15 @@ than an estimate of general production retrieval quality.
 
 ## Next work
 
-1. **Deduplicate PDF pages in the top results.** Keep the best scoring passage
+1. **[Deduplicate PDF pages in the top results](https://github.com/rotimi-babalola/news-intelligenz/issues/70).** Keep the best scoring passage
    per document reference and page, then fill the remaining top-10 slots from
    the ranked candidates. This directly addresses 15 repeated rows across
    eight queries without changing embeddings.
-2. **Investigate the 2045 grid-charge exact-item miss.** Compare the indexed
+2. **[Investigate the 2045 grid-charge exact-item miss](https://github.com/rotimi-babalola/news-intelligenz/issues/71).** Compare the indexed
    proceeding/step text and scores with nearby grid-charge records, then make
    the smallest ranking change that brings 340178 or 701442 into both top 10s.
    Test against both languages and the other 14 queries before adopting it.
-3. **Process missing linked PDFs as corpus work.** The 12 absent references
+3. **[Process missing linked PDFs as corpus work](https://github.com/rotimi-babalola/news-intelligenz/issues/72).** The 12 absent references
    cannot be judged as retrieval misses. Prioritize the 2045 grid-charge and
    climate-allocation sources if their PDF content is needed for dossiers.
 
