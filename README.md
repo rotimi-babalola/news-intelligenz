@@ -245,9 +245,10 @@ back all writes. Durable retry jobs are deferred.
 ## MCP server
 
 The read-only MCP server lets a local LLM client search stored DIP evidence and
-inspect proceedings. It listens only on `http://127.0.0.1:3001/mcp`; it does
-not collect records or queue PDF processing. Start it from the repository root
-with a configured `DATABASE_URL` in `.env`:
+inspect proceedings. By default, it listens at `http://127.0.0.1:3001/mcp`;
+set `MCP_PORT` to change the port. It does not collect records or queue PDF
+processing. Start it from the repository root with a configured `DATABASE_URL`
+in `.env`:
 
 ```sh
 pnpm mcp
