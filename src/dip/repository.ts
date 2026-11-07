@@ -130,9 +130,15 @@ export function searchDipEmbeddings(
   },
 ) {
   return client.$queryRawUnsafe<DipSearchRow[]>(
-    `SELECT e.source_entity::text AS "entity", e.source_api_id AS "apiId",
+    `SELECT * FROM (
+     SELECT e.source_entity::text AS "entity", e.source_api_id AS "apiId",
+      e.source_entity AS "sortEntity",
       e.source_version_no AS "versionNo",
       1 - (e.embedding <=> $1::public.vector) AS "score",
+      ROW_NUMBER() OVER (
+        PARTITION BY e.source_entity, e.source_api_id, e.source_page
+        ORDER BY e.embedding <=> $1::public.vector, e.source_chunk
+      ) AS "pageRank",
       CASE WHEN e.source_entity = 'dokument' THEN dr.document_number
         ELSE COALESCE(p.title, s.title) END AS "title",
       COALESCE(p.metadata->>'abstract', s.metadata->>'abstract') AS "summary",
@@ -175,7 +181,9 @@ export function searchDipEmbeddings(
        AND dc.page_no = e.source_page AND dc.chunk_no = e.source_chunk
      WHERE e.model = $2 AND e.document_instruction = $3 AND e.query_instruction = $4
        AND (p.api_id IS NOT NULL OR s.api_id IS NOT NULL OR dc.content_id IS NOT NULL)
-     ORDER BY e.embedding <=> $1::public.vector, e.source_entity, e.source_api_id
+     ) ranked
+     WHERE "pageRank" = 1
+     ORDER BY "score" DESC, "sortEntity", "apiId"
      LIMIT $5`,
     JSON.stringify(input.embedding),
     input.model,
