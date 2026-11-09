@@ -37,6 +37,15 @@ export async function getDocumentPages(
   const variant = await latestDocumentContent(prisma, referenceId);
   if (!variant)
     return { status: "unavailable", source, eligibility, variant: null };
+  if (variant.requestedUrl !== reference.pdfUrl)
+    return {
+      status: "metadata-only",
+      source,
+      eligibility: {
+        status: "metadata-only" as const,
+        reason: "Document revision has not been processed",
+      },
+    };
   const pages = await listBoundedDocumentPages(
     prisma,
     variant.id,

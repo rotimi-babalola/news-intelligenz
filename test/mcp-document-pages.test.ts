@@ -35,6 +35,7 @@ function fixture(options: { eligible?: boolean; variant?: boolean } = {}) {
           : {
               id: "latest",
               variantNo: 2,
+              requestedUrl: pdfUrl,
               sourceUrl: "https://dserver.bundestag.de/latest.pdf",
             };
       },

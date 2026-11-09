@@ -80,6 +80,7 @@ test("MCP page reads use only the latest eligible variant without changing jobs"
           byteHash: `hash-${variantNo}`,
           byteSize: 10,
           pageCount: 1,
+          requestedUrl: reference.pdfUrl,
           isLatest,
           pages: { create: { pageNo: 1, text } },
         },
@@ -91,6 +92,17 @@ test("MCP page reads use only the latest eligible variant without changing jobs"
     assert.deepEqual(current.pages, [
       { page: 1, text: "Current variant", truncated: false },
     ]);
+    await prisma.documentReference.update({
+      where: { stepApiId: reference.stepApiId },
+      data: { pdfUrl: "https://dserver.bundestag.de/revised.pdf" },
+    });
+    const revision = await read("291522");
+    assert.equal(revision.status, "metadata-only");
+    assert.equal(
+      revision.eligibility.reason,
+      "Document revision has not been processed",
+    );
+    assert.equal("pages" in revision, false);
     assert.equal(await prisma.processingJob.count(), jobsBefore);
   } finally {
     await handler.close();
