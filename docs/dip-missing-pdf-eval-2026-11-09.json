@@ -1,0 +1,1004 @@
+{
+  "model": "openai:text-embedding-3-small:9e33b9fd2b34",
+  "queries": 16,
+  "recallAt5": 0.8736111111111113,
+  "recallAt10": 0.9069444444444446,
+  "mrrAt10": 1,
+  "meanLatencyMs": 2237.4375,
+  "billedTokens": 253,
+  "unmeteredRequests": 0,
+  "estimatedCost": null,
+  "details": [
+    {
+      "query": "Welche Vorhaben sollen die Baukosten für Wohnungen senken?",
+      "recallAt5": 1,
+      "recallAt10": 1,
+      "reciprocalRank": 1,
+      "latencyMs": 17465,
+      "topResults": [
+        {
+          "entity": "vorgang",
+          "apiId": "339930",
+          "score": 0.8171834944672325
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "700983",
+          "score": 0.7787874702552127
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "701230",
+          "score": 0.7490136096383778
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "698466",
+          "score": 0.7467253436044613
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "698911",
+          "score": 0.7458680297668792
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "686777",
+          "score": 0.7171041121644831
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "687052",
+          "score": 0.7134113358798692
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "338396",
+          "score": 0.7078051229233224
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "340995",
+          "score": 0.6783211879497169
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "702874",
+          "score": 0.6744406945915116
+        }
+      ]
+    },
+    {
+      "query": "What parliamentary item addresses lowering housing construction costs?",
+      "recallAt5": 1,
+      "recallAt10": 1,
+      "reciprocalRank": 1,
+      "latencyMs": 1430,
+      "topResults": [
+        {
+          "entity": "vorgangsposition",
+          "apiId": "700983",
+          "score": 0.5844417298114594
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "701230",
+          "score": 0.5822525914909433
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "339930",
+          "score": 0.57810343798447
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "703183",
+          "score": 0.5719112226389025
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "702874",
+          "score": 0.5672420262048578
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "340995",
+          "score": 0.5286719466892987
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "687052",
+          "score": 0.5193717131354343
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "698466",
+          "score": 0.5182482161275839
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "686777",
+          "score": 0.5083557278672005
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "679458",
+          "score": 0.5025986953401301
+        }
+      ]
+    },
+    {
+      "query": "Wie werden Deutschlands Emissionszuweisungen für die Jahre 2021 bis 2030 bilanziert?",
+      "recallAt5": 0.3333333333333333,
+      "recallAt10": 0.5555555555555556,
+      "reciprocalRank": 1,
+      "latencyMs": 1231,
+      "topResults": [
+        {
+          "entity": "vorgang",
+          "apiId": "338509",
+          "score": 0.7258053619017172
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290340",
+          "page": 3,
+          "score": 0.6852369278477796
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "689224",
+          "score": 0.6797829420637743
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290322",
+          "page": 1,
+          "score": 0.6744503220774546
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "690410",
+          "score": 0.6667027770205096
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "689634",
+          "score": 0.6593506573861799
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290322",
+          "page": 3,
+          "score": 0.6581164780112941
+        },
+        {
+          "entity": "dokument",
+          "apiId": "291903",
+          "page": 36,
+          "score": 0.6516044510358103
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290322",
+          "page": 2,
+          "score": 0.6493919136110269
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292022",
+          "page": 7,
+          "score": 0.6490042362620664
+        }
+      ]
+    },
+    {
+      "query": "Which item reviews Germany's annual emissions allocations through 2030?",
+      "recallAt5": 0.4444444444444444,
+      "recallAt10": 0.5555555555555556,
+      "reciprocalRank": 1,
+      "latencyMs": 1135,
+      "topResults": [
+        {
+          "entity": "dokument",
+          "apiId": "290322",
+          "page": 1,
+          "score": 0.6315358220452537
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "338509",
+          "score": 0.6287455026923646
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290340",
+          "page": 3,
+          "score": 0.6083782107517396
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "690410",
+          "score": 0.6056569298565362
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290340",
+          "page": 5,
+          "score": 0.5993245127346161
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "673441",
+          "score": 0.5925515495316155
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292046",
+          "page": 3,
+          "score": 0.5918802611264321
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290322",
+          "page": 3,
+          "score": 0.5912930817539277
+        },
+        {
+          "entity": "dokument",
+          "apiId": "5819",
+          "page": 82,
+          "score": 0.5906807062231598
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "689224",
+          "score": 0.5904239267584463
+        }
+      ]
+    },
+    {
+      "query": "Wie sollen sich die Netzentgelte für Strom bis 2045 entwickeln?",
+      "recallAt5": 1,
+      "recallAt10": 1,
+      "reciprocalRank": 1,
+      "latencyMs": 1218,
+      "topResults": [
+        {
+          "entity": "vorgang",
+          "apiId": "340178",
+          "score": 0.8860260578227637
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "701442",
+          "score": 0.7959962157639826
+        },
+        {
+          "entity": "dokument",
+          "apiId": "291288",
+          "page": 48,
+          "score": 0.7885621804107484
+        },
+        {
+          "entity": "dokument",
+          "apiId": "291709",
+          "page": 1,
+          "score": 0.6785192617525307
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "675582",
+          "score": 0.6660580312933204
+        },
+        {
+          "entity": "dokument",
+          "apiId": "291709",
+          "page": 3,
+          "score": 0.6498447415774007
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "701888",
+          "score": 0.6460950123852343
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "690464",
+          "score": 0.642414097527561
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "678360",
+          "score": 0.6418562076409986
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "675851",
+          "score": 0.6400899186324825
+        }
+      ]
+    },
+    {
+      "query": "What is being asked about future electricity grid charges?",
+      "recallAt5": 1,
+      "recallAt10": 1,
+      "reciprocalRank": 1,
+      "latencyMs": 1186,
+      "topResults": [
+        {
+          "entity": "dokument",
+          "apiId": "291288",
+          "page": 48,
+          "score": 0.5682427159160217
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "701442",
+          "score": 0.5656915639428207
+        },
+        {
+          "entity": "dokument",
+          "apiId": "291709",
+          "page": 1,
+          "score": 0.5451672965512825
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "340178",
+          "score": 0.5449257132374443
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "700852",
+          "score": 0.5307923356759057
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "339848",
+          "score": 0.5194026698622192
+        },
+        {
+          "entity": "dokument",
+          "apiId": "291709",
+          "page": 5,
+          "score": 0.518293006893984
+        },
+        {
+          "entity": "dokument",
+          "apiId": "5819",
+          "page": 133,
+          "score": 0.5156533960764804
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "671771",
+          "score": 0.5086191937886272
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "690319",
+          "score": 0.505983978848795
+        }
+      ]
+    },
+    {
+      "query": "Wie nahmen Menschen mit Migrationshintergrund 2024 an Arbeitsförderung teil?",
+      "recallAt5": 1,
+      "recallAt10": 1,
+      "reciprocalRank": 1,
+      "latencyMs": 1373,
+      "topResults": [
+        {
+          "entity": "vorgangsposition",
+          "apiId": "673410",
+          "score": 0.8071158296708824
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "323679",
+          "score": 0.7270090402380955
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "679437",
+          "score": 0.6904439773182597
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "327322",
+          "score": 0.6863205597407791
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "694009",
+          "score": 0.6779687143368933
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "691835",
+          "score": 0.677533602095066
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "684346",
+          "score": 0.656458388457429
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "685199",
+          "score": 0.6527767320895259
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "673930",
+          "score": 0.6507178267747101
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "684563",
+          "score": 0.6419113429742547
+        }
+      ]
+    },
+    {
+      "query": "How many people with a migration background joined employment support measures in 2024?",
+      "recallAt5": 1,
+      "recallAt10": 1,
+      "reciprocalRank": 1,
+      "latencyMs": 1159,
+      "topResults": [
+        {
+          "entity": "vorgangsposition",
+          "apiId": "673410",
+          "score": 0.6287490238040553
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "323679",
+          "score": 0.6264212226659601
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "672853",
+          "score": 0.5535222838714062
+        },
+        {
+          "entity": "dokument",
+          "apiId": "291600",
+          "page": 2,
+          "score": 0.5530536849006402
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "327322",
+          "score": 0.5468472583116488
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "679437",
+          "score": 0.541776465105818
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "679653",
+          "score": 0.5307159276078309
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "686034",
+          "score": 0.523433874542695
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "685199",
+          "score": 0.5226346119320671
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "688649",
+          "score": 0.522114375169636
+        }
+      ]
+    },
+    {
+      "query": "Welche Belastungen könnten pflegende Angehörige durch die Abschaffung von Pflegegrad 1 tragen?",
+      "recallAt5": 1,
+      "recallAt10": 1,
+      "reciprocalRank": 1,
+      "latencyMs": 1197,
+      "topResults": [
+        {
+          "entity": "vorgangsposition",
+          "apiId": "679549",
+          "score": 0.8408699160076178
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "327415",
+          "score": 0.8353510300040893
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "694130",
+          "score": 0.649973939266929
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292038",
+          "page": 69,
+          "score": 0.646328800437343
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "686913",
+          "score": 0.6440688341941971
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292038",
+          "page": 216,
+          "score": 0.6415198445103387
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292038",
+          "page": 70,
+          "score": 0.6408105927541842
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "694413",
+          "score": 0.6243927493808326
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "692970",
+          "score": 0.6233607196434772
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292038",
+          "page": 197,
+          "score": 0.6223677630912325
+        }
+      ]
+    },
+    {
+      "query": "Could removing the lowest care level increase pressure on family caregivers?",
+      "recallAt5": 1,
+      "recallAt10": 1,
+      "reciprocalRank": 1,
+      "latencyMs": 1201,
+      "topResults": [
+        {
+          "entity": "vorgangsposition",
+          "apiId": "679549",
+          "score": 0.5671370003863736
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "327415",
+          "score": 0.5576215637371145
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "694130",
+          "score": 0.47334952342507886
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "695265",
+          "score": 0.46168953841728466
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "695276",
+          "score": 0.4571483668188685
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "692970",
+          "score": 0.4563551881498764
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "694413",
+          "score": 0.45511601102411015
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292038",
+          "page": 69,
+          "score": 0.45050253325573075
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "695539",
+          "score": 0.44385660042627684
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "693254",
+          "score": 0.4400994538393992
+        }
+      ]
+    },
+    {
+      "query": "Wie finanziert der Bund Hochschulen für angewandte Wissenschaften?",
+      "recallAt5": 1,
+      "recallAt10": 1,
+      "reciprocalRank": 1,
+      "latencyMs": 1122,
+      "topResults": [
+        {
+          "entity": "dokument",
+          "apiId": "291815",
+          "page": 1,
+          "score": 0.7087828450919897
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "702970",
+          "score": 0.6774276624157817
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "702325",
+          "score": 0.6600399001843913
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "340641",
+          "score": 0.6510615945860497
+        },
+        {
+          "entity": "dokument",
+          "apiId": "291815",
+          "page": 2,
+          "score": 0.643065762716886
+        },
+        {
+          "entity": "dokument",
+          "apiId": "291815",
+          "page": 3,
+          "score": 0.6206217567947969
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "341050",
+          "score": 0.6045134863078045
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "702934",
+          "score": 0.5876056106465868
+        },
+        {
+          "entity": "dokument",
+          "apiId": "5820",
+          "page": 45,
+          "score": 0.5848923468419468
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "340650",
+          "score": 0.582484218943888
+        }
+      ]
+    },
+    {
+      "query": "What federal funding goes to universities of applied sciences?",
+      "recallAt5": 1,
+      "recallAt10": 1,
+      "reciprocalRank": 1,
+      "latencyMs": 1260,
+      "topResults": [
+        {
+          "entity": "dokument",
+          "apiId": "291815",
+          "page": 1,
+          "score": 0.5540916554552212
+        },
+        {
+          "entity": "dokument",
+          "apiId": "291815",
+          "page": 2,
+          "score": 0.5379111295360874
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "702970",
+          "score": 0.5214925751319563
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "340641",
+          "score": 0.5037208714281401
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "702325",
+          "score": 0.4991534153099114
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "701339",
+          "score": 0.49777446875148645
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "340650",
+          "score": 0.48698570104768213
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "690498",
+          "score": 0.4866454282379147
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "340051",
+          "score": 0.48245745501905124
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "701144",
+          "score": 0.48229736072725826
+        }
+      ]
+    },
+    {
+      "query": "Wie soll die Finanzierung der Autobahn-Infrastrukturgesellschaft geändert werden?",
+      "recallAt5": 0.8,
+      "recallAt10": 1,
+      "reciprocalRank": 1,
+      "latencyMs": 1229,
+      "topResults": [
+        {
+          "entity": "dokument",
+          "apiId": "292037",
+          "page": 1,
+          "score": 0.7804144881731693
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "701438",
+          "score": 0.7768997937535242
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "702860",
+          "score": 0.7768997937535242
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "340174",
+          "score": 0.7651855273657845
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292037",
+          "page": 11,
+          "score": 0.7564300773420828
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292037",
+          "page": 6,
+          "score": 0.7238772866563804
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292037",
+          "page": 35,
+          "score": 0.7162079381336841
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292037",
+          "page": 2,
+          "score": 0.6960419910697441
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292037",
+          "page": 33,
+          "score": 0.68864713131219
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292037",
+          "page": 30,
+          "score": 0.6763293455248746
+        }
+      ]
+    },
+    {
+      "query": "Which proposed law changes funding for the federal motorway infrastructure company?",
+      "recallAt5": 0.8,
+      "recallAt10": 0.8,
+      "reciprocalRank": 1,
+      "latencyMs": 1229,
+      "topResults": [
+        {
+          "entity": "vorgangsposition",
+          "apiId": "701438",
+          "score": 0.6022505367474947
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "702860",
+          "score": 0.6022505367474947
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "340174",
+          "score": 0.6003491651857839
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292037",
+          "page": 1,
+          "score": 0.5820765795352104
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292037",
+          "page": 11,
+          "score": 0.5624267964608883
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292037",
+          "page": 6,
+          "score": 0.5608643540485099
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292037",
+          "page": 31,
+          "score": 0.5358619569885356
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292037",
+          "page": 13,
+          "score": 0.5305439634902488
+        },
+        {
+          "entity": "dokument",
+          "apiId": "292037",
+          "page": 23,
+          "score": 0.5261952654827707
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "701098",
+          "score": 0.5258056280514235
+        }
+      ]
+    },
+    {
+      "query": "Wie werden Preise bei Beschaffungen der Bundeswehr kontrolliert?",
+      "recallAt5": 0.8,
+      "recallAt10": 0.8,
+      "reciprocalRank": 1,
+      "latencyMs": 1256,
+      "topResults": [
+        {
+          "entity": "vorgang",
+          "apiId": "340267",
+          "score": 0.8102381281551942
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "701560",
+          "score": 0.7789286833185486
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "701949",
+          "score": 0.7529495093287981
+        },
+        {
+          "entity": "dokument",
+          "apiId": "5819",
+          "page": 131,
+          "score": 0.6755145450622607
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "695663",
+          "score": 0.645768054560941
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "669547",
+          "score": 0.635297422477358
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "678177",
+          "score": 0.6300568059500736
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "676334",
+          "score": 0.6295624716147465
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "677198",
+          "score": 0.6230912135550035
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "684722",
+          "score": 0.6227427772818395
+        }
+      ]
+    },
+    {
+      "query": "What scrutiny applies to prices in German military procurement?",
+      "recallAt5": 0.8,
+      "recallAt10": 0.8,
+      "reciprocalRank": 1,
+      "latencyMs": 1108,
+      "topResults": [
+        {
+          "entity": "vorgangsposition",
+          "apiId": "701560",
+          "score": 0.6599135827081645
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "340267",
+          "score": 0.6520113151697176
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "701949",
+          "score": 0.6359105227087727
+        },
+        {
+          "entity": "dokument",
+          "apiId": "5819",
+          "page": 131,
+          "score": 0.6261012356483954
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "695663",
+          "score": 0.5952572858416343
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "669547",
+          "score": 0.5755202862840565
+        },
+        {
+          "entity": "vorgang",
+          "apiId": "338198",
+          "score": 0.574612386861864
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "689583",
+          "score": 0.5656514006055754
+        },
+        {
+          "entity": "dokument",
+          "apiId": "291613",
+          "page": 6,
+          "score": 0.56385537506061
+        },
+        {
+          "entity": "vorgangsposition",
+          "apiId": "689892",
+          "score": 0.5616996402138896
+        }
+      ]
+    }
+  ]
+}
