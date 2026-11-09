@@ -49,6 +49,36 @@
         {
           "entity": "vorgangsposition",
           "apiId": "698672"
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290322",
+          "page": 1
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290322",
+          "page": 2
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290322",
+          "page": 3
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290340",
+          "page": 3
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290340",
+          "page": 4
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290340",
+          "page": 5
         }
       ]
     },
@@ -66,6 +96,36 @@
         {
           "entity": "vorgangsposition",
           "apiId": "698672"
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290322",
+          "page": 1
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290322",
+          "page": 2
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290322",
+          "page": 3
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290340",
+          "page": 3
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290340",
+          "page": 4
+        },
+        {
+          "entity": "dokument",
+          "apiId": "290340",
+          "page": 5
         }
       ]
     },
@@ -79,6 +139,11 @@
         {
           "entity": "vorgangsposition",
           "apiId": "701442"
+        },
+        {
+          "entity": "dokument",
+          "apiId": "291288",
+          "page": 48
         }
       ]
     },
@@ -92,6 +157,11 @@
         {
           "entity": "vorgangsposition",
           "apiId": "701442"
+        },
+        {
+          "entity": "dokument",
+          "apiId": "291288",
+          "page": 48
         }
       ]
     },
