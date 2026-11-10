@@ -251,8 +251,19 @@ processing. Start it from the repository root with a configured `DATABASE_URL`
 in `.env`:
 
 ```sh
+pnpm db:migrate
+pnpm mcp:invites issue "Reader name"
 pnpm mcp
 ```
+
+The invite command prints a token once, along with its ID. Give the token to
+the invited reader over a private channel and keep it out of shell history,
+logs, and source control. Clients send it as `Authorization: Bearer <token>`
+on every `/mcp` request. Missing, invalid, or revoked tokens receive HTTP 401;
+the limit is 60 requests per token per minute (HTTP 429 after that). Revoke an
+invite by ID with `pnpm mcp:invites revoke <id>`. These commands run locally
+with database access; token administration is not an MCP tool. An MCP token
+does not authorize the local operator UI or API routes.
 
 The server exposes three tools:
 
