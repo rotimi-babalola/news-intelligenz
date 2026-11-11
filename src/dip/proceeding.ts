@@ -1,4 +1,4 @@
-import type { PrismaClient } from "../generated/prisma/client";
+import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { readProceedingTimeline } from "./repository";
 
 function optionalText(metadata: unknown, key: string): string | null {
@@ -8,7 +8,10 @@ function optionalText(metadata: unknown, key: string): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-export async function getProceeding(prisma: PrismaClient, apiId: string) {
+export async function getProceeding(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  apiId: string,
+) {
   if (!/^\d+$/.test(apiId))
     throw new Error("Proceeding API ID must be numeric");
   const { proceeding, steps } = await readProceedingTimeline(prisma, apiId);

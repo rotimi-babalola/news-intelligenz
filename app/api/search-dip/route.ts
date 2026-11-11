@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { database } from "../../../src/db";
-import { searchDip } from "../../../src/dip/search";
+import { searchProceedingDossiers } from "../../../src/dip/dossiers";
 
 const bodySchema = z.object({
   query: z.string().trim().min(1).max(1000),
@@ -18,7 +18,11 @@ export async function POST(request: Request) {
   const prisma = database();
   try {
     return NextResponse.json({
-      results: await searchDip(prisma, parsed.data.query, parsed.data.limit),
+      results: await searchProceedingDossiers(
+        prisma,
+        parsed.data.query,
+        parsed.data.limit,
+      ),
     });
   } catch (error) {
     return NextResponse.json(

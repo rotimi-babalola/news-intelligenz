@@ -1,4 +1,4 @@
-import type { PrismaClient } from "../generated/prisma/client";
+import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import {
   assertEmbedding,
   embeddingConfig,
@@ -12,7 +12,7 @@ import { readDocumentExcerpt } from "./excerpts";
 export { QUERY_INSTRUCTION };
 
 export async function searchDip(
-  prisma: PrismaClient,
+  prisma: PrismaClient | Prisma.TransactionClient,
   query: string,
   limit: number,
   options: { embed?: (text: string) => Promise<number[]> } = {},

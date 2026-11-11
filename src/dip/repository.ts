@@ -131,6 +131,15 @@ export function searchDipEmbeddings(
 ) {
   return client.$queryRawUnsafe<DipSearchRow[]>(
     `SELECT * FROM (
+     SELECT capped.*, ROW_NUMBER() OVER (
+       PARTITION BY CASE WHEN "entity" = 'vorgang' THEN "apiId" ELSE "proceedingApiId" END
+       ORDER BY "score" DESC, "sortEntity", "apiId", "pageNo"
+     ) AS "proceedingRank"
+     FROM (
+     SELECT ranked.*, ROW_NUMBER() OVER (
+       PARTITION BY "entity", "apiId" ORDER BY "score" DESC, "pageNo"
+     ) AS "documentRank"
+     FROM (
      SELECT e.source_entity::text AS "entity", e.source_api_id AS "apiId",
       e.source_entity AS "sortEntity",
       e.source_version_no AS "versionNo",
@@ -183,6 +192,12 @@ export function searchDipEmbeddings(
        AND (p.api_id IS NOT NULL OR s.api_id IS NOT NULL OR dc.content_id IS NOT NULL)
      ) ranked
      WHERE "pageRank" = 1
+     ) capped
+     -- shortcut: two pages per document bound repeated evidence; increase if a document needs more context.
+     WHERE "entity" <> 'dokument' OR "documentRank" <= 2
+     ) diversified
+     -- shortcut: five hits per proceeding keep the candidate window diverse; increase for deeper dossiers.
+     WHERE "proceedingRank" <= 5
      ORDER BY "score" DESC, "sortEntity", "apiId"
      LIMIT $5`,
     JSON.stringify(input.embedding),
