@@ -7,7 +7,10 @@ function sanitizeMessage(message: string): string {
       return JSON.stringify(
         value.map((item) => JSON.parse(sanitizeMessage(JSON.stringify(item)))),
       );
-    const id = typeof value.id === "number" ? value.id : null;
+    const id =
+      typeof value.id === "string" || typeof value.id === "number"
+        ? value.id
+        : null;
     if (value.error)
       return JSON.stringify({
         jsonrpc: "2.0",

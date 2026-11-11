@@ -2,19 +2,19 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sanitizeMcpResponse } from "../src/mcp/response.js";
 
-test("MCP errors never echo request values", async () => {
+test("MCP errors redact messages and preserve request IDs", async () => {
   const secret = "request-secret";
   for (const [body, contentType] of [
     [
       JSON.stringify({
         jsonrpc: "2.0",
-        id: secret,
+        id: "request-1",
         error: { message: `Tool ${secret} not found` },
       }),
       "application/json",
     ],
     [
-      `event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: 1, result: { isError: true, content: [{ type: "text", text: secret }] } })}\n\n`,
+      `event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: "request-1", result: { isError: true, content: [{ type: "text", text: secret }] } })}\n\n`,
       "text/event-stream",
     ],
   ] as const) {
@@ -28,9 +28,9 @@ test("MCP errors never echo request values", async () => {
     if (contentType === "text/event-stream") {
       assert.match(text, /^event: message\ndata: /);
       const message = JSON.parse(text.split("data: ")[1]!);
-      assert.equal(message.id, 1);
+      assert.equal(message.id, "request-1");
       assert.equal(message.result.isError, true);
-    }
+    } else assert.equal(JSON.parse(text).id, "request-1");
   }
   const good = await sanitizeMcpResponse(
     Response.json({ jsonrpc: "2.0", id: 1, result: { tools: [] } }),

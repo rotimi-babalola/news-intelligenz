@@ -282,11 +282,14 @@ the document ID and `source.apiId` is the linked step ID. Each result includes
 include `page` when available. Search returns only current indexed versions,
 not historical versions or news records.
 
-To test with Codex, add the local server once (or confirm it is already listed
-with `codex mcp list`), then restart Codex after starting `pnpm mcp`:
+To test with Codex, set `NEWS_INTELLIGENZ_MCP_TOKEN` to the issued token in the
+environment that launches Codex. If the server is already listed by
+`codex mcp list` without token authentication, remove it with
+`codex mcp remove news-intelligenz`. Add the server, then restart Codex after
+starting `pnpm mcp`:
 
 ```sh
-codex mcp add news-intelligenz --url http://127.0.0.1:3001/mcp
+codex mcp add news-intelligenz --url http://127.0.0.1:3001/mcp --bearer-token-env-var NEWS_INTELLIGENZ_MCP_TOKEN
 ```
 
 In a Codex chat, use `/mcp` to check the connection, then ask:
