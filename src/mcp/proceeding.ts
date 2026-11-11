@@ -19,15 +19,22 @@ export function proceedingHandler(prisma: PrismaClient) {
         inputSchema: z.object({ apiId: z.string().regex(/^\d+$/) }),
       },
       async ({ apiId }) => {
-        const result = await getProceeding(prisma, apiId);
-        return result
-          ? { content: [{ type: "text", text: JSON.stringify(result) }] }
-          : {
-              content: [
-                { type: "text", text: `Proceeding ${apiId} was not found` },
-              ],
-              isError: true,
-            };
+        try {
+          const result = await getProceeding(prisma, apiId);
+          return result
+            ? { content: [{ type: "text", text: JSON.stringify(result) }] }
+            : {
+                content: [
+                  { type: "text", text: `Proceeding ${apiId} was not found` },
+                ],
+                isError: true,
+              };
+        } catch {
+          return {
+            content: [{ type: "text", text: "DIP read unavailable" }],
+            isError: true,
+          };
+        }
       },
     );
     server.registerTool(
@@ -41,16 +48,25 @@ export function proceedingHandler(prisma: PrismaClient) {
           limit: z.number().int().min(1).max(3).default(3),
         }),
       },
-      async ({ referenceId, startPage, limit }) => ({
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(
-              await getDocumentPages(prisma, referenceId, startPage, limit),
-            ),
-          },
-        ],
-      }),
+      async ({ referenceId, startPage, limit }) => {
+        try {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  await getDocumentPages(prisma, referenceId, startPage, limit),
+                ),
+              },
+            ],
+          };
+        } catch {
+          return {
+            content: [{ type: "text", text: "DIP read unavailable" }],
+            isError: true,
+          };
+        }
+      },
     );
     server.registerTool(
       "search_dip_evidence",
@@ -68,18 +84,12 @@ export function proceedingHandler(prisma: PrismaClient) {
           return {
             content: [{ type: "text", text: JSON.stringify({ results }) }],
           };
-        } catch (error) {
-          const message =
-            error instanceof TypeError && error.message === "fetch failed"
-              ? "embedding provider unreachable"
-              : error instanceof Error
-                ? error.message
-                : "unknown error";
+        } catch {
           return {
             content: [
               {
                 type: "text",
-                text: `DIP search unavailable: ${message}`,
+                text: "DIP search unavailable",
               },
             ],
             isError: true,

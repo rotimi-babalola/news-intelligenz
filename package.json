@@ -26,6 +26,7 @@
     "evaluate:dip": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/evaluate-dip.js",
     "drain:dip": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/drain-dip.js",
     "mcp": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/run-mcp.js",
+    "mcp:invites": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/mcp-invites.js",
     "backfill:documents": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/backfill-document-objects.js"
   },
   "dependencies": {

@@ -251,8 +251,19 @@ processing. Start it from the repository root with a configured `DATABASE_URL`
 in `.env`:
 
 ```sh
+pnpm db:migrate
+pnpm mcp:invites issue "Reader name"
 pnpm mcp
 ```
+
+The invite command prints a token once, along with its ID. Give the token to
+the invited reader over a private channel and keep it out of shell history,
+logs, and source control. Clients send it as `Authorization: Bearer <token>`
+on every `/mcp` request. Missing, invalid, or revoked tokens receive HTTP 401;
+the limit is 60 requests per token per minute (HTTP 429 after that). Revoke an
+invite by ID with `pnpm mcp:invites revoke <id>`. These commands run locally
+with database access; token administration is not an MCP tool. An MCP token
+does not authorize the local operator UI or API routes.
 
 The server exposes three tools:
 
@@ -271,14 +282,15 @@ the document ID and `source.apiId` is the linked step ID. Each result includes
 include `page` when available. Search returns only current indexed versions,
 not historical versions or news records.
 
-To test with Codex, add the local server once (or confirm it is already listed
-with `codex mcp list`), then restart Codex after starting `pnpm mcp`:
+In an AI agent that supports MCP over Streamable HTTP, add a server named
+`news-intelligenz` with URL `http://127.0.0.1:3001/mcp`. Configure its bearer
+token from the issued invite, preferably through an environment variable or
+the client's secret storage. The agent must send `Authorization: Bearer <token>`
+on every request. Update any existing server entry that lacks authentication,
+then reload the agent after starting `pnpm mcp`. Because the server binds to
+`127.0.0.1`, the agent must run on the same machine.
 
-```sh
-codex mcp add news-intelligenz --url http://127.0.0.1:3001/mcp
-```
-
-In a Codex chat, use `/mcp` to check the connection, then ask:
+Use the agent's MCP tool list to confirm the three tools appear, then ask:
 
 > Use the `news-intelligenz` MCP tool `search_dip_evidence` to search for
 > “Erdölreserven” with limit 5. Show the evidence type, IDs, version, score,

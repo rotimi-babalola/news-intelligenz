@@ -131,10 +131,7 @@ test("MCP search rejects invalid input and reports provider or index errors", as
     });
     const provider = await call(handler, 4, { query: "test" });
     assert.equal(provider.isError, true);
-    assert.match(
-      provider.content[0].text,
-      /DIP search unavailable: embedding provider unreachable/,
-    );
+    assert.match(provider.content[0].text, /^DIP search unavailable$/);
     assert.equal(reads, 0);
     t.mock.restoreAll();
     t.mock.method(globalThis, "fetch", async () =>
@@ -142,10 +139,7 @@ test("MCP search rejects invalid input and reports provider or index errors", as
     );
     const index = await call(handler, 5, { query: "test" });
     assert.equal(index.isError, true);
-    assert.match(
-      index.content[0].text,
-      /DIP search unavailable: DIP index unavailable/,
-    );
+    assert.match(index.content[0].text, /^DIP search unavailable$/);
     assert.equal(reads, 1);
   } finally {
     await handler.close();
