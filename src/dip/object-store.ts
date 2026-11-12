@@ -1,4 +1,8 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 
 // PDF variants are archived in object storage; PostgreSQL keeps only their
 // identity and key. Keys are content-addressed, so retries and concurrent
@@ -37,4 +41,14 @@ export async function putDocumentPdf(key: string, bytes: Buffer) {
       ContentType: "application/pdf",
     }),
   );
+}
+
+export async function getDocumentPdf(key: string) {
+  const bucket = process.env.R2_BUCKET;
+  if (!bucket) throw new Error("R2_BUCKET is not configured");
+  const result = await r2().send(
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+  );
+  if (!result.Body) throw new Error("Archived PDF is empty");
+  return Buffer.from(await result.Body.transformToByteArray());
 }

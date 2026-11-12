@@ -117,7 +117,12 @@ test("MCP discovers get_proceeding and reports invalid and missing IDs", async (
     const listing = await request(1, "tools/list", {});
     assert.deepEqual(
       listing.result.tools.map((tool: { name: string }) => tool.name),
-      ["get_proceeding", "get_document_pages", "search_dip_evidence"],
+      [
+        "get_proceeding",
+        "get_document_pages",
+        "verify_document_section",
+        "search_dip_evidence",
+      ],
     );
     const missing = await request(2, "tools/call", {
       name: "get_proceeding",
