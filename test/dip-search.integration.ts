@@ -212,9 +212,20 @@ test("document text returns the latest variant with page provenance", async () =
           ],
         });
       }
+      return content;
     };
     await variant(1, false);
-    await variant(2, true);
+    const current = await variant(2, true);
+    await prisma.documentSection.create({
+      data: {
+        contentId: current.id,
+        sectionNo: 1,
+        label: "A.4",
+        title: "Haushalt",
+        startPage: 1,
+        endPage: 3,
+      },
+    });
     for (const variantNo of [1, 2])
       await saveDipEmbedding(prisma, {
         sourceEntity: "dokument",
@@ -294,7 +305,7 @@ test("document text returns the latest variant with page provenance", async () =
       number: "21/1001",
       page: 1,
       pdfUrl: "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
-      section: null,
+      section: { label: "A.4", title: "Haushalt", startPage: 1, endPage: 3 },
     });
     assert.deepEqual(document.source, {
       endpoint: "/vorgangsposition",
@@ -340,6 +351,7 @@ test("document text returns the latest variant with page provenance", async () =
       status: "metadata-only",
       reason: "Unconfirmed official issuer",
     });
+    assert.equal(restricted.document.section, null);
     assert.equal("bytes" in restricted, false);
     await prisma.documentReference.update({
       where: { stepApiId: "456" },
@@ -358,6 +370,7 @@ test("document text returns the latest variant with page provenance", async () =
       status: "metadata-only",
       reason: "Document revision has not been processed",
     });
+    assert.equal(changedUrl[0].document.section, null);
   } finally {
     await prisma.$disconnect();
   }
@@ -448,6 +461,14 @@ test("document search cites matching sections and keeps unrelated pages out of t
           startPage: 4,
           endPage: 4,
         },
+        {
+          contentId: content.id,
+          sectionNo: 3,
+          label: "B.22",
+          title: "Weitere Wärmepläne",
+          startPage: 4,
+          endPage: 4,
+        },
       ],
     });
     for (const [page, embedding] of [
@@ -490,6 +511,14 @@ test("document search cites matching sections and keeps unrelated pages out of t
       documents.some((document) => document.document.section?.label === "B.21"),
       false,
     );
+    const sharedPage = await searchDip(prisma, "Wärmepläne", 1, {
+      embed: async () => vector(0.8, 0.6),
+    });
+    assert.equal(sharedPage[0]?.entity, "dokument");
+    if (sharedPage[0]?.entity === "dokument") {
+      assert.equal(sharedPage[0].page, 4);
+      assert.equal(sharedPage[0].document.section, null);
+    }
   } finally {
     await prisma.$disconnect();
   }

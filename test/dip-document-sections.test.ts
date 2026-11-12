@@ -110,6 +110,27 @@ test("repeated running headers do not start new sections", () => {
   );
 });
 
+test("a reused label with a different title starts another section", () => {
+  const sections = detectDocumentSections([
+    { pageNo: 1, text: "A. Erste Frage" },
+    { pageNo: 2, text: "B. Antwort" },
+    { pageNo: 3, text: "A. Zweite Frage" },
+  ]);
+  assert.deepEqual(
+    sections.map(({ label, title, startPage, endPage }) => ({
+      label,
+      title,
+      startPage,
+      endPage,
+    })),
+    [
+      { label: "A.", title: "Erste Frage", startPage: 1, endPage: 1 },
+      { label: "B.", title: "Antwort", startPage: 2, endPage: 2 },
+      { label: "A.", title: "Zweite Frage", startPage: 3, endPage: 3 },
+    ],
+  );
+});
+
 test("bare labels, unlabeled prose, and contents entries never invent a section", () => {
   assert.deepEqual(
     detectDocumentSections([

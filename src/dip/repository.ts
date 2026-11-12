@@ -243,14 +243,18 @@ export function searchDipEmbeddings(
        ON e.source_entity = 'dokument' AND dc.content_id = dr.content_id
        AND dc.page_no = e.source_page AND dc.chunk_no = e.source_chunk
      LEFT JOIN LATERAL (
-       -- shortcut: a page shared by several section starts cites the latest
-       -- heading; use chunk-level offsets if that attribution must be exact.
+       -- Page-only provenance cannot distinguish passages from sections that
+       -- share a page, so leave those passages without a section citation.
        SELECT ds.label AS "sectionLabel", ds.title AS "sectionTitle",
          ds.start_page AS "sectionStartPage", ds.end_page AS "sectionEndPage"
        FROM ${qualifiedTable("document_sections")} ds
        WHERE e.source_entity = 'dokument' AND ds.content_id = dr.content_id
          AND e.source_page BETWEEN ds.start_page AND ds.end_page
-       ORDER BY ds.start_page DESC, ds.section_no DESC
+         AND NOT EXISTS (
+           SELECT 1 FROM ${qualifiedTable("document_sections")} other
+           WHERE other.content_id = ds.content_id AND other.section_no <> ds.section_no
+             AND e.source_page BETWEEN other.start_page AND other.end_page
+         )
        LIMIT 1
      ) sec ON true
      WHERE e.model = $2 AND e.document_instruction = $3 AND e.query_instruction = $4

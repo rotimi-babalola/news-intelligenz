@@ -97,8 +97,8 @@ function readHeading(line: string): Heading | null {
   return null;
 }
 
-// Section headings are ordered by their first appearance. A repeated label is
-// a running header, so only its first occurrence starts a section.
+// Section headings are ordered by their first appearance. Repeated heading
+// text is a running header; a reused label with a new title starts a section.
 export function detectDocumentSections(
   pages: DocumentSectionInput[],
 ): DetectedDocumentSection[] {
@@ -110,8 +110,10 @@ export function detectDocumentSections(
     if (CONTENTS_PAGE.test(page.text)) continue;
     for (const line of page.text.split(/\r?\n/)) {
       const heading = readHeading(line);
-      if (!heading || seen.has(heading.label)) continue;
-      seen.add(heading.label);
+      if (!heading) continue;
+      const key = `${heading.label}\0${heading.title}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       headings.push({ page: page.pageNo, ...heading });
     }
   }

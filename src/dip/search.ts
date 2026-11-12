@@ -69,12 +69,15 @@ export async function searchDip(
           number: row.documentNumber,
           page: row.pageNo,
           pdfUrl: row.pdfUrl,
-          section: toSection({
-            label: row.sectionLabel,
-            title: row.sectionTitle,
-            startPage: row.sectionStartPage,
-            endPage: row.sectionEndPage,
-          }),
+          section:
+            excerpt.status === "excerpt-eligible"
+              ? toSection({
+                  label: row.sectionLabel,
+                  title: row.sectionTitle,
+                  startPage: row.sectionStartPage,
+                  endPage: row.sectionEndPage,
+                })
+              : null,
         },
         source: {
           endpoint,
