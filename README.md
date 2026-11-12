@@ -133,14 +133,17 @@ curl -X POST http://127.0.0.1:3000/api/search-dip \
   -d '{"query":"release of petroleum reserves","limit":10}'
 ```
 
-`limit` defaults to 10 and is capped at 20. Results include the source entity,
-API ID, current version number, title, available summary or step label, cosine
-similarity score, and a DIP API source reference. A record appears only after
-its current version's embedding job succeeds; extracted PDF passages appear as
-`dokument` results carrying the matched passage, document reference, page and
-chunk numbers, and original `pdf_url`. Only the latest fetched content variant
-is searchable. Search requires the configured embedding provider; collection
-and stored source records remain available if it is offline.
+`limit` defaults to 10 and is capped at 20. Each result is a proceeding dossier:
+its `apiId`, current `title`, `type`, and `deliberationState`, `firstActivity`
+and `lastActivity`, the ordered `steps` timeline with linked documents, the
+matching `evidence`, an inspectable `ranking` breakdown, and the summed `score`.
+Evidence keeps at most two pages per document and five hits per proceeding, so
+one omnibus PDF cannot crowd out other proceedings. A record appears only after
+its current version's embedding job succeeds; `dokument` evidence carries the
+matched passage, document reference, page and chunk numbers, and the original
+`pdf_url`. Only the latest fetched content variant is searchable. Search
+requires the configured embedding provider; collection and stored source
+records remain available if it is offline.
 
 To query the same evidence from an LLM, see [MCP server](#mcp-server).
 
@@ -269,18 +272,22 @@ The server exposes three tools:
 
 | Tool                  | Input                                                                              | Result                                                                                                                                                                                                     |
 | --------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `search_dip_evidence` | German or English `query` (1–1000 characters); optional `limit` (1–20, default 10) | Ranked current proceedings, steps, and document page evidence                                                                                                                                              |
+| `search_dip_evidence` | German or English `query` (1–1000 characters); optional `limit` (1–20, default 10) | Ranked proceeding dossiers with cited evidence, an inspectable ranking breakdown, and ordered step timelines                                                                                               |
 | `get_proceeding`      | Numeric proceeding `apiId` as a string                                             | Stored proceeding, ordered steps, and linked document references                                                                                                                                           |
 | `get_document_pages`  | Numeric `referenceId`; optional `startPage` (default 1), `limit` (1–3, default 3)  | Latest eligible PDF variant, with up to 2,000 characters per page, page numbers, source links, and attribution. Unknown or ineligible references return metadata only; missing pages return `unavailable`. |
 
-Search results use `entity` for the evidence type: `vorgang` is a proceeding,
-`vorgangsposition` is a step within a proceeding, and `dokument` is a document
-page. `apiId` identifies the matched evidence; `proceedingApiId` links a step or
-document to its proceeding. For document results, `document.referenceId` is
-the document ID and `source.apiId` is the linked step ID. Each result includes
-`versionNo`, cosine similarity `score`, and `source.url`; document results also
-include `page` when available. Search returns only current indexed versions,
-not historical versions or news records.
+Search results are proceeding dossiers. Each dossier carries the proceeding
+`apiId`, current `title`, `type`, and `deliberationState`, `firstActivity` and
+`lastActivity`, an ordered `steps` timeline, the matching `evidence`, and an
+inspectable `ranking` breakdown whose contributions sum to `score`. Evidence
+uses `entity` for the matched record type: `vorgang` is the proceeding,
+`vorgangsposition` is a step, and `dokument` is a document page. `apiId`
+identifies the matched evidence and `proceedingApiId` links a step or document
+to its proceeding. For document evidence, `document.referenceId` is the document
+ID and `source.apiId` is the linked step ID. Evidence includes `versionNo`,
+cosine similarity `score`, and `source.url`; document evidence also includes
+`page` when available. Dossiers and evidence contain only current indexed
+versions, not historical versions or news records.
 
 In an AI agent that supports MCP over Streamable HTTP, add a server named
 `news-intelligenz` with URL `http://127.0.0.1:3001/mcp`. Configure its bearer
@@ -293,8 +300,9 @@ then reload the agent after starting `pnpm mcp`. Because the server binds to
 Use the agent's MCP tool list to confirm the three tools appear, then ask:
 
 > Use the `news-intelligenz` MCP tool `search_dip_evidence` to search for
-> “Erdölreserven” with limit 5. Show the evidence type, IDs, version, score,
-> page if present, and source URL. Report any tool error.
+> “Erdölreserven” with limit 5. Show each proceeding's title, timeline, and the
+> evidence with its type, IDs, version, score, page if present, and source URL.
+> Report any tool error.
 
 Search needs the embedding provider configured in `.env` and a matching DIP
 index. Provider or database failures return a tool error; an empty result set

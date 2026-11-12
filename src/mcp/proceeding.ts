@@ -2,7 +2,7 @@ import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { PrismaClient } from "../generated/prisma/client";
 import { getProceeding } from "../dip/proceeding";
-import { searchDip } from "../dip/search";
+import { searchProceedingDossiers } from "../dip/dossiers";
 import { getDocumentPages } from "../dip/document-pages";
 
 export function proceedingHandler(prisma: PrismaClient) {
@@ -72,7 +72,7 @@ export function proceedingHandler(prisma: PrismaClient) {
       "search_dip_evidence",
       {
         description:
-          "Search current DIP proceedings, steps, and document pages. Results include evidence type, IDs, version, score, source URL, and page when applicable.",
+          "Search current DIP proceeding dossiers with ranked evidence, source links, and ordered step timelines.",
         inputSchema: z.object({
           query: z.string().trim().min(1).max(1000),
           limit: z.number().int().min(1).max(20).default(10),
@@ -80,7 +80,7 @@ export function proceedingHandler(prisma: PrismaClient) {
       },
       async ({ query, limit }) => {
         try {
-          const results = await searchDip(prisma, query, limit);
+          const results = await searchProceedingDossiers(prisma, query, limit);
           return {
             content: [{ type: "text", text: JSON.stringify({ results }) }],
           };

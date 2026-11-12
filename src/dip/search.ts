@@ -1,4 +1,3 @@
-import type { PrismaClient } from "../generated/prisma/client";
 import {
   assertEmbedding,
   embeddingConfig,
@@ -6,13 +5,13 @@ import {
   embedText,
   QUERY_INSTRUCTION,
 } from "./embedding";
-import { searchDipEmbeddings } from "./repository";
+import { searchDipEmbeddings, type Client } from "./repository";
 import { readDocumentExcerpt } from "./excerpts";
 
 export { QUERY_INSTRUCTION };
 
 export async function searchDip(
-  prisma: PrismaClient,
+  prisma: Client,
   query: string,
   limit: number,
   options: { embed?: (text: string) => Promise<number[]> } = {},
@@ -79,8 +78,7 @@ export async function searchDip(
         },
       };
     }
-    return {
-      entity: row.entity,
+    const record = {
       apiId: row.apiId,
       versionNo: row.versionNo,
       score: row.score,
@@ -94,5 +92,10 @@ export async function searchDip(
         url: `https://search.dip.bundestag.de/api/v1${endpoint}/${row.apiId}`,
       },
     };
+    return row.entity === "vorgang"
+      ? { entity: "vorgang" as const, ...record }
+      : { entity: "vorgangsposition" as const, ...record };
   });
 }
+
+export type DipHit = Awaited<ReturnType<typeof searchDip>>[number];

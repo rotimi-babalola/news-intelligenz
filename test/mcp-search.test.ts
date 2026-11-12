@@ -65,9 +65,55 @@ test("MCP search accepts German and English queries and returns current DIP evid
   ];
   const sql: string[] = [];
   const prisma = {
+    $transaction: async (run: (client: PrismaClient) => Promise<unknown>) =>
+      run(prisma as unknown as PrismaClient),
     $queryRawUnsafe: async (query: string) => {
       sql.push(query);
       return rows;
+    },
+    proceeding: {
+      findMany: async () => [
+        {
+          apiId: "340161",
+          title: "Energy reserves",
+          proceedingType: "Bill",
+          deliberationState: null,
+          documentDate: null,
+          sourceUpdatedAt: new Date("2026-10-10"),
+          firstObservedAt: new Date("2026-10-10"),
+          lastObservedAt: new Date("2026-10-10"),
+          latestVersionNo: 1,
+          metadata: {},
+          versions: [],
+        },
+      ],
+    },
+    proceedingStep: {
+      findMany: async () => [
+        {
+          apiId: "10",
+          proceedingApiId: "340161",
+          institution: "BR",
+          stepLabel: "Beratung",
+          title: "Energy reserves",
+          documentType: "Drucksache",
+          documentDate: null,
+          sourceUpdatedAt: new Date("2026-10-10"),
+          firstObservedAt: new Date("2026-10-10"),
+          lastObservedAt: new Date("2026-10-10"),
+          latestVersionNo: 1,
+          metadata: {},
+          versions: [],
+          documentReference: {
+            referenceId: "291522",
+            documentNumber: "583/26",
+            documentDate: null,
+            pdfUrl: "https://example.org/document.pdf",
+            metadata: {},
+            observedAt: new Date("2026-10-10"),
+          },
+        },
+      ],
     },
   } as unknown as PrismaClient;
   const handler = proceedingHandler(prisma);
@@ -78,7 +124,10 @@ test("MCP search accepts German and English queries and returns current DIP evid
     ] as const) {
       const result = await call(handler, id, { query, limit: 1 });
       assert.equal(result.isError, undefined);
-      const evidence = JSON.parse(result.content[0].text).results[0];
+      const dossier = JSON.parse(result.content[0].text).results[0];
+      assert.equal(dossier.apiId, "340161");
+      assert.equal(dossier.steps[0].apiId, "10");
+      const evidence = dossier.evidence[0];
       assert.equal(evidence.entity, "dokument");
       assert.equal(evidence.apiId, "291522");
       assert.equal(evidence.proceedingApiId, "340161");
@@ -109,6 +158,8 @@ test("MCP search rejects invalid input and reports provider or index errors", as
   process.env.EMBEDDING_API_FORMAT = "ollama";
   let reads = 0;
   const prisma = {
+    $transaction: async (run: (client: PrismaClient) => Promise<unknown>) =>
+      run(prisma as unknown as PrismaClient),
     $queryRawUnsafe: async () => {
       reads++;
       throw new Error("DIP index unavailable");

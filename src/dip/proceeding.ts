@@ -1,5 +1,8 @@
-import type { PrismaClient } from "../generated/prisma/client";
-import { readProceedingTimeline } from "./repository";
+import {
+  readProceedingTimeline,
+  readProceedingTimelines,
+  type Client,
+} from "./repository";
 
 function optionalText(metadata: unknown, key: string): string | null {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata))
@@ -8,12 +11,10 @@ function optionalText(metadata: unknown, key: string): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-export async function getProceeding(prisma: PrismaClient, apiId: string) {
-  if (!/^\d+$/.test(apiId))
-    throw new Error("Proceeding API ID must be numeric");
-  const { proceeding, steps } = await readProceedingTimeline(prisma, apiId);
-  if (!proceeding && steps.length === 0) return null;
-
+function toTimeline(
+  apiId: string,
+  { proceeding, steps }: Awaited<ReturnType<typeof readProceedingTimeline>>,
+) {
   return {
     apiId,
     parentMissing: !proceeding,
@@ -69,4 +70,26 @@ export async function getProceeding(prisma: PrismaClient, apiId: string) {
           : null,
       })),
   };
+}
+
+export type ProceedingTimeline = ReturnType<typeof toTimeline>;
+
+export async function getProceeding(prisma: Client, apiId: string) {
+  if (!/^\d+$/.test(apiId))
+    throw new Error("Proceeding API ID must be numeric");
+  const { proceeding, steps } = await readProceedingTimeline(prisma, apiId);
+  if (!proceeding && steps.length === 0) return null;
+  return toTimeline(apiId, { proceeding, steps });
+}
+
+// Timelines for a whole result page in two queries; proceedings with neither a
+// stored parent nor steps are omitted, matching getProceeding's null.
+export async function getProceedings(client: Client, apiIds: string[]) {
+  const rows = await readProceedingTimelines(client, apiIds);
+  const timelines = new Map<string, ProceedingTimeline>();
+  for (const [apiId, row] of rows) {
+    if (!row.proceeding && row.steps.length === 0) continue;
+    timelines.set(apiId, toTimeline(apiId, row));
+  }
+  return timelines;
 }
