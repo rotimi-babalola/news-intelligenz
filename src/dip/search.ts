@@ -7,6 +7,7 @@ import {
 } from "./embedding";
 import { searchDipEmbeddings, type Client } from "./repository";
 import { readDocumentExcerpt } from "./excerpts";
+import { toSection } from "./sections";
 
 export { QUERY_INSTRUCTION };
 
@@ -68,6 +69,15 @@ export async function searchDip(
           number: row.documentNumber,
           page: row.pageNo,
           pdfUrl: row.pdfUrl,
+          section:
+            excerpt.status === "excerpt-eligible"
+              ? toSection({
+                  label: row.sectionLabel,
+                  title: row.sectionTitle,
+                  startPage: row.sectionStartPage,
+                  endPage: row.sectionEndPage,
+                })
+              : null,
         },
         source: {
           endpoint,

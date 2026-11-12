@@ -7,6 +7,7 @@ import {
   enqueueRecordReindex,
 } from "./jobs";
 import { ensureDocumentChunks } from "./chunks";
+import { ensureDocumentSections } from "./sections";
 
 // A model gets its own jobs, while source versions and extracted pages stay shared.
 export async function enqueueDipReindex(
@@ -100,6 +101,7 @@ export async function enqueueDipReindex(
         select: { pageNo: true, text: true },
       });
       const chunks = await ensureDocumentChunks(prisma, content.id, pages);
+      await ensureDocumentSections(prisma, content.id, pages);
       counts.chunks += await enqueueDocumentEmbeddings(prisma, {
         runId,
         itemIndex: null,

@@ -55,6 +55,22 @@ function fixture(options: { eligible?: boolean; variant?: boolean } = {}) {
         ];
       },
     },
+    documentSection: {
+      findMany: async (args: { where: { contentId: string } }) => {
+        reads.push("sections");
+        assert.equal(args.where.contentId, "latest");
+        return [
+          {
+            contentId: "latest",
+            sectionNo: 1,
+            label: "A.4",
+            title: "Steuerliche Behandlung",
+            startPage: 2,
+            endPage: 3,
+          },
+        ];
+      },
+    },
   } as unknown as PrismaClient;
   return { prisma, reads };
 }
@@ -63,7 +79,7 @@ test("eligible pages are bounded, attributed, and read from the latest variant",
   const { prisma, reads } = fixture();
   const result = await getDocumentPages(prisma, "291522", 2, 2);
   assert.equal(result.status, "available");
-  assert.deepEqual(reads, ["reference", "variant", "pages"]);
+  assert.deepEqual(reads, ["reference", "variant", "pages", "sections"]);
   assert.equal(result.source?.pdfUrl, pdfUrl);
   assert.equal(result.variant?.variantNo, 2);
   assert.equal(
@@ -71,6 +87,14 @@ test("eligible pages are bounded, attributed, and read from the latest variant",
     "Deutscher Bundestag/Bundesrat – DIP",
   );
   assert.equal(result.eligibility?.document, "BT-Drs. 21/1001");
+  assert.deepEqual(result.sections, [
+    {
+      label: "A.4",
+      title: "Steuerliche Behandlung",
+      startPage: 2,
+      endPage: 3,
+    },
+  ]);
   assert.deepEqual(
     result.pages?.map((page) => page.page),
     [2, 3],

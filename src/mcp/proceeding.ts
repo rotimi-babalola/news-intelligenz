@@ -41,7 +41,7 @@ export function proceedingHandler(prisma: PrismaClient) {
       "get_document_pages",
       {
         description:
-          "Read up to 3 stored pages from the latest eligible DIP document variant. Each page excerpt is at most 2000 characters; unavailable documents are never fetched or queued.",
+          "Read up to 3 stored pages from the latest eligible DIP document variant, plus its section outline with page ranges. Each page excerpt is at most 2000 characters; unavailable documents are never fetched or queued.",
         inputSchema: z.object({
           referenceId: z.string().regex(/^\d+$/),
           startPage: z.number().int().min(1).default(1),

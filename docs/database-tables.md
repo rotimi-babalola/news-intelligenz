@@ -194,6 +194,7 @@ earlier text counts as a new version, mirroring publications).
 | `dip_checkpoints`           | (`endpoint`, `electoral_term`)  | Durable per-endpoint/scope progress; advances only after all pages of a window are stored                                                                                                                                                                                  |
 | `document_contents`         | (`reference_id`, `byte_hash`)   | Fetched PDF variants per document revision: `variant_no`, `byte_size`, `page_count`, nullable `object_key` in R2 (null = needs archive), retained nullable `bytes` for pre-R2 rows, nullable `source_url`, `fetched_at`, `is_latest`. Changed bytes add a retained variant |
 | `document_pages`            | (`content_id`, `page_no`)       | Extracted page text from PyMuPDF; `dip_embeddings` joins the variant and page so retrieval can cite a specific page                                                                                                                                                        |
+| `document_sections`         | (`content_id`, `section_no`)    | Derived section outline from explicit headings in the extracted pages: `label`, `title`, and inclusive `start_page`/`end_page`. Rows belong to one content variant, so changed bytes regenerate the outline                                                                |
 
 Fetched PDF bytes are cached in Cloudflare R2 under
 `documents/<reference_id>/<byte_hash>.pdf`; PostgreSQL keeps the object key and

@@ -4,7 +4,9 @@ import {
   findDocumentReferenceById,
   latestDocumentContent,
   listBoundedDocumentPages,
+  listDocumentSections,
 } from "./repository";
+import { toSection } from "./sections";
 
 const MAX_PAGE_TEXT = 2000;
 
@@ -46,29 +48,36 @@ export async function getDocumentPages(
         reason: "Document revision has not been processed",
       },
     };
-  const pages = await listBoundedDocumentPages(
-    prisma,
-    variant.id,
-    startPage,
-    limit,
-  );
+  const [pages, sections] = await Promise.all([
+    listBoundedDocumentPages(prisma, variant.id, startPage, limit),
+    listDocumentSections(prisma, variant.id),
+  ]);
+  // The outline belongs to the stored variant, so it is returned together with
+  // the variant's pages and omitted when the revision no longer matches.
+  const outline = sections.flatMap((section) => toSection(section) ?? []);
+  const storedVariant = {
+    variantNo: variant.variantNo,
+    sourceUrl: variant.sourceUrl,
+  };
   if (!pages.length)
     return {
       status: "unavailable",
       source,
       eligibility,
-      variant: { variantNo: variant.variantNo, sourceUrl: variant.sourceUrl },
+      variant: storedVariant,
+      sections: outline,
     };
   return {
     status: "available",
     source,
     eligibility,
-    variant: { variantNo: variant.variantNo, sourceUrl: variant.sourceUrl },
+    variant: storedVariant,
     pages: pages.map(({ pageNo, text }) => ({
       page: pageNo,
       text: text.slice(0, MAX_PAGE_TEXT),
       truncated: text.length > MAX_PAGE_TEXT,
     })),
+    sections: outline,
     changes: "Text extracted from PDF and excerpted",
   };
 }

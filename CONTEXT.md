@@ -32,3 +32,6 @@ An encounter with a parliamentary proceeding or proceeding step through a DIP so
 
 **Semantic retrieval**:
 Finding source records by meaning, including across German and English queries, and returning the source material that supports the match.
+
+**Document section**:
+A titled, labeled span of a parliamentary document with an inclusive page range, derived from an explicit heading in the stored page text. It makes an omnibus document navigable without treating the whole document as one topic.

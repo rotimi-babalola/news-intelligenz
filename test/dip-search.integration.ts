@@ -212,9 +212,20 @@ test("document text returns the latest variant with page provenance", async () =
           ],
         });
       }
+      return content;
     };
     await variant(1, false);
-    await variant(2, true);
+    const current = await variant(2, true);
+    await prisma.documentSection.create({
+      data: {
+        contentId: current.id,
+        sectionNo: 1,
+        label: "A.4",
+        title: "Haushalt",
+        startPage: 1,
+        endPage: 3,
+      },
+    });
     for (const variantNo of [1, 2])
       await saveDipEmbedding(prisma, {
         sourceEntity: "dokument",
@@ -294,6 +305,7 @@ test("document text returns the latest variant with page provenance", async () =
       number: "21/1001",
       page: 1,
       pdfUrl: "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
+      section: { label: "A.4", title: "Haushalt", startPage: 1, endPage: 3 },
     });
     assert.deepEqual(document.source, {
       endpoint: "/vorgangsposition",
@@ -339,6 +351,7 @@ test("document text returns the latest variant with page provenance", async () =
       status: "metadata-only",
       reason: "Unconfirmed official issuer",
     });
+    assert.equal(restricted.document.section, null);
     assert.equal("bytes" in restricted, false);
     await prisma.documentReference.update({
       where: { stepApiId: "456" },
@@ -357,6 +370,155 @@ test("document text returns the latest variant with page provenance", async () =
       status: "metadata-only",
       reason: "Document revision has not been processed",
     });
+    assert.equal(changedUrl[0].document.section, null);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("document search cites matching sections and keeps unrelated pages out of the result", async () => {
+  const prisma = await isolatedDatabase();
+  try {
+    await prisma.proceedingStep.create({
+      data: {
+        apiId: "456",
+        proceedingApiId: "123",
+        institution: "BT",
+        stepLabel: "Kleine Anfrage",
+        title: "Erbschaftsteuer",
+        documentType: "Drucksache",
+        sourceUpdatedAt: new Date("2026-10-14T12:00:00Z"),
+        metadata: {},
+        latestVersionNo: 1,
+      },
+    });
+    await prisma.documentReference.create({
+      data: {
+        stepApiId: "456",
+        proceedingApiId: "123",
+        referenceId: "789",
+        documentNumber: "21/1001",
+        pdfUrl: "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
+        documentDate: new Date("2026-10-09"),
+        metadata: { herausgeber: "BT", dokumentart: "Drucksache" },
+      },
+    });
+    const content = await prisma.documentContent.create({
+      data: {
+        referenceId: "789",
+        variantNo: 1,
+        byteHash: "hash-sections",
+        byteSize: 4,
+        pageCount: 4,
+        objectKey: "documents/789/hash-sections.pdf",
+        requestedUrl: "https://dserver.bundestag.de/btd/21/010/2110010.pdf",
+      },
+    });
+    await prisma.documentPage.createMany({
+      data: [
+        { contentId: content.id, pageNo: 2, text: "A.4 Erbschaftsteuer" },
+        { contentId: content.id, pageNo: 3, text: "Erbschaftsteuer details" },
+        { contentId: content.id, pageNo: 4, text: "B.21 Wärmepläne" },
+      ],
+    });
+    await prisma.documentChunk.createMany({
+      data: [
+        {
+          contentId: content.id,
+          pageNo: 2,
+          chunkNo: 1,
+          text: "A.4 Erbschaftsteuer",
+        },
+        {
+          contentId: content.id,
+          pageNo: 3,
+          chunkNo: 1,
+          text: "Erbschaftsteuer details",
+        },
+        {
+          contentId: content.id,
+          pageNo: 4,
+          chunkNo: 1,
+          text: "B.21 Wärmepläne",
+        },
+      ],
+    });
+    await prisma.documentSection.createMany({
+      data: [
+        {
+          contentId: content.id,
+          sectionNo: 1,
+          label: "A.4",
+          title: "Erbschaftsteuer",
+          startPage: 2,
+          endPage: 3,
+        },
+        {
+          contentId: content.id,
+          sectionNo: 2,
+          label: "B.21",
+          title: "Wärmepläne",
+          startPage: 4,
+          endPage: 4,
+        },
+        {
+          contentId: content.id,
+          sectionNo: 3,
+          label: "B.22",
+          title: "Weitere Wärmepläne",
+          startPage: 4,
+          endPage: 4,
+        },
+      ],
+    });
+    for (const [page, embedding] of [
+      [2, vector(1, 0)],
+      [3, vector(0.99, 0.141)],
+      [4, vector(0.8, 0.6)],
+    ] as const)
+      await saveDipEmbedding(prisma, {
+        sourceEntity: "dokument",
+        apiId: "789",
+        versionNo: 1,
+        sourcePage: page,
+        sourceChunk: 1,
+        model: embeddingConfig().indexId,
+        documentInstruction: embeddingConfig().documentInstruction,
+        queryInstruction: embeddingConfig().queryInstruction,
+        embedding,
+      });
+    const results = await searchDip(prisma, "Erbschaftsteuer", 10, {
+      embed: async () => vector(1, 0),
+    });
+    const documents = results.filter(
+      (
+        result,
+      ): result is Extract<(typeof results)[number], { entity: "dokument" }> =>
+        result.entity === "dokument",
+    );
+    assert.deepEqual(
+      documents.map((document) => [
+        document.page,
+        document.document.section?.label,
+        document.document.section?.title,
+      ]),
+      [
+        [2, "A.4", "Erbschaftsteuer"],
+        [3, "A.4", "Erbschaftsteuer"],
+      ],
+    );
+    assert.equal(
+      documents.some((document) => document.document.section?.label === "B.21"),
+      false,
+    );
+    const sharedPage = await searchDip(prisma, "Wärmepläne", 1, {
+      embed: async () => vector(0.8, 0.6),
+    });
+    assert.equal(sharedPage[0]?.entity, "dokument");
+    if (sharedPage[0]?.entity === "dokument") {
+      assert.equal(sharedPage[0].page, 4);
+      assert.equal(sharedPage[0].document.section, null);
+    }
   } finally {
     await prisma.$disconnect();
   }

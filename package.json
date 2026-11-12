@@ -27,7 +27,8 @@
     "drain:dip": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/drain-dip.js",
     "mcp": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/run-mcp.js",
     "mcp:invites": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/mcp-invites.js",
-    "backfill:documents": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/backfill-document-objects.js"
+    "backfill:documents": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/backfill-document-objects.js",
+    "backfill:sections": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/backfill-document-sections.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1156.0",

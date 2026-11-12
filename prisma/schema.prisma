@@ -350,6 +350,7 @@ model DocumentContent {
   isLatest    Boolean        @map("is_latest") @default(true)
   pages       DocumentPage[]
   chunks      DocumentChunk[]
+  sections    DocumentSection[]
 
   @@unique([referenceId, byteHash])
   @@unique([referenceId, variantNo])
@@ -378,6 +379,24 @@ model DocumentChunk {
 
   @@id([contentId, pageNo, chunkNo])
   @@map("document_chunks")
+}
+
+// Derived section outline for one fetched document variant. A section is
+// detected from an explicit heading in the extracted page text; page ranges
+// always point back at stored document pages. Rows are keyed by content variant,
+// so changed PDF bytes derive a new outline and historical variants are never
+// current evidence.
+model DocumentSection {
+  contentId String          @map("content_id") @db.Uuid
+  content   DocumentContent @relation(fields: [contentId], references: [id])
+  sectionNo Int             @map("section_no")
+  label     String          @db.Text
+  title     String          @db.Text
+  startPage Int             @map("start_page")
+  endPage   Int             @map("end_page")
+
+  @@id([contentId, sectionNo])
+  @@map("document_sections")
 }
 
 // Distinct encounters between runs and parliamentary records: one row per
