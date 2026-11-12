@@ -17,6 +17,7 @@ import {
   type ExtractedPage,
   type PageExtractor,
 } from "./pdf";
+import { ensureDocumentSections } from "./sections";
 import {
   createDocumentContent,
   createDocumentPages,
@@ -196,6 +197,7 @@ export async function processNextDocument(
     }
     const pageRows = await listDocumentPages(prisma, content.id);
     const chunks = await ensureDocumentChunks(prisma, content.id, pageRows);
+    await ensureDocumentSections(prisma, content.id, pageRows);
     await prisma.documentContent.update({
       where: { id: content.id },
       data: { requestedUrl: pdfUrl },

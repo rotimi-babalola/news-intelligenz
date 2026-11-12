@@ -157,6 +157,10 @@ export type DipSearchRow = {
   pageNo: number | null;
   chunkNo: number | null;
   passage: string | null;
+  sectionLabel: string | null;
+  sectionTitle: string | null;
+  sectionStartPage: number | null;
+  sectionEndPage: number | null;
 };
 
 // Records join their current version; document text joins the citation and
@@ -209,7 +213,11 @@ export function searchDipEmbeddings(
       dr.step_id AS "stepId",
       CASE WHEN e.source_entity = 'dokument' THEN e.source_page END AS "pageNo",
       CASE WHEN e.source_entity = 'dokument' THEN e.source_chunk END AS "chunkNo",
-      dc.text AS "passage"
+      dc.text AS "passage",
+      sec."sectionLabel",
+      sec."sectionTitle",
+      sec."sectionStartPage",
+      sec."sectionEndPage"
      FROM ${qualifiedTable("dip_embeddings")} e
      LEFT JOIN ${qualifiedTable("proceedings")} p
        ON e.source_entity = 'vorgang' AND p.api_id = e.source_api_id
@@ -234,6 +242,17 @@ export function searchDipEmbeddings(
      LEFT JOIN ${qualifiedTable("document_chunks")} dc
        ON e.source_entity = 'dokument' AND dc.content_id = dr.content_id
        AND dc.page_no = e.source_page AND dc.chunk_no = e.source_chunk
+     LEFT JOIN LATERAL (
+       -- shortcut: a page shared by several section starts cites the latest
+       -- heading; use chunk-level offsets if that attribution must be exact.
+       SELECT ds.label AS "sectionLabel", ds.title AS "sectionTitle",
+         ds.start_page AS "sectionStartPage", ds.end_page AS "sectionEndPage"
+       FROM ${qualifiedTable("document_sections")} ds
+       WHERE e.source_entity = 'dokument' AND ds.content_id = dr.content_id
+         AND e.source_page BETWEEN ds.start_page AND ds.end_page
+       ORDER BY ds.start_page DESC, ds.section_no DESC
+       LIMIT 1
+     ) sec ON true
      WHERE e.model = $2 AND e.document_instruction = $3 AND e.query_instruction = $4
        AND (p.api_id IS NOT NULL OR s.api_id IS NOT NULL OR dc.content_id IS NOT NULL)
      ) ranked
@@ -572,6 +591,20 @@ export function findDocumentPage(
   return client.documentPage.findUnique({
     where: { contentId_pageNo: { contentId, pageNo } },
   });
+}
+
+export function listDocumentSections(client: Client, contentId: string) {
+  return client.documentSection.findMany({
+    where: { contentId },
+    orderBy: { sectionNo: "asc" },
+  });
+}
+
+export function createDocumentSections(
+  client: Client,
+  data: Prisma.DocumentSectionUncheckedCreateInput[],
+) {
+  return client.documentSection.createMany({ data, skipDuplicates: true });
 }
 
 export function supersedeDocumentContents(client: Client, referenceId: string) {

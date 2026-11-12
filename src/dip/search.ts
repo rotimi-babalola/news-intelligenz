@@ -68,6 +68,18 @@ export async function searchDip(
           number: row.documentNumber,
           page: row.pageNo,
           pdfUrl: row.pdfUrl,
+          section:
+            row.sectionLabel &&
+            row.sectionTitle &&
+            row.sectionStartPage !== null &&
+            row.sectionEndPage !== null
+              ? {
+                  label: row.sectionLabel,
+                  title: row.sectionTitle,
+                  startPage: row.sectionStartPage,
+                  endPage: row.sectionEndPage,
+                }
+              : null,
         },
         source: {
           endpoint,

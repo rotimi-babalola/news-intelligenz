@@ -4,6 +4,7 @@ import {
   findDocumentReferenceById,
   latestDocumentContent,
   listBoundedDocumentPages,
+  listDocumentSections,
 } from "./repository";
 
 const MAX_PAGE_TEXT = 2000;
@@ -52,12 +53,14 @@ export async function getDocumentPages(
     startPage,
     limit,
   );
+  const sections = await listDocumentSections(prisma, variant.id);
   if (!pages.length)
     return {
       status: "unavailable",
       source,
       eligibility,
       variant: { variantNo: variant.variantNo, sourceUrl: variant.sourceUrl },
+      sections: sections.map(toSection),
     };
   return {
     status: "available",
@@ -69,6 +72,21 @@ export async function getDocumentPages(
       text: text.slice(0, MAX_PAGE_TEXT),
       truncated: text.length > MAX_PAGE_TEXT,
     })),
+    sections: sections.map(toSection),
     changes: "Text extracted from PDF and excerpted",
+  };
+}
+
+function toSection(section: {
+  label: string;
+  title: string;
+  startPage: number;
+  endPage: number;
+}) {
+  return {
+    label: section.label,
+    title: section.title,
+    startPage: section.startPage,
+    endPage: section.endPage,
   };
 }
