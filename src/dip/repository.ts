@@ -529,6 +529,35 @@ export function latestDocumentContent(client: Client, referenceId: string) {
   });
 }
 
+export function findDocumentChunk(
+  client: Client,
+  contentId: string,
+  pageNo: number,
+  chunkNo: number,
+) {
+  return client.documentChunk.findUnique({
+    where: { contentId_pageNo_chunkNo: { contentId, pageNo, chunkNo } },
+  });
+}
+
+export function findProceedingBrief(client: Client, key: string) {
+  return client.proceedingBrief.findUnique({ where: { key } });
+}
+
+export function saveProceedingBrief(
+  client: Client,
+  key: string,
+  proceedingApiId: string,
+  language: string,
+  answer: Prisma.InputJsonValue,
+) {
+  return client.proceedingBrief.upsert({
+    where: { key },
+    create: { key, proceedingApiId, language, answer },
+    update: {},
+  });
+}
+
 // Variant numbers only grow, even when an older variant is promoted back to
 // latest: reused bytes must never reuse a number held by another variant.
 export async function maxDocumentVariantNo(

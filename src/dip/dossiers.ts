@@ -85,6 +85,7 @@ export function buildDossiers(
         apiId,
         parentMissing: timeline.parentMissing,
         title: timeline.proceeding?.title ?? null,
+        proceedingVersionNo: timeline.proceeding?.versionNo ?? null,
         type: timeline.proceeding?.type ?? null,
         deliberationState: timeline.proceeding?.deliberationState ?? null,
         firstActivity,

@@ -399,6 +399,19 @@ model DocumentSection {
   @@map("document_sections")
 }
 
+// A generated answer is immutable for its question, language, model, and
+// exact current evidence fingerprint. Source changes produce a different key.
+model ProceedingBrief {
+  key             String   @id @db.Text
+  proceedingApiId String   @map("proceeding_id") @db.Text
+  language        String   @db.Text
+  answer          Json
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([proceedingApiId, language])
+  @@map("proceeding_briefs")
+}
+
 // Distinct encounters between runs and parliamentary records: one row per
 // (run, entity, apiId). Replaying a run reuses the row; a new run records a
 // new encounter without duplicating the record or its versions.
