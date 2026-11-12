@@ -4,7 +4,6 @@ import type { PrismaClient } from "../generated/prisma/client";
 import { getProceeding } from "../dip/proceeding";
 import { searchProceedingDossiers } from "../dip/dossiers";
 import { getDocumentPages } from "../dip/document-pages";
-import { verifyDocumentSection } from "../dip/section-verification";
 
 export function proceedingHandler(prisma: PrismaClient) {
   return createMcpHandler(() => {
@@ -57,36 +56,6 @@ export function proceedingHandler(prisma: PrismaClient) {
                 type: "text",
                 text: JSON.stringify(
                   await getDocumentPages(prisma, referenceId, startPage, limit),
-                ),
-              },
-            ],
-          };
-        } catch {
-          return {
-            content: [{ type: "text", text: "DIP read unavailable" }],
-            isError: true,
-          };
-        }
-      },
-    );
-    server.registerTool(
-      "verify_document_section",
-      {
-        description:
-          "Check a detected section heading and its boundary against the archived current PDF before citing the section. Verify a proposed quote on a page inside the returned range separately.",
-        inputSchema: z.object({
-          referenceId: z.string().regex(/^\d+$/),
-          sectionNo: z.number().int().min(1),
-        }),
-      },
-      async ({ referenceId, sectionNo }) => {
-        try {
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(
-                  await verifyDocumentSection(prisma, referenceId, sectionNo),
                 ),
               },
             ],

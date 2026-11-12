@@ -16,10 +16,9 @@ the archive stays free for well over a year at this rate. Keeping PDFs in
 Postgres would have forced a Neon storage upgrade within months.
 
 The bucket is private and bucket-scoped API tokens are used per environment;
-development and production have separate buckets. The document worker needs
-write access; the read-only MCP section verification tool needs read access to
-the archived variant. Tests inject fake storage operations so CI never reaches
-R2. Object upload happens before the database transaction:
+development and production have separate buckets. The document worker is the
+only component that needs R2 credentials, and tests inject a fake uploader so
+CI never reaches R2. Object upload happens before the database transaction:
 a failed upload retries the job, and a failed transaction leaves an object that
 the same content-addressed key overwrites on retry. Retained variants are not
 deleted automatically, matching the existing retention rule.
