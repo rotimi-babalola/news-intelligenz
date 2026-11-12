@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { detectDocumentSections } from "../src/dip/sections.js";
+import type { Client } from "../src/dip/repository.js";
+import {
+  backfillDocumentSections,
+  detectDocumentSections,
+} from "../src/dip/sections.js";
 
 test("omnibus headings produce ordered sections with page ranges and skip the contents list", () => {
   const sections = detectDocumentSections([
@@ -106,7 +110,7 @@ test("repeated running headers do not start new sections", () => {
   );
 });
 
-test("bare labels, prose, and contents entries never invent a section", () => {
+test("bare labels, unlabeled prose, and contents entries never invent a section", () => {
   assert.deepEqual(
     detectDocumentSections([
       {
@@ -123,4 +127,60 @@ test("bare labels, prose, and contents entries never invent a section", () => {
     [],
   );
   assert.deepEqual(detectDocumentSections([]), []);
+});
+
+test("a labeled prose sentence is not a section heading", () => {
+  assert.deepEqual(
+    detectDocumentSections([
+      { pageNo: 1, text: "A. Problem" },
+      {
+        pageNo: 2,
+        text: "B. Der Ausschuss empfiehlt die Annahme des Gesetzes.",
+      },
+    ]),
+    [{ sectionNo: 1, label: "A.", title: "Problem", startPage: 1, endPage: 2 }],
+  );
+});
+
+test("backfill outlines latest variants once and leaves existing outlines alone", async () => {
+  const created: { contentId: string; sectionNo: number }[] = [];
+  const client = {
+    documentContent: {
+      findMany: async (args: { where: { isLatest: boolean } }) => {
+        assert.equal(args.where.isLatest, true);
+        return [{ id: "with-heading" }, { id: "without-heading" }];
+      },
+    },
+    documentPage: {
+      findMany: async (args: { where: { contentId: string } }) => [
+        {
+          pageNo: 1,
+          text:
+            args.where.contentId === "with-heading"
+              ? "A.4 Steuerliche Behandlung\nText"
+              : "Nur Fließtext ohne Gliederung",
+        },
+      ],
+    },
+    documentSection: {
+      findMany: async (args: { where: { contentId: string } }) =>
+        created.filter((row) => row.contentId === args.where.contentId),
+      createMany: async (args: {
+        data: { contentId: string; sectionNo: number }[];
+      }) => {
+        created.push(...args.data);
+        return { count: args.data.length };
+      },
+    },
+  } as unknown as Client;
+  assert.deepEqual(await backfillDocumentSections(client), {
+    variants: 2,
+    outlines: 1,
+  });
+  assert.equal(created.length, 1);
+  assert.deepEqual(await backfillDocumentSections(client), {
+    variants: 2,
+    outlines: 1,
+  });
+  assert.equal(created.length, 1);
 });

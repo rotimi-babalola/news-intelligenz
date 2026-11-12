@@ -116,8 +116,11 @@ python3 -m pip install pymupdf
 PDF fetching is independent of DIP collection: only references dated within the
 previous 14 days are queued automatically, and `POST /api/drain-documents`
 processes one queued document per call. Fetched PDF bytes are archived in
-Cloudflare R2; extracted page text and overlapping LangChain passages stay in
-PostgreSQL. Rows written before the move can be archived in place with
+Cloudflare R2; extracted page text, overlapping LangChain passages, and derived
+section outlines stay in PostgreSQL. A new variant derives its outline when its
+PDF is processed; variants stored before outlines existed derive theirs with
+`pnpm backfill:sections` (re-running is safe). Rows written before the move
+can be archived in place with
 `pnpm backfill:documents` (`DRY_RUN=1`
 reports without uploading); the command re-fetches from `source_url` only when
 the row still holds no bytes. DIP data use is governed by the
@@ -270,11 +273,11 @@ does not authorize the local operator UI or API routes.
 
 The server exposes three tools:
 
-| Tool                  | Input                                                                              | Result                                                                                                                                                                                                     |
-| --------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `search_dip_evidence` | German or English `query` (1–1000 characters); optional `limit` (1–20, default 10) | Ranked proceeding dossiers with cited evidence, an inspectable ranking breakdown, and ordered step timelines                                                                                               |
-| `get_proceeding`      | Numeric proceeding `apiId` as a string                                             | Stored proceeding, ordered steps, and linked document references                                                                                                                                           |
-| `get_document_pages`  | Numeric `referenceId`; optional `startPage` (default 1), `limit` (1–3, default 3)  | Latest eligible PDF variant, with up to 2,000 characters per page, page numbers, source links, and attribution. Unknown or ineligible references return metadata only; missing pages return `unavailable`. |
+| Tool                  | Input                                                                              | Result                                                                                                                                                                                                                                         |
+| --------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_dip_evidence` | German or English `query` (1–1000 characters); optional `limit` (1–20, default 10) | Ranked proceeding dossiers with cited evidence, an inspectable ranking breakdown, and ordered step timelines                                                                                                                                   |
+| `get_proceeding`      | Numeric proceeding `apiId` as a string                                             | Stored proceeding, ordered steps, and linked document references                                                                                                                                                                               |
+| `get_document_pages`  | Numeric `referenceId`; optional `startPage` (default 1), `limit` (1–3, default 3)  | Latest eligible PDF variant with its section outline and page ranges, up to 2,000 characters per page, page numbers, source links, and attribution. Unknown or ineligible references return metadata only; missing pages return `unavailable`. |
 
 Search results are proceeding dossiers. Each dossier carries the proceeding
 `apiId`, current `title`, `type`, and `deliberationState`, `firstActivity` and
@@ -286,8 +289,9 @@ identifies the matched evidence and `proceedingApiId` links a step or document
 to its proceeding. For document evidence, `document.referenceId` is the document
 ID and `source.apiId` is the linked step ID. Evidence includes `versionNo`,
 cosine similarity `score`, and `source.url`; document evidence also includes
-`page` when available. Dossiers and evidence contain only current indexed
-versions, not historical versions or news records.
+`page` when available and the matching `section` (`label`, `title`, `startPage`,
+`endPage`) when the page falls in a detected outline. Dossiers and evidence
+contain only current indexed versions, not historical versions or news records.
 
 In an AI agent that supports MCP over Streamable HTTP, add a server named
 `news-intelligenz` with URL `http://127.0.0.1:3001/mcp`. Configure its bearer

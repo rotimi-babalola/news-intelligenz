@@ -1,22 +1,52 @@
 import type { Client } from "./repository";
-import { createDocumentSections, listDocumentSections } from "./repository";
+import {
+  createDocumentSections,
+  listDocumentPages,
+  listDocumentSections,
+} from "./repository";
 
 export type DocumentSectionInput = { pageNo: number; text: string };
 
-export type DetectedDocumentSection = {
-  sectionNo: number;
+// One outline shape shared by detection, stored rows, and the MCP/search output.
+export type DocumentSectionView = {
   label: string;
   title: string;
   startPage: number;
   endPage: number;
 };
 
+export type DetectedDocumentSection = DocumentSectionView & {
+  sectionNo: number;
+};
+
+// Stored rows and search rows carry the same fields, nullable when no section
+// covers the page; one projection keeps the published shape from drifting.
+export function toSection(section: {
+  label: string | null;
+  title: string | null;
+  startPage: number | null;
+  endPage: number | null;
+}): DocumentSectionView | null {
+  if (
+    section.label === null ||
+    section.title === null ||
+    section.startPage === null ||
+    section.endPage === null
+  )
+    return null;
+  return {
+    label: section.label,
+    title: section.title,
+    startPage: section.startPage,
+    endPage: section.endPage,
+  };
+}
+
 type Heading = { label: string; title: string };
 
 // Drucksachen mark structural items with explicit labels: `A.4`, `B.21`,
-// top-level `A.`/`B.`, or Roman numerals. A heading must start its own line and
-// carry a title; a bare label, a table-of-contents entry, or a prose line is
-// left out rather than guessed at.
+// top-level `A.`/`B.`, or Roman numerals. A heading must start its own line,
+// carry a title, and not end like a sentence.
 const HEADING_PATTERNS: {
   pattern: RegExp;
   label: (match: RegExpExecArray) => string;
@@ -35,6 +65,11 @@ const HEADING_PATTERNS: {
   },
 ];
 
+// shortcut: labels are matched without layout context, so a body enumeration
+// that does not end like a sentence (`A. Die Bundesregierung wird aufgefordert`)
+// can still read as a heading; use a layout-aware extractor if outlines must be
+// exact.
+
 // A contents page lists the same labels as the body. Skipping the whole page
 // avoids mistaking a leaderless contents entry for the section start.
 const CONTENTS_PAGE =
@@ -47,10 +82,16 @@ function readHeading(line: string): Heading | null {
     const match = pattern.exec(trimmed);
     if (!match) continue;
     const title = (match[3] ?? match[2] ?? "").trim();
-    if (!title || title.length > 200) return null;
+    if (!title) return null;
     if (!/^[\p{Lu}\d]/u.test(title)) return null;
-    // Table of contents entries end in leader dots or a trailing page number.
-    if (/\.{3,}|…/.test(title) || /\s\d{1,4}$/.test(title)) return null;
+    // Table of contents entries end in leader dots or a trailing page number;
+    // body prose ends like a sentence.
+    if (
+      /\.{3,}|…/.test(title) ||
+      /\s\d{1,4}$/.test(title) ||
+      /[.!?]$/.test(title)
+    )
+      return null;
     return { label: label(match), title };
   }
   return null;
@@ -109,4 +150,21 @@ export async function ensureDocumentSections(
     detected.map((section) => ({ contentId, ...section })),
   );
   return listDocumentSections(client, contentId);
+}
+
+// Variants processed before outlines existed have pages but no derived rows.
+// Only latest variants are outlined, mirroring retrieval, and re-running is
+// safe because ensureDocumentSections leaves an existing outline untouched.
+export async function backfillDocumentSections(client: Client) {
+  const contents = await client.documentContent.findMany({
+    where: { isLatest: true },
+    select: { id: true },
+    orderBy: { id: "asc" },
+  });
+  let outlines = 0;
+  for (const { id } of contents) {
+    const pages = await listDocumentPages(client, id);
+    if ((await ensureDocumentSections(client, id, pages)).length) outlines++;
+  }
+  return { variants: contents.length, outlines };
 }
