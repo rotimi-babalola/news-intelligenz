@@ -1,61 +1,63 @@
 import type { PrismaClient } from "../generated/prisma/client";
 import { embedText } from "./embedding";
-import { getProceeding } from "./proceeding";
-import { searchDip } from "./search";
+import { getProceedings, type ProceedingTimeline } from "./proceeding";
+import { searchDip, type DipHit } from "./search";
 
-type Hit = Awaited<ReturnType<typeof searchDip>>[number];
-type Timeline = NonNullable<Awaited<ReturnType<typeof getProceeding>>>;
+type TimelineStep = ProceedingTimeline["steps"][number];
+type DocumentHit = Extract<DipHit, { entity: "dokument" }>;
+
+// Evidence dominates the score; these signals are tie-breakers that add at most
+// 0.10 combined, so they only reorder proceedings with near-equal evidence.
+const STEP_WEIGHT = 0.005; // per step, counting up to 10 steps
+const RECENCY_WEIGHT = 0.03; // halves every 30 days since last activity
+const CURRENT_ACTIVITY_WEIGHT = 0.02; // last activity within 30 days
+const CURRENT_ACTIVITY_DAYS = 30;
+
+// A document hit is only current when its step still links the same reference
+// and PDF; otherwise the citation would point at replaced bytes.
+function sameDocument(step: TimelineStep, hit: DocumentHit) {
+  return (
+    step.apiId === hit.source.apiId &&
+    step.document?.referenceId === hit.document.referenceId &&
+    step.document?.pdfUrl === hit.document.pdfUrl
+  );
+}
+
+function isCurrent(hit: DipHit, timeline: ProceedingTimeline) {
+  if (hit.entity === "vorgang")
+    return timeline.proceeding?.versionNo === hit.versionNo;
+  if (hit.entity === "vorgangsposition")
+    return timeline.steps.some(
+      (step) => step.apiId === hit.apiId && step.versionNo === hit.versionNo,
+    );
+  return timeline.steps.some((step) => sameDocument(step, hit));
+}
 
 export function buildDossiers(
-  hits: Hit[],
-  timelines: Map<string, Timeline | null>,
+  hits: DipHit[],
+  timelines: Map<string, ProceedingTimeline>,
   limit: number,
   now = new Date(),
 ) {
-  const grouped = new Map<string, Hit[]>();
+  const grouped = new Map<
+    string,
+    { timeline: ProceedingTimeline; evidence: DipHit[] }
+  >();
   for (const hit of hits) {
     const apiId = hit.entity === "vorgang" ? hit.apiId : hit.proceedingApiId;
     if (!apiId) continue;
     const timeline = timelines.get(apiId);
-    if (!timeline) continue;
-    const current =
-      hit.entity === "vorgang"
-        ? timeline.proceeding?.versionNo === hit.versionNo
-        : hit.entity === "vorgangsposition"
-          ? timeline.steps.some(
-              (step) =>
-                step.apiId === hit.apiId && step.versionNo === hit.versionNo,
-            )
-          : timeline.steps.some(
-              (step) =>
-                step.apiId === hit.source.apiId &&
-                step.document?.referenceId === hit.document?.referenceId &&
-                step.document?.pdfUrl === hit.document?.pdfUrl,
-            );
-    if (current) grouped.set(apiId, [...(grouped.get(apiId) ?? []), hit]);
+    if (!timeline || !isCurrent(hit, timeline)) continue;
+    const group = grouped.get(apiId);
+    if (group) group.evidence.push(hit);
+    else grouped.set(apiId, { timeline, evidence: [hit] });
   }
 
   return [...grouped]
-    .map(([apiId, matches]) => {
-      const timeline = timelines.get(apiId)!;
-      const seenPages = new Set<string>();
-      const documentCounts = new Map<string, number>();
-      const evidence = matches
-        .sort((a, b) => b.score - a.score || a.apiId.localeCompare(b.apiId))
-        .filter((hit) => {
-          if (hit.entity !== "dokument") return true;
-          const documentId = hit.document?.referenceId;
-          if (!documentId) return false;
-          const page = `${documentId}:${hit.page}`;
-          if (seenPages.has(page) || (documentCounts.get(documentId) ?? 0) >= 2)
-            return false;
-          seenPages.add(page);
-          documentCounts.set(
-            documentId,
-            (documentCounts.get(documentId) ?? 0) + 1,
-          );
-          return true;
-        });
+    .map(([apiId, { timeline, evidence }]) => {
+      evidence.sort(
+        (a, b) => b.score - a.score || a.apiId.localeCompare(b.apiId),
+      );
       const dates = timeline.steps
         .map((step) => step.documentDate)
         .filter((date): date is string => date !== null);
@@ -69,12 +71,15 @@ export function buildDossiers(
         : Infinity;
       const ranking = {
         strongestEvidence: Math.max(...evidence.map((hit) => hit.score)),
-        stepCount: Math.min(timeline.steps.length, 10) * 0.005,
+        stepCount: Math.min(timeline.steps.length, 10) * STEP_WEIGHT,
         recency:
           ageDays >= 0 && Number.isFinite(ageDays)
-            ? 0.03 / (1 + ageDays / 30)
+            ? RECENCY_WEIGHT / (1 + ageDays / CURRENT_ACTIVITY_DAYS)
             : 0,
-        currentActivity: ageDays >= 0 && ageDays <= 30 ? 0.02 : 0,
+        currentActivity:
+          ageDays >= 0 && ageDays <= CURRENT_ACTIVITY_DAYS
+            ? CURRENT_ACTIVITY_WEIGHT
+            : 0,
       };
       return {
         apiId,
@@ -119,12 +124,7 @@ export async function searchProceedingDossiers(
             .filter((id): id is string => Boolean(id)),
         ),
       ];
-      const timelines = new Map(
-        await Promise.all(
-          ids.map(async (id) => [id, await getProceeding(tx, id)] as const),
-        ),
-      );
-      return buildDossiers(hits, timelines, limit);
+      return buildDossiers(hits, await getProceedings(tx, ids), limit);
     },
     { isolationLevel: "RepeatableRead", timeout: 30_000 },
   );

@@ -5,7 +5,7 @@ import type {
 } from "../generated/prisma/client";
 import { qualifiedTable } from "../db";
 
-type Client = PrismaClient | Prisma.TransactionClient;
+export type Client = PrismaClient | Prisma.TransactionClient;
 
 // All PostgreSQL reads and writes for parliamentary records live here;
 // src/dip/vorgang.ts orchestrates collection without touching the client
@@ -16,21 +16,64 @@ export function findProceeding(client: Client, apiId: string) {
   return client.proceeding.findUnique({ where: { apiId } });
 }
 
-export async function readProceedingTimeline(client: Client, apiId: string) {
+const proceedingInclude = {
+  versions: { orderBy: { versionNo: "desc" }, take: 1 },
+} satisfies Prisma.ProceedingInclude;
+
+const stepInclude = {
+  versions: { orderBy: { versionNo: "desc" }, take: 1 },
+  documentReference: true,
+} satisfies Prisma.ProceedingStepInclude;
+
+type ProceedingTimelineRow = {
+  proceeding: Prisma.ProceedingGetPayload<{
+    include: typeof proceedingInclude;
+  }> | null;
+  steps: Prisma.ProceedingStepGetPayload<{ include: typeof stepInclude }>[];
+};
+
+export async function readProceedingTimeline(
+  client: Client,
+  apiId: string,
+): Promise<ProceedingTimelineRow> {
   const [proceeding, steps] = await Promise.all([
     client.proceeding.findUnique({
       where: { apiId },
-      include: { versions: { orderBy: { versionNo: "desc" }, take: 1 } },
+      include: proceedingInclude,
     }),
     client.proceedingStep.findMany({
       where: { proceedingApiId: apiId },
-      include: {
-        versions: { orderBy: { versionNo: "desc" }, take: 1 },
-        documentReference: true,
-      },
+      include: stepInclude,
     }),
   ]);
   return { proceeding, steps };
+}
+
+// One query per table for a whole result page, so dossier assembly never
+// becomes a per-proceeding round trip inside a transaction.
+export async function readProceedingTimelines(
+  client: Client,
+  apiIds: string[],
+): Promise<Map<string, ProceedingTimelineRow>> {
+  const [proceedings, steps] = await Promise.all([
+    client.proceeding.findMany({
+      where: { apiId: { in: apiIds } },
+      include: proceedingInclude,
+    }),
+    client.proceedingStep.findMany({
+      where: { proceedingApiId: { in: apiIds } },
+      include: stepInclude,
+    }),
+  ]);
+  const rows = new Map<string, ProceedingTimelineRow>(
+    apiIds.map((apiId) => [apiId, { proceeding: null, steps: [] }]),
+  );
+  for (const proceeding of proceedings) {
+    const row = rows.get(proceeding.apiId);
+    if (row) row.proceeding = proceeding;
+  }
+  for (const step of steps) rows.get(step.proceedingApiId)?.steps.push(step);
+  return rows;
 }
 
 export function latestProceedingVersion(
@@ -119,6 +162,9 @@ export type DipSearchRow = {
 // Records join their current version; document text joins the citation and
 // only the latest fetched content variant, so historical bytes never produce
 // duplicate hits. One citation is chosen per document to keep results unique.
+// The result window is diversified before LIMIT so one omnibus document or one
+// busy proceeding cannot fill a caller's page: at most two pages per document
+// and five hits per proceeding survive regardless of the requested limit.
 export function searchDipEmbeddings(
   client: Client,
   input: {

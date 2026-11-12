@@ -72,24 +72,27 @@ test("MCP search accepts German and English queries and returns current DIP evid
       return rows;
     },
     proceeding: {
-      findUnique: async () => ({
-        apiId: "340161",
-        title: "Energy reserves",
-        proceedingType: "Bill",
-        deliberationState: null,
-        documentDate: null,
-        sourceUpdatedAt: new Date("2026-10-10"),
-        firstObservedAt: new Date("2026-10-10"),
-        lastObservedAt: new Date("2026-10-10"),
-        latestVersionNo: 1,
-        metadata: {},
-        versions: [],
-      }),
+      findMany: async () => [
+        {
+          apiId: "340161",
+          title: "Energy reserves",
+          proceedingType: "Bill",
+          deliberationState: null,
+          documentDate: null,
+          sourceUpdatedAt: new Date("2026-10-10"),
+          firstObservedAt: new Date("2026-10-10"),
+          lastObservedAt: new Date("2026-10-10"),
+          latestVersionNo: 1,
+          metadata: {},
+          versions: [],
+        },
+      ],
     },
     proceedingStep: {
       findMany: async () => [
         {
           apiId: "10",
+          proceedingApiId: "340161",
           institution: "BR",
           stepLabel: "Beratung",
           title: "Energy reserves",

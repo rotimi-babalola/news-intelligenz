@@ -186,6 +186,9 @@ test("document text returns the latest variant with page provenance", async () =
         await prisma.documentPage.create({
           data: { contentId: content.id, pageNo: 2, text: "Second page" },
         });
+        await prisma.documentPage.create({
+          data: { contentId: content.id, pageNo: 3, text: "Third page" },
+        });
         await prisma.documentChunk.createMany({
           data: [
             {
@@ -199,6 +202,12 @@ test("document text returns the latest variant with page provenance", async () =
               pageNo: 2,
               chunkNo: 1,
               text: "Second page",
+            },
+            {
+              contentId: content.id,
+              pageNo: 3,
+              chunkNo: 1,
+              text: "Third page",
             },
           ],
         });
@@ -233,6 +242,7 @@ test("document text returns the latest variant with page provenance", async () =
     for (const [page, chunk, embedding] of [
       [1, 3, vector(0.9, 0.435)],
       [2, 1, vector(0.8, 0.6)],
+      [3, 1, vector(0.7, 0.714)],
     ] as const)
       await saveDipEmbedding(prisma, {
         sourceEntity: "dokument",
@@ -307,6 +317,13 @@ test("document text returns the latest variant with page provenance", async () =
     assert.equal(distinctPages[1]?.entity, "dokument");
     if (distinctPages[1]?.entity === "dokument")
       assert.equal(distinctPages[1].passage, "Second page");
+    // Three matching pages exist; the search window keeps the best two.
+    assert.equal(
+      distinctPages.some(
+        (result) => result.entity === "dokument" && result.page === 3,
+      ),
+      false,
+    );
     await prisma.documentReference.update({
       where: { stepApiId: "456" },
       data: { metadata: { herausgeber: "Dritte", dokumentart: "Drucksache" } },
@@ -340,6 +357,62 @@ test("document text returns the latest variant with page provenance", async () =
       status: "metadata-only",
       reason: "Document revision has not been processed",
     });
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("search caps evidence per proceeding so one proceeding cannot fill the window", async () => {
+  const prisma = await isolatedDatabase();
+  try {
+    await prisma.proceeding.create({
+      data: {
+        apiId: "900",
+        title: "Omnibus proceeding",
+        proceedingType: "Bill",
+        electoralTerm: 21,
+        sourceUpdatedAt: new Date("2026-10-14T12:00:00Z"),
+        metadata: {},
+        latestVersionNo: 1,
+      },
+    });
+    for (const apiId of ["1", "2", "3", "4", "5", "6"]) {
+      await prisma.proceedingStep.create({
+        data: {
+          apiId,
+          proceedingApiId: "900",
+          institution: "BT",
+          stepLabel: "Beratung",
+          title: "Omnibus proceeding",
+          documentType: "Drucksache",
+          sourceUpdatedAt: new Date("2026-10-14T12:00:00Z"),
+          metadata: {},
+          latestVersionNo: 1,
+        },
+      });
+      await saveDipEmbedding(prisma, {
+        sourceEntity: "vorgangsposition",
+        apiId,
+        versionNo: 1,
+        model: embeddingConfig().indexId,
+        documentInstruction: embeddingConfig().documentInstruction,
+        queryInstruction: embeddingConfig().queryInstruction,
+        embedding: vector(1, 0),
+      });
+    }
+    const results = await searchDip(prisma, "Omnibus", 10, {
+      embed: async () => vector(1, 0),
+    });
+    assert.deepEqual(
+      results.map((result) => [result.entity, result.apiId]),
+      [
+        ["vorgangsposition", "1"],
+        ["vorgangsposition", "2"],
+        ["vorgangsposition", "3"],
+        ["vorgangsposition", "4"],
+        ["vorgangsposition", "5"],
+      ],
+    );
   } finally {
     await prisma.$disconnect();
   }

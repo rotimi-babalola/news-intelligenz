@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildDossiers } from "../src/dip/dossiers.js";
+import type { ProceedingTimeline } from "../src/dip/proceeding.js";
+import type { DipHit } from "../src/dip/search.js";
 
-type Hit = Parameters<typeof buildDossiers>[0][number];
-type Timeline = NonNullable<
-  Parameters<typeof buildDossiers>[1] extends Map<string, infer T> ? T : never
->;
+type Hit = DipHit;
+type Timeline = ProceedingTimeline;
 
+const observedAt = "2026-10-10T00:00:00.000Z";
 const source = (apiId: string) => ({
   endpoint: "/vorgangsposition",
   apiId,
@@ -21,8 +22,8 @@ const step = (apiId: string, day: number) => ({
   documentType: "Drucksache",
   documentDate: `2026-10-${day}T00:00:00.000Z`,
   sourceUpdatedAt: `2026-10-${day}T00:00:00.000Z`,
-  firstObservedAt: "",
-  lastObservedAt: "",
+  firstObservedAt: observedAt,
+  lastObservedAt: observedAt,
   versionNo: 1,
   versionId: null,
   versionObservedAt: null,
@@ -33,31 +34,34 @@ const step = (apiId: string, day: number) => ({
     date: null,
     pdfUrl: `https://example.org/${apiId}.pdf`,
     metadata: {},
-    observedAt: "",
+    observedAt,
   },
 });
-const timeline = (apiId: string, steps: Timeline["steps"], missing = false) =>
-  ({
-    apiId,
-    parentMissing: missing,
-    proceeding: missing
-      ? null
-      : {
-          title: `Proceeding ${apiId}`,
-          type: "Bill",
-          deliberationState: null,
-          summary: null,
-          documentDate: null,
-          sourceUpdatedAt: "2026-10-10T00:00:00.000Z",
-          firstObservedAt: "",
-          lastObservedAt: "",
-          versionNo: 1,
-          versionId: null,
-          versionObservedAt: null,
-          sourceUrl: `https://example.org/${apiId}`,
-        },
-    steps,
-  }) as Timeline;
+const timeline = (
+  apiId: string,
+  steps: Timeline["steps"],
+  missing = false,
+): Timeline => ({
+  apiId,
+  parentMissing: missing,
+  proceeding: missing
+    ? null
+    : {
+        title: `Proceeding ${apiId}`,
+        type: "Bill",
+        deliberationState: null,
+        summary: null,
+        documentDate: null,
+        sourceUpdatedAt: "2026-10-10T00:00:00.000Z",
+        firstObservedAt: observedAt,
+        lastObservedAt: observedAt,
+        versionNo: 1,
+        versionId: null,
+        versionObservedAt: null,
+        sourceUrl: `https://example.org/${apiId}`,
+      },
+  steps,
+});
 const hit = (
   entity: "vorgang" | "vorgangsposition" | "dokument",
   apiId: string,
@@ -92,12 +96,10 @@ const hit = (
     source: source(entity === "dokument" ? "10" : apiId),
   }) as Hit;
 
-test("dossiers group current hits, cap document pages, and expose ranking contributions", () => {
+test("dossiers group current hits by proceeding and expose ranking contributions", () => {
   const hits = [
     hit("dokument", "doc-10", "1", 0.95, 1),
-    hit("dokument", "doc-10", "1", 0.94, 1),
-    hit("dokument", "doc-10", "1", 0.93, 2),
-    hit("dokument", "doc-10", "1", 0.92, 3),
+    hit("dokument", "doc-10", "1", 0.94, 2),
     hit("vorgang", "2", "2", 0.9),
     hit("vorgangsposition", "10", "1", 0.8),
     hit("vorgangsposition", "stale", "1", 0.99),
