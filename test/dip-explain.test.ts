@@ -294,6 +294,39 @@ test("unsupported citations and missing evidence produce a qualified answer or a
   assert.match(brief.qualification!, /does not establish/);
 });
 
+test("PDF line wrapping does not discard an otherwise exact cited quote", () => {
+  const original =
+    "Der Gesetzentwurf ist besonders eilbedürftig, um eine\n  gemeinsame Beratung im parlamentarischen Verfahren zu ermöglichen.";
+  const result = validateAnswer(
+    {
+      ...answer("de"),
+      documents: [
+        {
+          text: "Der Entwurf ist eilbedürftig.",
+          evidenceId: "page:3:2",
+          quote:
+            "Der Gesetzentwurf ist besonders eilbedürftig, um eine gemeinsame Beratung im parlamentarischen Verfahren zu ermöglichen.",
+        },
+      ],
+    },
+    [
+      {
+        id: "page:3:2",
+        text: original,
+        citation: {
+          kind: "page",
+          stepId: "2",
+          referenceId: "3",
+          page: 2,
+          url: pdfUrl,
+        },
+      },
+    ],
+  );
+  assert.equal(result.documents[0]?.quote, original);
+  assert.equal(result.documents[0]?.citation.referenceId, "3");
+});
+
 test("extra model claims retain all cited steps without rejecting the answer", () => {
   const claims = Array.from({ length: 12 }, (_, index) => ({
     text: `Recorded step ${index}`,
