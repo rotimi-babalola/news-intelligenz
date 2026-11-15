@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { ensureDocumentChunks } from "./chunks";
-import { classifyDocumentReference } from "./excerpts";
+import { resolveDocumentCitation } from "./citation";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { claimNextJob, completeJob, failJob } from "../../jobs";
 import { PROCESS_DOCUMENT } from "../constants";
@@ -247,7 +247,11 @@ export async function requestDocument(
 ) {
   const reference = await findDocumentReferenceById(prisma, referenceId);
   if (!reference) return null;
-  const content = await latestDocumentContent(prisma, referenceId);
+  const citation = resolveDocumentCitation(
+    reference,
+    await latestDocumentContent(prisma, referenceId),
+  );
+  const content = citation.status === "missing" ? null : citation.variant;
   const key = documentJobKey({
     referenceId,
     pdfUrl: reference.pdfUrl,
@@ -281,13 +285,7 @@ export async function requestDocument(
     job = (await raiseDocumentJob(prisma, key)) ?? job;
   }
   return {
-    eligibility: classifyDocumentReference({
-      institution: reference.step.institution,
-      documentType: reference.step.documentType,
-      documentNumber: reference.documentNumber,
-      pdfUrl: reference.pdfUrl,
-      metadata: reference.metadata,
-    }),
+    eligibility: citation.eligibility,
     reference: {
       referenceId,
       stepApiId: reference.stepApiId,
@@ -297,15 +295,16 @@ export async function requestDocument(
       pdfUrl: reference.pdfUrl,
     },
     processed,
-    variant: processed
-      ? {
-          variantNo: content.variantNo,
-          pageCount: content.pageCount,
-          byteHash: content.byteHash,
-          fetchedAt: content.fetchedAt,
-          sourceUrl: content.sourceUrl,
-        }
-      : null,
+    variant:
+      processed && content
+        ? {
+            variantNo: content.variantNo,
+            pageCount: content.pageCount,
+            byteHash: content.byteHash,
+            fetchedAt: content.fetchedAt,
+            sourceUrl: content.sourceUrl,
+          }
+        : null,
     job: job
       ? { id: job.id, status: job.status, priority: job.priority }
       : null,

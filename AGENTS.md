@@ -17,7 +17,7 @@ Use the single-context layout at the repo root. See `docs/agents/domain.md`.
 `src/dip` is organised by concern. Do not add new flat files at its root; put a file in the existing folder that owns the behaviour.
 
 - `collection/` — DIP `/vorgang` and `/vorgangsposition` collection, checkpoints, source versions, schedules, and raw payload parsing.
-- `documents/` — PDF fetch/extraction, chunks, sections, excerpts, object storage, processing, and section verification.
+- `documents/` — PDF fetch/extraction, chunks, sections, excerpts, citation currency and status, object storage, processing, and section verification.
 - `search/` — embedding provider, vector search, dossier assembly, and relevance evaluation.
 - `proceedings/` — proceeding timeline read model.
 - `jobs/` — DIP job operations, embedding worker, and reindex.

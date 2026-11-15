@@ -64,7 +64,10 @@ export type DipSearchRow = {
 
 // Records join their current version; document text joins the citation and
 // only the latest fetched content variant, so historical bytes never produce
-// duplicate hits. Scoped searches keep one citation per requested proceeding;
+// duplicate hits. The currency rule is `isCurrentDocumentVariant` in
+// ../documents/citation.ts; this join pins that latest variant in one batch
+// query and projects `requested_url` for the caller to apply it, never per hit.
+// Scoped searches keep one citation per requested proceeding;
 // unscoped searches keep one citation per document.
 // The result window is diversified before LIMIT so one omnibus document or one
 // busy proceeding cannot fill a caller's page: at most two pages per document
@@ -134,6 +137,8 @@ export function searchDipEmbeddings(
          c.id AS content_id
        FROM ${qualifiedTable("document_references")} r
        JOIN ${qualifiedTable("proceeding_steps")} rs ON rs.api_id = r.step_id
+       -- Current citation: latest variant only; the requested_url check is
+       -- isCurrentDocumentVariant in ../documents/citation.ts.
        JOIN ${qualifiedTable("document_contents")} c
          ON c.reference_id = r.reference_id
          AND c.variant_no = e.source_version_no AND c.is_latest

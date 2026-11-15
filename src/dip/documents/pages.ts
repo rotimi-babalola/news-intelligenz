@@ -1,12 +1,7 @@
 import type { PrismaClient } from "../../generated/prisma/client";
 import { MAX_DOCUMENT_PAGE_TEXT } from "../constants";
-import { classifyDocumentReference } from "./excerpts";
-import {
-  findDocumentReferenceById,
-  latestDocumentContent,
-  listBoundedDocumentPages,
-  listDocumentSections,
-} from "../db/index";
+import { listBoundedDocumentPages, listDocumentSections } from "../db/index";
+import { loadDocumentCitation, STALE_REVISION_REASON } from "./citation";
 import { toSection } from "./sections";
 
 export async function getDocumentPages(
@@ -15,16 +10,10 @@ export async function getDocumentPages(
   startPage: number,
   limit: number,
 ) {
-  const reference = await findDocumentReferenceById(prisma, referenceId);
-  if (!reference) return { status: "unknown", referenceId };
+  const citation = await loadDocumentCitation(prisma, referenceId);
+  if (citation.status === "unknown") return { status: "unknown", referenceId };
 
-  const eligibility = classifyDocumentReference({
-    institution: reference.step.institution,
-    documentType: reference.step.documentType,
-    documentNumber: reference.documentNumber,
-    pdfUrl: reference.pdfUrl,
-    metadata: reference.metadata,
-  });
+  const reference = citation.reference;
   const source = {
     referenceId,
     stepApiId: reference.stepApiId,
@@ -32,21 +21,30 @@ export async function getDocumentPages(
     documentNumber: reference.documentNumber,
     pdfUrl: reference.pdfUrl,
   };
-  if (eligibility.status === "metadata-only")
-    return { status: "metadata-only", source, eligibility };
-
-  const variant = await latestDocumentContent(prisma, referenceId);
-  if (!variant)
-    return { status: "unavailable", source, eligibility, variant: null };
-  if (variant.requestedUrl !== reference.pdfUrl)
+  if (citation.status === "metadata-only")
+    return {
+      status: "metadata-only",
+      source,
+      eligibility: citation.eligibility,
+    };
+  if (citation.status === "stale")
     return {
       status: "metadata-only",
       source,
       eligibility: {
         status: "metadata-only" as const,
-        reason: "Document revision has not been processed",
+        reason: STALE_REVISION_REASON,
       },
     };
+  if (citation.status === "missing")
+    return {
+      status: "unavailable",
+      source,
+      eligibility: citation.eligibility,
+      variant: null,
+    };
+
+  const variant = citation.variant;
   const [pages, sections] = await Promise.all([
     listBoundedDocumentPages(prisma, variant.id, startPage, limit),
     listDocumentSections(prisma, variant.id),
@@ -62,14 +60,14 @@ export async function getDocumentPages(
     return {
       status: "unavailable",
       source,
-      eligibility,
+      eligibility: citation.eligibility,
       variant: storedVariant,
       sections: outline,
     };
   return {
     status: "available",
     source,
-    eligibility,
+    eligibility: citation.eligibility,
     variant: storedVariant,
     pages: pages.map(({ pageNo, text }) => ({
       page: pageNo,
