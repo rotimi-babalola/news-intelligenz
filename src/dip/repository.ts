@@ -173,7 +173,8 @@ export type DipSearchRow = {
 
 // Records join their current version; document text joins the citation and
 // only the latest fetched content variant, so historical bytes never produce
-// duplicate hits. One citation is chosen per document to keep results unique.
+// duplicate hits. Scoped searches keep one citation per requested proceeding;
+// unscoped searches keep one citation per document.
 // The result window is diversified before LIMIT so one omnibus document or one
 // busy proceeding cannot fill a caller's page: at most two pages per document
 // and five hits per proceeding survive regardless of the requested limit.
@@ -196,7 +197,7 @@ export function searchDipEmbeddings(
      ) AS "proceedingRank"
      FROM (
      SELECT ranked.*, ROW_NUMBER() OVER (
-       PARTITION BY "entity", "apiId" ORDER BY "score" DESC, "pageNo"
+       PARTITION BY "entity", "apiId", "proceedingApiId" ORDER BY "score" DESC, "pageNo"
      ) AS "documentRank"
      FROM (
      SELECT e.source_entity::text AS "entity", e.source_api_id AS "apiId",
@@ -204,7 +205,7 @@ export function searchDipEmbeddings(
       e.source_version_no AS "versionNo",
       1 - (e.embedding <=> $1::public.vector) AS "score",
       ROW_NUMBER() OVER (
-        PARTITION BY e.source_entity, e.source_api_id, e.source_page
+        PARTITION BY e.source_entity, e.source_api_id, e.source_page, dr.proceeding_id
         ORDER BY e.embedding <=> $1::public.vector, e.source_chunk
       ) AS "pageRank",
       CASE WHEN e.source_entity = 'dokument' THEN dr.document_number
@@ -235,7 +236,8 @@ export function searchDipEmbeddings(
        ON e.source_entity = 'vorgangsposition' AND s.api_id = e.source_api_id
        AND s.latest_version_no = e.source_version_no
      LEFT JOIN LATERAL (
-       SELECT r.reference_id, r.document_number, r.pdf_url, r.step_id,
+       SELECT DISTINCT ON (CASE WHEN $6::text[] IS NOT NULL THEN r.proceeding_id END)
+         r.reference_id, r.document_number, r.pdf_url, r.step_id,
          r.proceeding_id, r.metadata, rs.institution, rs.document_type,
          c.requested_url,
          c.id AS content_id
@@ -245,8 +247,9 @@ export function searchDipEmbeddings(
          ON c.reference_id = r.reference_id
          AND c.variant_no = e.source_version_no AND c.is_latest
        WHERE e.source_entity = 'dokument' AND r.reference_id = e.source_api_id
-       ORDER BY r.observed_at DESC
-       LIMIT 1
+         AND ($6::text[] IS NULL OR r.proceeding_id = ANY($6::text[]))
+       ORDER BY CASE WHEN $6::text[] IS NOT NULL THEN r.proceeding_id END,
+         r.observed_at DESC, r.step_id
      ) dr ON true
      LEFT JOIN ${qualifiedTable("document_chunks")} dc
        ON e.source_entity = 'dokument' AND dc.content_id = dr.content_id
@@ -267,11 +270,7 @@ export function searchDipEmbeddings(
        LIMIT 1
      ) sec ON true
      WHERE e.model = $2 AND e.document_instruction = $3 AND e.query_instruction = $4
-       AND ($6::text[] IS NULL OR (e.source_entity = 'dokument' AND EXISTS (
-         SELECT 1 FROM ${qualifiedTable("document_references")} scoped
-         WHERE scoped.reference_id = e.source_api_id
-           AND scoped.proceeding_id = ANY($6::text[])
-       )))
+       AND ($6::text[] IS NULL OR e.source_entity = 'dokument')
        AND (p.api_id IS NOT NULL OR s.api_id IS NOT NULL OR dc.content_id IS NOT NULL)
      ) ranked
      WHERE "pageRank" = 1

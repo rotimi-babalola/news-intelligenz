@@ -6,6 +6,29 @@ import { generateProceedingBrief, validateAnswer } from "../src/dip/explain.js";
 import type { ProceedingTimeline } from "../src/dip/proceeding.js";
 import type { DipHit } from "../src/dip/search.js";
 
+const approveFixtureClaims: NonNullable<
+  Parameters<typeof generateProceedingBrief>[5]
+> = async ({ claims }) => ({
+  supportedClaimIds: claims.map(({ id }) => id),
+});
+
+function generateTestBrief(
+  prisma: PrismaClient,
+  question: string,
+  language: "en" | "de",
+  dossier: Parameters<typeof generateProceedingBrief>[3],
+  generate: NonNullable<Parameters<typeof generateProceedingBrief>[4]>,
+) {
+  return generateProceedingBrief(
+    prisma,
+    question,
+    language,
+    dossier,
+    generate,
+    approveFixtureClaims,
+  );
+}
+
 const date = new Date("2026-10-10T00:00:00.000Z");
 const pdfUrl = "https://example.org/document.pdf";
 const timeline: ProceedingTimeline = {
@@ -75,7 +98,7 @@ const hit = {
 } as DipHit;
 const dossier = buildDossiers([hit], new Map([["1", timeline]]), 1)[0]!;
 
-function store(noSteps = false) {
+function store(noSteps = false, stepLabel = "First reading") {
   let proceedingVersion = 1;
   let variantNo = 1;
   let byteHash = "hash-one";
@@ -104,7 +127,7 @@ function store(noSteps = false) {
               {
                 apiId: "2",
                 institution: "BT",
-                stepLabel: "First reading",
+                stepLabel,
                 title: "Housing bill introduced",
                 documentType: "Drucksache",
                 documentDate: date,
@@ -210,7 +233,7 @@ const answer = (language: "en" | "de") => ({
 test("English and German briefs cite the same stored step and document page", async () => {
   const { prisma } = store();
   for (const language of ["en", "de"] as const) {
-    const brief = await generateProceedingBrief(
+    const brief = await generateTestBrief(
       prisma,
       "What happened?",
       language,
@@ -237,7 +260,7 @@ test("a broad question can cite a linked PDF added after proceeding selection", 
     evidence: dossier.evidence.filter((item) => item.entity !== "dokument"),
   };
   const enriched = addDocumentEvidence([withoutPage], [hit])[0]!;
-  const brief = await generateProceedingBrief(
+  const brief = await generateTestBrief(
     prisma,
     "What happened to housing?",
     "en",
@@ -252,7 +275,7 @@ test("a broad question can cite a linked PDF added after proceeding selection", 
 
 test("unsupported citations are dropped while documented steps remain", async () => {
   const { prisma, setVariant } = store();
-  const unsupported = validateAnswer(
+  const unsupported = await validateAnswer(
     {
       ...answer("en"),
       documents: [
@@ -276,10 +299,12 @@ test("unsupported citations are dropped while documented steps remain", async ()
         },
       },
     ],
+    "en",
+    approveFixtureClaims,
   );
   assert.deepEqual(unsupported.documents, []);
   setVariant(2, "hash-two");
-  const brief = await generateProceedingBrief(
+  const brief = await generateTestBrief(
     prisma,
     "What does the document say?",
     "en",
@@ -321,7 +346,7 @@ test("a proceeding with no step or page evidence abstains", async () => {
     new Map([["1", { ...timeline, steps: [] }]]),
     1,
   )[0]!;
-  const brief = await generateProceedingBrief(
+  const brief = await generateTestBrief(
     prisma,
     "What happened?",
     "en",
@@ -334,10 +359,10 @@ test("a proceeding with no step or page evidence abstains", async () => {
   assert.deepEqual(brief.claims.steps, []);
 });
 
-test("PDF line wrapping does not discard an otherwise exact cited quote", () => {
+test("PDF line wrapping does not discard an otherwise exact cited quote", async () => {
   const original =
     "Der Gesetzentwurf ist besonders eilbedürftig, um eine\n  gemeinsame Beratung im parlamentarischen Verfahren zu ermöglichen.";
-  const result = validateAnswer(
+  const result = await validateAnswer(
     {
       ...answer("de"),
       documents: [
@@ -362,6 +387,8 @@ test("PDF line wrapping does not discard an otherwise exact cited quote", () => 
         },
       },
     ],
+    "de",
+    approveFixtureClaims,
   );
   assert.equal(result.documents[0]?.quote, original);
   assert.equal(result.documents[0]?.citation.referenceId, "3");
@@ -369,7 +396,7 @@ test("PDF line wrapping does not discard an otherwise exact cited quote", () => 
 
 test("malformed document claims do not discard valid ordered steps", async () => {
   const { prisma } = store();
-  const brief = await generateProceedingBrief(
+  const brief = await generateTestBrief(
     prisma,
     "What happened?",
     "de",
@@ -394,35 +421,43 @@ test("malformed document claims do not discard valid ordered steps", async () =>
 
 test("stored steps fill an omitted model timeline with source citations", async () => {
   const { prisma } = store();
-  const brief = await generateProceedingBrief(
+  const brief = await generateTestBrief(
     prisma,
     "What happened?",
     "de",
     dossier,
     async () => ({ ...answer("de"), steps: [] }),
   );
-  assert.match(brief.claims.steps[0]?.text ?? "", /First reading/);
+  assert.match(
+    brief.claims.steps[0]?.text ?? "",
+    /Ein Verfahrensschritt ist dokumentiert/,
+  );
   assert.equal(brief.claims.steps[0]?.citation.stepId, "2");
   assert.match(brief.claims.steps[0]?.quote ?? "", /First reading/);
 });
 
-test("extra model claims retain all cited steps without rejecting the answer", () => {
+test("extra model claims retain all cited steps without rejecting the answer", async () => {
   const claims = Array.from({ length: 12 }, (_, index) => ({
     text: `Recorded step ${index}`,
     evidenceId: "step:2",
     quote: index === 0 ? "Unsupported quote" : "First reading",
   }));
-  const result = validateAnswer({ ...answer("en"), steps: claims }, [
-    {
-      id: "step:2",
-      text: "First reading | Housing bill introduced",
-      citation: {
-        kind: "step",
-        stepId: "2",
-        url: "https://example.org/step/2",
+  const result = await validateAnswer(
+    { ...answer("en"), steps: claims },
+    [
+      {
+        id: "step:2",
+        text: "First reading | Housing bill introduced",
+        citation: {
+          kind: "step",
+          stepId: "2",
+          url: "https://example.org/step/2",
+        },
       },
-    },
-  ]);
+    ],
+    "en",
+    approveFixtureClaims,
+  );
   assert.equal(result.steps.length, 11);
   assert.equal(result.steps[0]?.text, "Recorded step 1");
   assert.equal(result.steps[10]?.text, "Recorded step 11");
@@ -440,7 +475,7 @@ test("ineligible document passages cannot support document claims", async () => 
     new Map([["1", timeline]]),
     1,
   )[0]!;
-  const brief = await generateProceedingBrief(
+  const brief = await generateTestBrief(
     prisma,
     "What does the document say?",
     "de",
@@ -458,13 +493,13 @@ test("cached briefs regenerate for each language and changed PDF evidence", asyn
     calls++;
     return answer("en");
   };
-  await generateProceedingBrief(prisma, "Question", "en", dossier, generate);
-  await generateProceedingBrief(prisma, "Question", "en", dossier, generate);
+  await generateTestBrief(prisma, "Question", "en", dossier, generate);
+  await generateTestBrief(prisma, "Question", "en", dossier, generate);
   assert.equal(calls, 1);
-  await generateProceedingBrief(prisma, "Question", "de", dossier, generate);
+  await generateTestBrief(prisma, "Question", "de", dossier, generate);
   assert.equal(calls, 2);
   setVariant(2, "hash-two");
-  await generateProceedingBrief(prisma, "Question", "en", dossier, generate);
+  await generateTestBrief(prisma, "Question", "en", dossier, generate);
   assert.equal(calls, 3);
   assert.equal(briefs.size, 3);
 });
@@ -476,10 +511,10 @@ test("a changed proceeding version rejects a stale dossier", async () => {
     calls++;
     return answer("en");
   };
-  await generateProceedingBrief(prisma, "Question", "en", dossier, generate);
+  await generateTestBrief(prisma, "Question", "en", dossier, generate);
   setVersion(2);
   await assert.rejects(
-    generateProceedingBrief(prisma, "Question", "en", dossier, generate),
+    generateTestBrief(prisma, "Question", "en", dossier, generate),
     /Dossier changed/,
   );
   const updated = buildDossiers(
@@ -492,7 +527,194 @@ test("a changed proceeding version rejects a stale dossier", async () => {
     ]),
     1,
   )[0]!;
-  await generateProceedingBrief(prisma, "Question", "en", updated, generate);
+  await generateTestBrief(prisma, "Question", "en", updated, generate);
   assert.equal(calls, 2);
   assert.equal(briefs.size, 2);
+});
+
+test("English fallback uses a localized statement and retains the German source quote", async () => {
+  const { prisma } = store(false, "Beschlussempfehlung und Bericht");
+  const brief = await generateTestBrief(
+    prisma,
+    "What happened?",
+    "en",
+    dossier,
+    async () => ({ steps: [] }),
+  );
+  assert.equal(
+    brief.claims.steps[0]?.text,
+    "10 Oct 2026 · A proceeding step is documented.",
+  );
+  assert.match(
+    brief.claims.steps[0]?.quote ?? "",
+    /Beschlussempfehlung und Bericht/,
+  );
+});
+
+test("verification drops and never caches an invented status paired with a valid quote", async () => {
+  const { prisma, briefs } = store();
+  let checks = 0;
+  const brief = await generateProceedingBrief(
+    prisma,
+    "What happened?",
+    "en",
+    dossier,
+    async () => ({
+      ...answer("en"),
+      stage: [
+        {
+          text: "The bill has become law.",
+          evidenceId: "step:2",
+          quote: "First reading",
+        },
+      ],
+    }),
+    async ({ claims, evidence, language }) => {
+      checks++;
+      assert.equal(language, "en");
+      assert.ok(evidence.some((item) => item.text.includes("First reading")));
+      assert.equal(
+        claims.find((claim) => claim.section === "stage")?.text,
+        "The bill has become law.",
+      );
+      return {
+        supportedClaimIds: claims
+          .filter((claim) => claim.section !== "stage")
+          .map((claim) => claim.id),
+      };
+    },
+  );
+  assert.equal(checks, 1);
+  assert.deepEqual(brief.claims.stage, []);
+  assert.equal(brief.claims.documents.length, 1);
+  assert.equal(brief.answerConfidence, "partial");
+  assert.doesNotMatch(JSON.stringify([...briefs.values()]), /has become law/);
+});
+
+test("verification failures and malformed verdicts cannot cache an unverified brief", async () => {
+  for (const verdict of [
+    null,
+    {},
+    { supportedClaimIds: [999] },
+    { supportedClaimIds: ["0"] },
+  ]) {
+    const { prisma, briefs } = store();
+    await assert.rejects(
+      generateProceedingBrief(
+        prisma,
+        "Question",
+        "en",
+        dossier,
+        async () => answer("en"),
+        async () => verdict,
+      ),
+    );
+    assert.equal(briefs.size, 0);
+  }
+  const { prisma, briefs } = store();
+  await assert.rejects(
+    generateProceedingBrief(
+      prisma,
+      "Question",
+      "en",
+      dossier,
+      async () => answer("en"),
+      async () => {
+        throw new Error("Verifier unavailable");
+      },
+    ),
+    /Verifier unavailable/,
+  );
+  assert.equal(briefs.size, 0);
+});
+
+test("page citations cannot substitute for procedural step evidence", async () => {
+  const result = await validateAnswer(
+    { steps: [{ ...answer("en").documents[0] }] },
+    [
+      {
+        id: "page:3:2",
+        text: "The bill would provide housing grants.",
+        citation: {
+          kind: "page",
+          stepId: "2",
+          referenceId: "3",
+          page: 2,
+          url: pdfUrl,
+        },
+      },
+    ],
+    "en",
+    async () => {
+      throw new Error("Invalid citations must not reach verification");
+    },
+  );
+  assert.deepEqual(result.steps, []);
+});
+
+test("the provider path verifies generated claims and reuses only the verified cache", async (t) => {
+  const previousModel = process.env.EXPLAIN_MODEL;
+  const previousUrl = process.env.EXPLAIN_BASE_URL;
+  process.env.EXPLAIN_MODEL = "fixture-model";
+  process.env.EXPLAIN_BASE_URL = "http://localhost:11434/v1";
+  let requests = 0;
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async (_url: unknown, init?: RequestInit) => {
+      requests++;
+      const request = JSON.parse(String(init?.body));
+      const input = JSON.parse(request.messages[1].content);
+      let content: unknown;
+      if (requests === 1) {
+        assert.equal(input.language, "en");
+        content = {
+          ...answer("en"),
+          stage: [
+            {
+              text: "The bill has become law.",
+              evidenceId: "step:2",
+              quote: "First reading",
+            },
+          ],
+        };
+      } else {
+        assert.equal(requests, 2);
+        assert.match(
+          request.messages[0].content,
+          /An exact quote alone does not establish/,
+        );
+        assert.equal(input.claims[1].text, "The bill has become law.");
+        assert.equal(input.claims[1].quote, "First reading");
+        assert.ok(
+          input.evidence.some((item: { id: string }) => item.id === "step:2"),
+        );
+        content = { supportedClaimIds: [0, 2, 3] };
+      }
+      return Response.json({
+        choices: [{ message: { content: JSON.stringify(content) } }],
+      });
+    },
+  );
+  try {
+    const { prisma } = store();
+    const brief = await generateProceedingBrief(
+      prisma,
+      "Question",
+      "en",
+      dossier,
+    );
+    assert.deepEqual(brief.claims.stage, []);
+    assert.equal(brief.claims.documents.length, 1);
+    assert.deepEqual(
+      await generateProceedingBrief(prisma, "Question", "en", dossier),
+      brief,
+    );
+    assert.equal(requests, 2);
+  } finally {
+    if (previousModel === undefined) delete process.env.EXPLAIN_MODEL;
+    else process.env.EXPLAIN_MODEL = previousModel;
+    if (previousUrl === undefined) delete process.env.EXPLAIN_BASE_URL;
+    else process.env.EXPLAIN_BASE_URL = previousUrl;
+  }
 });
