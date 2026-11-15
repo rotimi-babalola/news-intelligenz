@@ -5,7 +5,7 @@ import {
   normalizeIdentifierValue,
   normalizePublisher,
 } from "../identity";
-import { enqueueJob } from "../jobs/index";
+import { enqueueJob, type EnqueueSpec, type SourceRef } from "../jobs/index";
 import type {
   PublicationResolution,
   PublicationResolutionInput,
@@ -13,6 +13,31 @@ import type {
 
 export const RESOLVE_PUBLICATION = "resolve_publication";
 export const EXTRACT_TEXT = "extract_publication_text";
+
+// The extraction job inherits the parent discovery's source, so a search
+// discovery keeps sourceKind search_query (with its query scope) instead of
+// falling back to news_feed. An operator retry reuses this identity with its
+// own dedupe key.
+export function extractionJobSpec(input: {
+  source: SourceRef;
+  runId: string;
+  itemIndex: number | null;
+  publicationId: string;
+  publisher: string;
+  dedupeKey?: string;
+}): EnqueueSpec {
+  return {
+    source: input.source,
+    runId: input.runId,
+    itemIndex: input.itemIndex,
+    ...(input.dedupeKey === undefined ? {} : { dedupeKey: input.dedupeKey }),
+    operation: EXTRACT_TEXT,
+    payload: {
+      publicationId: input.publicationId,
+      publisher: input.publisher,
+    },
+  };
+}
 
 // Single seam for publication identity: publisher-scoped URL/guid matching,
 // publication + identifier + discovery writes, and extraction handoff share
@@ -80,15 +105,15 @@ export async function resolvePublication(
     create: { runId: input.runId, publicationId },
     update: {},
   });
-  // The extraction job inherits the parent discovery's source, so a search
-  // discovery keeps sourceKind search_query (with its query scope) instead
-  // of falling back to news_feed.
-  await enqueueJob(tx, {
-    source: input.source,
-    runId: input.runId,
-    itemIndex: input.itemIndex,
-    operation: EXTRACT_TEXT,
-    payload: { publicationId, publisher },
-  });
+  await enqueueJob(
+    tx,
+    extractionJobSpec({
+      source: input.source,
+      runId: input.runId,
+      itemIndex: input.itemIndex,
+      publicationId,
+      publisher,
+    }),
+  );
   return { publicationId, errors: [] };
 }

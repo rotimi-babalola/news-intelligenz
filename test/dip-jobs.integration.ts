@@ -2,17 +2,23 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   claimNextJob,
-  dipSource,
   enqueueJob,
   failJob,
+  jobRow,
   requeueStaleClaims,
 } from "../src/jobs/index.js";
 import {
+  EMBED_DOCUMENT,
   EMBED_PROCEEDING,
   EMBED_STEP,
   PROCESS_DOCUMENT,
 } from "../src/dip/constants.js";
 import { raiseDocumentJob } from "../src/dip/jobs/queue.js";
+import {
+  documentEmbeddingIdentity,
+  documentProcessingIdentity,
+  proceedingEmbeddingIdentity,
+} from "../src/dip/jobs/identity.js";
 import { collectVorgang } from "../src/dip/collection/proceedings.js";
 import {
   collectSteps,
@@ -295,41 +301,109 @@ test("on-demand priority is claimed before older background work", async () => {
       status: "running",
     },
   });
-  const job = (dedupeKey: string, priority: number) => ({
-    dedupeKey,
-    sourceKind: "dip_endpoint" as const,
-    sourceKey: "/vorgangsposition",
-    runId: "priority-run",
-    operation: PROCESS_DOCUMENT,
-    payload: {},
-    priority,
-  });
-  await prisma.processingJob.create({ data: job("background", 0) });
-  const raised = await prisma.processingJob.create({
-    data: job("on-demand", 0),
+  const reference = {
+    referenceId: "on-demand",
+    pdfUrl: "https://example.org/on-demand.pdf",
+    documentDate: new Date("2026-10-09"),
+  };
+  const identity = (referenceId: string) =>
+    documentProcessingIdentity({
+      runId: "priority-run",
+      itemIndex: null,
+      electoralTerm: null,
+      stepApiId: "step",
+      ...reference,
+      referenceId,
+    });
+  const background = identity("background");
+  const raisedIdentity = identity(reference.referenceId);
+  await prisma.processingJob.createMany({
+    data: [jobRow(background), jobRow(raisedIdentity)],
   });
 
   // Enqueue is idempotent per dedupe key, so a request for work that already
   // exists adds no second job.
-  await prisma.$transaction((tx) =>
-    enqueueJob(tx, {
-      source: dipSource("/vorgangsposition", "21"),
-      runId: "priority-run",
-      dedupeKey: raised.dedupeKey,
-      operation: PROCESS_DOCUMENT,
-      payload: {},
-    }),
-  );
+  await prisma.$transaction((tx) => enqueueJob(tx, raisedIdentity));
   assert.equal(await prisma.processingJob.count(), 2);
 
-  await raiseDocumentJob(prisma, raised.dedupeKey);
+  await raiseDocumentJob(prisma, reference);
   assert.equal(
     (
       await claimNextJob(prisma, "worker", undefined, {
         operation: PROCESS_DOCUMENT,
       })
     )?.dedupeKey,
-    "on-demand",
+    raisedIdentity.dedupeKey,
+  );
+  await prisma.$disconnect();
+});
+
+test("replaying an identity enqueues one job; changing a field enqueues another", async () => {
+  const prisma = await isolatedDatabase();
+  await prisma.run.create({
+    data: {
+      id: "identity-run",
+      feedId: "/vorgang",
+      sourceKind: "dip_endpoint",
+      inputHash: "h",
+      status: "running",
+    },
+  });
+  const enqueue = (spec: Parameters<typeof enqueueJob>[1]) =>
+    prisma.$transaction((tx) => enqueueJob(tx, spec));
+
+  const record = {
+    runId: "identity-run",
+    itemIndex: 0,
+    electoralTerm: 21,
+    apiId: "123",
+    versionNo: 1,
+  };
+  await enqueue(proceedingEmbeddingIdentity(record));
+  await enqueue(proceedingEmbeddingIdentity(record));
+  assert.equal(await prisma.processingJob.count(), 1);
+  await enqueue(proceedingEmbeddingIdentity({ ...record, versionNo: 2 }));
+  assert.equal(await prisma.processingJob.count(), 2);
+
+  const reference = {
+    runId: "identity-run",
+    itemIndex: null,
+    electoralTerm: 21,
+    stepApiId: "step-1",
+    referenceId: "ref-1",
+    pdfUrl: "https://example.org/a.pdf",
+    documentDate: new Date("2026-10-09T00:00:00Z"),
+  };
+  await enqueue(documentProcessingIdentity(reference));
+  await enqueue(documentProcessingIdentity(reference));
+  await enqueue(
+    documentProcessingIdentity({
+      ...reference,
+      pdfUrl: "https://example.org/b.pdf",
+    }),
+  );
+  assert.equal(
+    await prisma.processingJob.count({
+      where: { operation: PROCESS_DOCUMENT },
+    }),
+    2,
+  );
+
+  const chunk = {
+    runId: "identity-run",
+    itemIndex: null,
+    electoralTerm: 21,
+    referenceId: "ref-1",
+    variantNo: 2,
+    pageNo: 1,
+    chunkNo: 3,
+  };
+  await enqueue(documentEmbeddingIdentity(chunk));
+  await enqueue(documentEmbeddingIdentity(chunk));
+  await enqueue(documentEmbeddingIdentity({ ...chunk, chunkNo: 4 }));
+  assert.equal(
+    await prisma.processingJob.count({ where: { operation: EMBED_DOCUMENT } }),
+    2,
   );
   await prisma.$disconnect();
 });

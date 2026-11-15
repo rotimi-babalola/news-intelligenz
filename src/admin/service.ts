@@ -1,5 +1,4 @@
-import { randomUUID } from "node:crypto";
-import type { Prisma, ProcessingJob } from "../generated/prisma/client";
+import type { ProcessingJob } from "../generated/prisma/client";
 import { fetchArticleHtml } from "../extract";
 import {
   drainJobs,
@@ -11,11 +10,13 @@ import { processNextDocument } from "../dip/documents/process";
 import { embeddingConfig } from "../dip/search/embedding";
 import { processNextDipEmbedding } from "../dip/jobs/embedding";
 import { PROCESS_DOCUMENT } from "../dip/constants";
+import { extractionJobSpec } from "../import/publication";
 import { database } from "../db";
 import {
-  dedupeKey,
+  enqueueJob,
   jobCounts,
   listJobs,
+  manualDedupeKey,
   retryExhausted,
   type SourceKind,
 } from "../jobs/index";
@@ -229,22 +230,26 @@ export async function reextractPublication(
     const candidate = await prisma.candidate.findFirst({
       where: { runId: run.id, publicationId },
     });
-    const jobId = randomUUID();
-    await prisma.processingJob.create({
-      data: {
-        id: jobId,
-        dedupeKey: `${dedupeKey(run.id, candidate?.itemIndex ?? null, EXTRACT_TEXT)}:manual:${jobId}`,
-        sourceKind: run.sourceKind,
-        sourceKey: run.feedId,
-        sourceScope: (run.sourceScope ?? undefined) as
-          Prisma.InputJsonValue | undefined,
+    const job = await enqueueJob(
+      prisma,
+      extractionJobSpec({
+        source: {
+          kind: run.sourceKind,
+          key: run.feedId,
+          scope: run.sourceScope ?? undefined,
+        },
         runId: run.id,
         itemIndex: candidate?.itemIndex ?? null,
-        operation: EXTRACT_TEXT,
-        payload: { publicationId, publisher: publication.publisher },
-      },
-    });
-    await drainJobs(prisma, "admin-reextract", { jobId }, fetchArticle);
+        publicationId,
+        publisher: publication.publisher,
+        dedupeKey: manualDedupeKey(
+          run.id,
+          candidate?.itemIndex ?? null,
+          EXTRACT_TEXT,
+        ),
+      }),
+    );
+    await drainJobs(prisma, "admin-reextract", { jobId: job.id }, fetchArticle);
     await finalizeRunIfSettled(prisma, run.id, run.error);
   } catch (error) {
     console.error(

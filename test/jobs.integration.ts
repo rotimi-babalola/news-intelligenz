@@ -45,15 +45,20 @@ const xml = (ids: string[]) =>
 
 async function isolatedDb() {
   const baseUrl = process.env.DATABASE_URL!;
+  const directUrl = process.env.DATABASE_URL_UNPOOLED || baseUrl;
   const admin = new pg.Pool({ connectionString: baseUrl });
   const schema = `test_${randomUUID().replaceAll("-", "")}`;
   await admin.query(`CREATE SCHEMA ${schema}`);
-  const url = `${baseUrl}?schema=${schema}`;
-  process.env.DATABASE_URL = url;
-  // Prisma migrate prefers DATABASE_URL_UNPOOLED when set (prisma.config.ts).
-  process.env.DATABASE_URL_UNPOOLED = url;
+  const url = new URL(baseUrl);
+  url.searchParams.set("schema", schema);
+  const schemaUrl = url.toString();
+  // Neon's pooler cannot run schema migrations; the CLI uses the direct host.
+  const direct = new URL(directUrl);
+  direct.searchParams.set("schema", schema);
+  process.env.DATABASE_URL = schemaUrl;
+  process.env.DATABASE_URL_UNPOOLED = direct.toString();
   await promisify(execFile)("node_modules/.bin/prisma", ["migrate", "deploy"], {
-    env: { ...process.env, DATABASE_URL: url },
+    env: { ...process.env, DATABASE_URL: schemaUrl },
     cwd: root,
   });
   const { database } = await import("../src/db.js");
@@ -61,6 +66,7 @@ async function isolatedDb() {
     prisma: database(),
     done: async () => {
       process.env.DATABASE_URL = baseUrl;
+      process.env.DATABASE_URL_UNPOOLED = directUrl;
       await admin.query(`DROP SCHEMA ${schema} CASCADE`);
       await admin.end();
     },

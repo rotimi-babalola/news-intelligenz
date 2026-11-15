@@ -14,6 +14,7 @@ import {
 } from "../search/embedding";
 import { EMBED_DOCUMENT, EMBED_PROCEEDING, EMBED_STEP } from "../constants";
 import { enqueueDocumentEmbeddings } from "./queue";
+import { documentEmbeddingPayload, recordEmbeddingPayload } from "./identity";
 
 type Embed = (text: string) => Promise<number[]>;
 
@@ -57,23 +58,7 @@ async function embedJob(
 ) {
   const sourceOperation = job.operation;
   if (sourceOperation === EMBED_DOCUMENT) {
-    const payload = job.payload as {
-      referenceId?: unknown;
-      variantNo?: unknown;
-      pageNo?: unknown;
-      chunkNo?: unknown;
-      model?: unknown;
-    };
-    if (
-      typeof payload.referenceId !== "string" ||
-      typeof payload.variantNo !== "number" ||
-      !Number.isInteger(payload.variantNo) ||
-      payload.variantNo < 1 ||
-      typeof payload.pageNo !== "number" ||
-      !Number.isInteger(payload.pageNo) ||
-      payload.pageNo < 1
-    )
-      throw new Error("Document embedding job has an invalid variant page");
+    const payload = documentEmbeddingPayload.parse(job.payload);
     const content = await findDocumentContent(
       prisma,
       payload.referenceId,
@@ -98,16 +83,10 @@ async function embedJob(
         referenceId: payload.referenceId,
         variantNo: payload.variantNo,
         chunks: chunks.filter((item) => item.pageNo === page.pageNo),
-        model: typeof payload.model === "string" ? payload.model : undefined,
+        model: payload.model,
         priority: job.priority,
       });
     } else {
-      if (
-        typeof payload.chunkNo !== "number" ||
-        !Number.isInteger(payload.chunkNo) ||
-        payload.chunkNo < 1
-      )
-        throw new Error("Document embedding job has an invalid chunk");
       const chunk = await prisma.documentChunk.findUnique({
         where: {
           contentId_pageNo_chunkNo: {
@@ -137,15 +116,8 @@ async function embedJob(
   }
   if (sourceOperation !== EMBED_PROCEEDING && sourceOperation !== EMBED_STEP)
     throw new Error("Unexpected DIP embedding operation");
-  const payload = job.payload as { apiId?: unknown; versionNo?: unknown };
+  const payload = recordEmbeddingPayload.parse(job.payload);
   const versionNo = payload.versionNo;
-  if (
-    typeof payload.apiId !== "string" ||
-    typeof versionNo !== "number" ||
-    !Number.isInteger(versionNo) ||
-    versionNo < 1
-  )
-    throw new Error("DIP embedding job has an invalid source version");
   const version =
     sourceOperation === EMBED_PROCEEDING
       ? await findProceedingVersion(prisma, payload.apiId, versionNo)
