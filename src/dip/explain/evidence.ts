@@ -1,5 +1,6 @@
 import type { PrismaClient } from "../../generated/prisma/client";
 import { findDocumentChunk, latestDocumentContent } from "../db/index";
+import { isCitedDocumentVariant } from "../documents/citation";
 import { getProceeding } from "../proceedings/timeline";
 import type { BriefLanguage, Dossier, Evidence, TimelineStep } from "./types";
 
@@ -76,8 +77,10 @@ export async function collectEvidence(
     );
     if (
       !variant ||
-      variant.variantNo !== hit.versionNo ||
-      variant.requestedUrl !== hit.document.pdfUrl
+      !isCitedDocumentVariant(variant, {
+        variantNo: hit.versionNo,
+        pdfUrl: hit.document.pdfUrl,
+      })
     )
       continue;
     const storedChunk = await findDocumentChunk(

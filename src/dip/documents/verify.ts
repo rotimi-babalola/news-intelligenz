@@ -2,14 +2,9 @@ import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { join } from "node:path";
 import type { PrismaClient } from "../../generated/prisma/client";
-import { classifyDocumentReference } from "./excerpts";
+import { loadDocumentCitation, STALE_REVISION_REASON } from "./citation";
 import { getDocumentPdf } from "./object-store";
-import {
-  findDocumentPage,
-  findDocumentReferenceById,
-  latestDocumentContent,
-  listDocumentSections,
-} from "../db/index";
+import { findDocumentPage, listDocumentSections } from "../db/index";
 
 type PdfPage = {
   page: number;
@@ -105,43 +100,44 @@ export async function verifyDocumentSection(
   readPdf = getDocumentPdf,
   inspectPdf = inspectDocumentPdf,
 ) {
-  const reference = await findDocumentReferenceById(prisma, referenceId);
-  if (!reference)
+  const citation = await loadDocumentCitation(prisma, referenceId);
+  if (citation.status === "unknown")
     return {
       status: "unavailable",
       referenceId,
       reason: "Document reference not found",
     };
-  const eligibility = classifyDocumentReference({
-    institution: reference.step.institution,
-    documentType: reference.step.documentType,
-    documentNumber: reference.documentNumber,
-    pdfUrl: reference.pdfUrl,
-    metadata: reference.metadata,
-  });
+  const reference = citation.reference;
   const source = {
     referenceId,
     pdfUrl: reference.pdfUrl,
     documentNumber: reference.documentNumber,
-    ...(eligibility.status === "excerpt-eligible"
-      ? { attribution: eligibility.source, document: eligibility.document }
+    ...(citation.eligibility.status === "excerpt-eligible"
+      ? {
+          attribution: citation.eligibility.source,
+          document: citation.eligibility.document,
+        }
       : {}),
   };
-  if (eligibility.status === "metadata-only")
-    return { status: "metadata-only", source, eligibility };
-  const variant = await latestDocumentContent(prisma, referenceId);
-  if (!variant)
+  if (citation.status === "metadata-only")
+    return {
+      status: "metadata-only",
+      source,
+      eligibility: citation.eligibility,
+    };
+  if (citation.status === "missing")
     return {
       status: "unavailable",
       source,
       reason: "No processed PDF variant",
     };
-  if (variant.requestedUrl !== reference.pdfUrl)
+  if (citation.status === "stale")
     return {
       status: "unavailable",
       source,
-      reason: "Document revision has not been processed",
+      reason: STALE_REVISION_REASON,
     };
+  const variant = citation.variant;
   const identity = {
     variantNo: variant.variantNo,
     byteHash: variant.byteHash,

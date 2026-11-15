@@ -6,6 +6,7 @@ import {
   latestDocumentContent,
   saveProceedingBrief,
 } from "../db/index";
+import { isCurrentDocumentVariant } from "../documents/citation";
 import { getProceeding } from "../proceedings/timeline";
 import { buildBrief } from "./brief";
 import {
@@ -102,7 +103,7 @@ export async function generateProceedingBrief(
     if (
       !variant ||
       variant.byteHash !== byteHash ||
-      variant.requestedUrl !== pdfUrl
+      !isCurrentDocumentVariant(variant.requestedUrl, pdfUrl)
     )
       throw new Error("Document changed during generation; search again");
   }

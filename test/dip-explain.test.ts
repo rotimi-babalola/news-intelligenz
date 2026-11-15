@@ -112,6 +112,7 @@ function store(noSteps = false, stepLabel = "First reading") {
   let proceedingVersion = 1;
   let variantNo = 1;
   let byteHash = "hash-one";
+  let requestedUrl = pdfUrl;
   const briefs = new Map<string, unknown>();
   const prisma = {
     proceeding: {
@@ -163,7 +164,7 @@ function store(noSteps = false, stepLabel = "First reading") {
         id: "content-one",
         variantNo,
         byteHash,
-        requestedUrl: pdfUrl,
+        requestedUrl,
       }),
     },
     documentChunk: {
@@ -192,6 +193,9 @@ function store(noSteps = false, stepLabel = "First reading") {
     setVariant: (number: number, hash: string) => {
       variantNo = number;
       byteHash = hash;
+    },
+    setRequestedUrl: (value: string) => {
+      requestedUrl = value;
     },
   };
 }
@@ -494,6 +498,51 @@ test("ineligible document passages cannot support document claims", async () => 
   );
   assert.deepEqual(brief.claims.documents, []);
   assert.equal(brief.answerConfidence, "partial");
+});
+
+test("a stale revision cannot be cited, and a reverted variant can again", async () => {
+  const { prisma, setVariant, setRequestedUrl } = store();
+  const current = await generateTestBrief(
+    prisma,
+    "What does it say?",
+    "en",
+    dossier,
+    async () => answer("en"),
+  );
+  assert.equal(current.claims.documents[0]?.citation.referenceId, "3");
+
+  // The reference moved to a revision that has not been processed.
+  setRequestedUrl(`${pdfUrl}?revised`);
+  const stale = await generateTestBrief(
+    prisma,
+    "What does the stale revision say?",
+    "en",
+    dossier,
+    async () => answer("en"),
+  );
+  assert.deepEqual(stale.claims.documents, []);
+
+  // Reverting to the cited variant makes the same hit citable again.
+  setRequestedUrl(pdfUrl);
+  const reverted = await generateTestBrief(
+    prisma,
+    "What does the reverted document say?",
+    "en",
+    dossier,
+    async () => answer("en"),
+  );
+  assert.equal(reverted.claims.documents[0]?.citation.referenceId, "3");
+
+  // A superseded variant is no longer the cited one, even at the same url.
+  setVariant(2, "hash-two");
+  const superseded = await generateTestBrief(
+    prisma,
+    "What does the superseded variant say?",
+    "en",
+    dossier,
+    async () => answer("en"),
+  );
+  assert.deepEqual(superseded.claims.documents, []);
 });
 
 test("cached briefs regenerate for each language and changed PDF evidence", async () => {

@@ -6,6 +6,10 @@ import {
 } from "./embedding";
 import { QUERY_INSTRUCTION } from "../constants";
 import { searchDipEmbeddings, type Client } from "../db/index";
+import {
+  isCurrentDocumentVariant,
+  STALE_REVISION_REASON,
+} from "../documents/citation";
 import { readDocumentExcerpt } from "../documents/excerpts";
 import { toSection } from "../documents/sections";
 
@@ -40,23 +44,22 @@ export async function searchDip(
       row.entity === "vorgang" ? "/vorgang" : "/vorgangsposition";
     if (row.entity === "dokument") {
       const stepApiId = row.stepId ?? "";
-      const excerpt =
-        row.requestedUrl !== row.pdfUrl
-          ? {
-              status: "metadata-only" as const,
-              reason: "Document revision has not been processed",
-            }
-          : readDocumentExcerpt(
-              {
-                institution: row.institution,
-                documentType: row.documentType,
-                documentNumber: row.documentNumber,
-                pdfUrl: row.pdfUrl,
-                metadata: row.referenceMetadata,
-              },
-              row.pageNo,
-              row.passage,
-            );
+      const excerpt = !isCurrentDocumentVariant(row.requestedUrl, row.pdfUrl)
+        ? {
+            status: "metadata-only" as const,
+            reason: STALE_REVISION_REASON,
+          }
+        : readDocumentExcerpt(
+            {
+              institution: row.institution,
+              documentType: row.documentType,
+              documentNumber: row.documentNumber,
+              pdfUrl: row.pdfUrl,
+              metadata: row.referenceMetadata,
+            },
+            row.pageNo,
+            row.passage,
+          );
       return {
         entity: row.entity,
         apiId: row.apiId,
