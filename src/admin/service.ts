@@ -18,7 +18,7 @@ import {
   listJobs,
   retryExhausted,
   type SourceKind,
-} from "../jobs";
+} from "../jobs/index";
 import { listCandidatesByRun } from "./candidate.repository";
 import {
   listDipCandidates,

@@ -10,7 +10,7 @@ import {
   drainJobs,
   reviewSearchCandidate,
 } from "../src/import/service.js";
-import { retryExhausted } from "../src/jobs.js";
+import { retryExhausted } from "../src/jobs/index.js";
 import type { SearchResult } from "../src/search.js";
 
 const root = process.cwd();

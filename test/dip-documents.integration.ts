@@ -16,7 +16,7 @@ import {
 } from "../src/dip/constants.js";
 import { enqueueDocumentEmbeddings } from "../src/dip/jobs/queue.js";
 import { collectSteps } from "../src/dip/collection/steps.js";
-import { claimNextJob, requeueStaleClaims } from "../src/jobs.js";
+import { claimNextJob, requeueStaleClaims } from "../src/jobs/index.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 
 const NOW = new Date("2026-10-20T12:00:00+02:00");

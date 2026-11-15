@@ -27,6 +27,21 @@ Use the single-context layout at the repo root. See `docs/agents/domain.md`.
 
 Each file owns one concern. Split a file when it grows a second responsibility instead of adding a shared `util`. A folder's `index.ts` is only its public entry point, never a place for new logic.
 
+### `src/jobs` module layout
+
+`src/jobs` is the shared job queue, organised by concern. Do not add new flat files at its root; put a file in the existing folder that owns the behaviour, and import through `jobs/index`.
+
+- `refs.ts` — source kinds and the `feedSource`, `searchSource` and `dipSource` constructors.
+- `policy.ts` — attempt and lease limits, backoff, `Retry-After` parsing, and `RateLimitedError`.
+- `enqueue.ts` — job identity (`dedupeKey`) and `enqueueJob`.
+- `claim.ts` — the atomic claim, `ClaimedJob`, claim filters, and expired-claim exhaustion.
+- `settle.ts` — `completeJob` and `failJob`, including retry, backoff and error capture.
+- `recovery.ts` — restart recovery (`requeueStaleClaims`) and deliberate `retryExhausted`.
+- `runner.ts` — the claimed-job loop, `JobOutcome`, and `runJobs`/`runNextJob`.
+- `queries.ts` — job listings and counts.
+
+Every worker goes through the runner: it supplies a filter and a handler, and never calls `completeJob` or `failJob` itself.
+
 ### Parliamentary research
 
 For questions about DIP proceedings, steps, or documents, check for the `news-intelligenz` MCP server and use its `get_proceeding`, `search_dip_evidence`, or `get_document_pages` tool first, as appropriate. See the MCP setup in `README.md`. If the server is unavailable, the record is missing, or fresh information is needed, consult official DIP sources and say explicitly why the MCP server could not answer.

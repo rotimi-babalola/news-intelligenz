@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { ensureDocumentChunks } from "./chunks";
 import { resolveDocumentCitation } from "./citation";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
-import { runNextJob, type ClaimedJob } from "../../jobs";
+import { runNextJob, type ClaimedJob } from "../../jobs/index";
 import { PROCESS_DOCUMENT } from "../constants";
 import {
   documentJobKey,

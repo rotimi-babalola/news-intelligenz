@@ -21,7 +21,7 @@ The DIP checkpoint is _unseen_ (`updatedThrough = null`) or _through T_. A succe
 
 ## Durable jobs and attempts
 
-`ProcessingJob.status` is `pending | claimed | retrying | succeeded | exhausted`. A unique dedupe key prevents duplicate handoff; `attempts` counts claims, and `maxAttempts` is the claim budget (`src/jobs.ts`). A `JobAttempt` row belongs to each committed claim. `claimedBy` plus `attempts` identifies the current owner.
+`ProcessingJob.status` is `pending | claimed | retrying | succeeded | exhausted`. A unique dedupe key prevents duplicate handoff; `attempts` counts claims, and `maxAttempts` is the claim budget (`src/jobs/`). A `JobAttempt` row belongs to each committed claim. `claimedBy` plus `attempts` identifies the current owner.
 
 | From                                 | Event                                        | To                  | Invariant                                                                    |
 | ------------------------------------ | -------------------------------------------- | ------------------- | ---------------------------------------------------------------------------- |
@@ -38,7 +38,7 @@ Completion or failure from an old owner is a no-op. Workers report `stale` (or o
 
 ### Confirmed queue issues, grouped as one fix
 
-**P1 — lease ownership and retry budget.** Before this change, `completeJob` and `failJob` updated only by job ID. Sequence: worker A claims attempt 1; its lease expires; B claims attempt 2; A completes or fails; A overwrites B's `claimed` state and may let the run settle while B is processing. The claim update and attempt insert were also separate commits, so a crash between them left a claimed job with no attempt log. Finally, a stale claim at `attempts == maxAttempts` could be reclaimed as attempt `maxAttempts + 1`. These paths are visible in the former `src/jobs.ts` claim/complete/fail flow and are reproduced by the forced lease handoff and final-budget cases in `test/jobs.integration.ts`. The shared queue now commits claim plus log together, checks owner and attempt on settlement, and exhausts expired final attempts. News, PDF, and embedding callers handle lost ownership.
+**P1 — lease ownership and retry budget.** Before this change, `completeJob` and `failJob` updated only by job ID. Sequence: worker A claims attempt 1; its lease expires; B claims attempt 2; A completes or fails; A overwrites B's `claimed` state and may let the run settle while B is processing. The claim update and attempt insert were also separate commits, so a crash between them left a claimed job with no attempt log. Finally, a stale claim at `attempts == maxAttempts` could be reclaimed as attempt `maxAttempts + 1`. These paths are visible in the former `src/jobs/` claim/complete/fail flow and are reproduced by the forced lease handoff and final-budget cases in `test/jobs.integration.ts`. The shared queue now commits claim plus log together, checks owner and attempt on settlement, and exhausts expired final attempts. News, PDF, and embedding callers handle lost ownership.
 
 ## Candidate and relevance decisions
 

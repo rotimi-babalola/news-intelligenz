@@ -1,5 +1,5 @@
 import type { PrismaClient } from "../../generated/prisma/client";
-import { runNextJob, type ClaimedJob } from "../../jobs";
+import { runNextJob, type ClaimedJob } from "../../jobs/index";
 import { ensureDocumentChunks } from "../documents/chunks";
 import {
   findDocumentContent,

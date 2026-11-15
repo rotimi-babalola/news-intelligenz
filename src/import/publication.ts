@@ -5,7 +5,7 @@ import {
   normalizeIdentifierValue,
   normalizePublisher,
 } from "../identity";
-import { enqueueJob } from "../jobs";
+import { enqueueJob } from "../jobs/index";
 import type {
   PublicationResolution,
   PublicationResolutionInput,

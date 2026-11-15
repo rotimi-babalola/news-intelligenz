@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { parseRetryAfterMs, RateLimitedError } from "../../jobs";
+import { parseRetryAfterMs, RateLimitedError } from "../../jobs/index";
 import {
   DOCUMENT_INSTRUCTION,
   EMBEDDING_DIMENSIONS,

@@ -22,7 +22,7 @@ import {
   retryExhausted,
   runJobs,
   searchSource,
-} from "../src/jobs.js";
+} from "../src/jobs/index.js";
 import type { Feed } from "../src/sources.js";
 
 const root = process.cwd();

@@ -5,7 +5,7 @@ import {
   embeddingConfig,
   embeddingInput,
 } from "../src/dip/search/embedding.js";
-import { RateLimitedError } from "../src/jobs.js";
+import { RateLimitedError } from "../src/jobs/index.js";
 
 test("OpenAI-compatible provider uses configured model and 1024 dimensions", async () => {
   const previous = { ...process.env };

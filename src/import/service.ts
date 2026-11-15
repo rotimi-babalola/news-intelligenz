@@ -21,7 +21,7 @@ import {
   runJobs,
   searchSource,
   type ClaimedJob,
-} from "../jobs";
+} from "../jobs/index";
 import {
   configuredFeed,
   fetchFeedXml,

@@ -6,7 +6,7 @@ import {
   parseRetryAfterMs,
   RateLimitedError,
   searchSource,
-} from "../src/jobs.js";
+} from "../src/jobs/index.js";
 
 test("backoff grows exponentially within the hourly cap", () => {
   assert.equal(backoffMs(1), 30_000);

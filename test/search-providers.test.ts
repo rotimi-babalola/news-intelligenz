@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { RateLimitedError } from "../src/jobs.js";
+import { RateLimitedError } from "../src/jobs/index.js";
 import {
   fetchExaResults,
   fetchTavilyResults,
