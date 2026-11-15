@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { database } from "../../../src/db";
-import { searchProceedingDossiers } from "../../../src/dip/dossiers";
+import { searchProceedingDossiers } from "../../../src/dip/search/dossiers";
 
 const bodySchema = z.object({
   query: z.string().trim().min(1).max(1000),

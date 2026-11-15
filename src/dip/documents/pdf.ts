@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { join } from "node:path";
-import { MAX_REDIRECTS, isBlockedDestination } from "../extract";
+import { MAX_REDIRECTS, isBlockedDestination } from "../../extract";
 
 // Fetched PDF bytes and their extracted page text. Fetching and extraction are
 // independent of DIP collection: this module never touches a checkpoint and

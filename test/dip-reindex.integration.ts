@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { retryJob } from "../src/admin/service.js";
-import { processNextDipEmbedding } from "../src/dip/embedding.js";
-import { enqueueDipReindex } from "../src/dip/reindex.js";
-import { collectVorgang } from "../src/dip/vorgang.js";
+import { processNextDipEmbedding } from "../src/dip/jobs/embedding.js";
+import { enqueueDipReindex } from "../src/dip/jobs/reindex.js";
+import { collectVorgang } from "../src/dip/collection/proceedings.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 
 test("reindex queues each model once and keeps both vector spaces separate", async () => {

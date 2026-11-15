@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
-import type { PrismaClient } from "../generated/prisma/client";
+import type { PrismaClient } from "../../generated/prisma/client";
 import {
   EMBED_PROCEEDING,
   EMBED_STEP,
   enqueueDocumentEmbeddings,
   enqueueRecordReindex,
-} from "./jobs";
-import { ensureDocumentChunks } from "./chunks";
-import { ensureDocumentSections } from "./sections";
+} from "./queue";
+import { ensureDocumentChunks } from "../documents/chunks";
+import { ensureDocumentSections } from "../documents/sections";
 
 // A model gets its own jobs, while source versions and extracted pages stay shared.
 export async function enqueueDipReindex(

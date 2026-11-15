@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PrismaClient } from "../src/generated/prisma/client.js";
-import { getDocumentPages } from "../src/dip/document-pages.js";
+import { getDocumentPages } from "../src/dip/documents/pages.js";
 import { proceedingHandler } from "../src/mcp/proceeding.js";
 
 const pdfUrl = "https://dserver.bundestag.de/btd/21/010/2110010.pdf";

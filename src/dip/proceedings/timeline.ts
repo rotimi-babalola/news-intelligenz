@@ -2,7 +2,7 @@ import {
   readProceedingTimeline,
   readProceedingTimelines,
   type Client,
-} from "./repository";
+} from "../db/index";
 
 function optionalText(metadata: unknown, key: string): string | null {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata))

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { processNextDocument } from "../src/dip/documents.js";
-import { collectSteps } from "../src/dip/steps.js";
+import { processNextDocument } from "../src/dip/documents/process.js";
+import { collectSteps } from "../src/dip/collection/steps.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 
 const NOW = new Date("2026-10-20T12:00:00+02:00");

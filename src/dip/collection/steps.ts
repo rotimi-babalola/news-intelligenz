@@ -1,5 +1,5 @@
-import type { Prisma, PrismaClient } from "../generated/prisma/client";
-import { RateLimitedError, parseRetryAfterMs } from "../jobs";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client";
+import { RateLimitedError, parseRetryAfterMs } from "../../jobs";
 import {
   findDocumentReference,
   findProceeding,
@@ -7,22 +7,32 @@ import {
   upsertDipCandidate,
   upsertDocumentReference,
   upsertParliamentaryDiscovery,
-} from "./repository";
-import { enqueueDocumentProcessing } from "./jobs";
+} from "../db/index";
+import { enqueueDocumentProcessing } from "../jobs/queue";
 import {
   PAGE_WRITE_BATCH_SIZE,
   TerminalPageError,
   collectDipPages,
-} from "./collect";
+} from "./pages";
 import type {
   CollectStepsOptions,
   CollectStepsResult,
   StoredDoc,
   StoredStep,
 } from "./types";
-import { isHotDocument, toStored, toStoredStep } from "./util";
-import { storeProceedingPage, VORGANG_ENDPOINT } from "./vorgang";
+import { toStored, toStoredStep } from "./normalize";
+import { storeProceedingPage, VORGANG_ENDPOINT } from "./proceedings";
 import { captureStepVersion } from "./versions";
+
+// PDF background set: references whose document date falls in the previous 14
+// days. Older references wait for an on-demand request; the document date is
+// never a sync filter, only this queue selection.
+const HOT_DOCUMENT_MS = 14 * 24 * 60 * 60 * 1000;
+
+function isHotDocument(documentDate: Date, now: Date) {
+  const ageMs = now.getTime() - documentDate.getTime();
+  return ageMs >= 0 && ageMs <= HOT_DOCUMENT_MS;
+}
 
 export type {
   CollectStepsOptions,

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import {
   classifyDocumentReference,
   readDocumentExcerpt,
-} from "../src/dip/excerpts.js";
+} from "../src/dip/documents/excerpts.js";
 
 const bt = {
   institution: "BT",

@@ -1,9 +1,9 @@
-import type { PrismaClient } from "../generated/prisma/client";
-import { findDipCheckpoint } from "./repository";
+import type { PrismaClient } from "../../generated/prisma/client";
+import { findDipCheckpoint } from "../db/index";
 import { collectSteps } from "./steps";
 import type { FetchStepPage, FetchVorgang } from "./types";
-import { collectVorgang } from "./vorgang";
-import type { FetchVorgangPage } from "./vorgang";
+import { collectVorgang } from "./proceedings";
+import type { FetchVorgangPage } from "./proceedings";
 
 // Fixed six-hour overlap from successful progress. An overlap window does not
 // guarantee every delayed update is captured; it is a recovery policy.

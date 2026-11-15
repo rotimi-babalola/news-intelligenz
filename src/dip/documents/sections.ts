@@ -1,9 +1,9 @@
-import type { Client } from "./repository";
+import type { Client } from "../db/index";
 import {
   createDocumentSections,
   listDocumentPages,
   listDocumentSections,
-} from "./repository";
+} from "../db/index";
 
 export type DocumentSectionInput = { pageNo: number; text: string };
 

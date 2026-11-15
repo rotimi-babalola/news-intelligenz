@@ -1,5 +1,5 @@
-import type { Prisma, PrismaClient } from "../generated/prisma/client";
-import { dipSource, enqueueJob, retryExhausted } from "../jobs";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client";
+import { dipSource, enqueueJob, retryExhausted } from "../../jobs";
 
 // Downstream DIP work submits as durable jobs at collection time and runs
 // independently: model outages or PDF failures never hold a collection

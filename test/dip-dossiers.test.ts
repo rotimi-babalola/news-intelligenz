@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addDocumentEvidence, buildDossiers } from "../src/dip/dossiers.js";
-import type { ProceedingTimeline } from "../src/dip/proceeding.js";
-import type { DipHit } from "../src/dip/search.js";
+import {
+  addDocumentEvidence,
+  buildDossiers,
+} from "../src/dip/search/dossiers.js";
+import type { ProceedingTimeline } from "../src/dip/proceedings/timeline.js";
+import type { DipHit } from "../src/dip/search/search.js";
 
 type Hit = DipHit;
 type Timeline = ProceedingTimeline;

@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { database } from "../../../src/db";
-import { parseBackfillWindow } from "../../../src/dip/schedule";
-import { liveStepsFetcher } from "../../../src/dip/steps";
-import { syncDipTerms } from "../../../src/dip/sync";
+import { parseBackfillWindow } from "../../../src/dip/collection/schedule";
+import { liveStepsFetcher } from "../../../src/dip/collection/steps";
+import { syncDipTerms } from "../../../src/dip/collection/sync";
 import {
   LOCAL_PROCEEDING_CAP,
   liveVorgangFetcher,
-} from "../../../src/dip/vorgang";
+} from "../../../src/dip/collection/proceedings";
 import { runIdSchema } from "../../../src/validation";
 
 const isoDate = z

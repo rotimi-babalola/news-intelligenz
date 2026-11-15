@@ -1,5 +1,5 @@
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-import type { PrismaClient, Prisma } from "../generated/prisma/client";
+import type { PrismaClient, Prisma } from "../../generated/prisma/client";
 
 // shortcut: character bounds are not token bounds; use the model tokenizer if a provider rejects these passages.
 const splitter = new RecursiveCharacterTextSplitter({

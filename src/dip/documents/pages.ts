@@ -1,11 +1,11 @@
-import type { PrismaClient } from "../generated/prisma/client";
+import type { PrismaClient } from "../../generated/prisma/client";
 import { classifyDocumentReference } from "./excerpts";
 import {
   findDocumentReferenceById,
   latestDocumentContent,
   listBoundedDocumentPages,
   listDocumentSections,
-} from "./repository";
+} from "../db/index";
 import { toSection } from "./sections";
 
 const MAX_PAGE_TEXT = 2000;

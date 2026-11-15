@@ -4,7 +4,7 @@ import {
   embedText,
   embeddingConfig,
   embeddingInput,
-} from "../src/dip/embedding.js";
+} from "../src/dip/search/embedding.js";
 import { RateLimitedError } from "../src/jobs.js";
 
 test("OpenAI-compatible provider uses configured model and 1024 dimensions", async () => {

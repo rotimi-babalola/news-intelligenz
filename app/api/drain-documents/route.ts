@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { database } from "../../../src/db";
-import { processNextDocument } from "../../../src/dip/documents";
+import { processNextDocument } from "../../../src/dip/documents/process";
 
 export async function POST() {
   const prisma = database();

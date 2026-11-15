@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { database } from "../../../../src/db";
-import { requestDocument } from "../../../../src/dip/documents";
+import { requestDocument } from "../../../../src/dip/documents/process";
 
 // On-demand document request: metadata and the original pdf_url return at once.
 // An unprocessed document is queued for PDF processing at high priority.

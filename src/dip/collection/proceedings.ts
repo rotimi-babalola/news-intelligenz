@@ -1,23 +1,23 @@
-import type { Prisma, PrismaClient } from "../generated/prisma/client";
-import { RateLimitedError, parseRetryAfterMs } from "../jobs";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client";
+import { RateLimitedError, parseRetryAfterMs } from "../../jobs";
 import {
   countProceedingsByTerm,
   findProceeding,
   upsertDipCandidate,
   upsertParliamentaryDiscovery,
-} from "./repository";
+} from "../db/index";
 import {
   PAGE_WRITE_BATCH_SIZE,
   TerminalPageError,
   collectDipPages,
-} from "./collect";
+} from "./pages";
 import type {
   CollectVorgangOptions,
   CollectVorgangResult,
   FetchVorgangPage,
   StoredDoc,
 } from "./types";
-import { toStored } from "./util";
+import { toStored } from "./normalize";
 import { captureProceedingVersion } from "./versions";
 
 export type {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
-import { verifyDocumentSection } from "../src/dip/section-verification.js";
+import { verifyDocumentSection } from "../src/dip/documents/verify.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 
 test("section verification reads the latest eligible variant and does not create jobs", async () => {

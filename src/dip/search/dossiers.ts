@@ -1,6 +1,9 @@
-import type { PrismaClient } from "../generated/prisma/client";
+import type { PrismaClient } from "../../generated/prisma/client";
 import { embedText } from "./embedding";
-import { getProceedings, type ProceedingTimeline } from "./proceeding";
+import {
+  getProceedings,
+  type ProceedingTimeline,
+} from "../proceedings/timeline";
 import { searchDip, type DipHit } from "./search";
 
 type TimelineStep = ProceedingTimeline["steps"][number];

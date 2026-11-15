@@ -1,14 +1,14 @@
-import type { Prisma, PrismaClient } from "../generated/prisma/client";
-import { createRun, finalizeRun, findRun } from "../import/run.repository";
-import { RateLimitedError, backoffMs } from "../jobs";
-import { runIdSchema } from "../validation";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client";
+import { createRun, finalizeRun, findRun } from "../../import/run.repository";
+import { RateLimitedError, backoffMs } from "../../jobs";
+import { runIdSchema } from "../../validation";
 import {
   countProceedingsByTerm,
   findDipCheckpoint,
   upsertDipCheckpoint,
-} from "./repository";
+} from "../db/index";
 import type { FetchVorgangPage, PageParams } from "./types";
-import { scopeInputHash } from "./util";
+import { scopeInputHash } from "./normalize";
 
 // Terminal failures (bad request, unknown cursor semantics aside) never
 // retry: only transient network/5xx/429 errors repeat with bounded backoff.

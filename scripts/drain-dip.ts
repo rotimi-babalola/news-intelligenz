@@ -1,9 +1,7 @@
 import { database } from "../src/db.js";
-import { processNextDocument } from "../src/dip/documents.js";
-import {
-  embeddingCost,
-  processNextDipEmbedding,
-} from "../src/dip/embedding.js";
+import { processNextDocument } from "../src/dip/documents/process.js";
+import { embeddingCost } from "../src/dip/search/embedding.js";
+import { processNextDipEmbedding } from "../src/dip/jobs/embedding.js";
 
 function cap(name: string, fallback: number) {
   const value = Number(process.env[name] ?? fallback);

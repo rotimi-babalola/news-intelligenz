@@ -1,15 +1,15 @@
 import { createHash } from "node:crypto";
 import { ensureDocumentChunks } from "./chunks";
 import { classifyDocumentReference } from "./excerpts";
-import type { Prisma, PrismaClient } from "../generated/prisma/client";
-import { claimNextJob, completeJob, failJob } from "../jobs";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client";
+import { claimNextJob, completeJob, failJob } from "../../jobs";
 import {
   documentJobKey,
   enqueueDocumentEmbeddings,
   enqueueDocumentProcessing,
   PROCESS_DOCUMENT,
   raiseDocumentJob,
-} from "./jobs";
+} from "../jobs/queue";
 import { documentObjectKey, putDocumentPdf } from "./object-store";
 import {
   fetchDocumentPdf,
@@ -28,7 +28,7 @@ import {
   listDocumentPages,
   maxDocumentVariantNo,
   supersedeDocumentContents,
-} from "./repository";
+} from "../db/index";
 
 // PDF processing is downstream of DIP collection and never part of it: the
 // document job fetches bytes, caches a content variant, extracts page text and

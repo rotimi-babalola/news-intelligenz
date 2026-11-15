@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { join } from "node:path";
-import type { PrismaClient } from "../generated/prisma/client";
+import type { PrismaClient } from "../../generated/prisma/client";
 import { classifyDocumentReference } from "./excerpts";
 import { getDocumentPdf } from "./object-store";
 import {
@@ -9,7 +9,7 @@ import {
   findDocumentReferenceById,
   latestDocumentContent,
   listDocumentSections,
-} from "./repository";
+} from "../db/index";
 
 type PdfPage = {
   page: number;

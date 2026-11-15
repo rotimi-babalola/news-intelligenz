@@ -1,5 +1,5 @@
 import { database } from "../src/db.js";
-import { backfillDocumentObjects } from "../src/dip/backfill.js";
+import { backfillDocumentObjects } from "../src/dip/documents/backfill.js";
 
 // One-off repair for rows written before PDF bytes moved to object storage.
 // Re-running is safe: rows that already have a key are never selected.

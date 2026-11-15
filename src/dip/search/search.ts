@@ -5,9 +5,9 @@ import {
   embedText,
   QUERY_INSTRUCTION,
 } from "./embedding";
-import { searchDipEmbeddings, type Client } from "./repository";
-import { readDocumentExcerpt } from "./excerpts";
-import { toSection } from "./sections";
+import { searchDipEmbeddings, type Client } from "../db/index";
+import { readDocumentExcerpt } from "../documents/excerpts";
+import { toSection } from "../documents/sections";
 
 export { QUERY_INSTRUCTION };
 

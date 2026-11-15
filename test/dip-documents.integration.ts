@@ -2,16 +2,19 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { retryJob } from "../src/admin/service.js";
-import { backfillDocumentObjects } from "../src/dip/backfill.js";
-import { processNextDocument, requestDocument } from "../src/dip/documents.js";
-import { documentObjectKey } from "../src/dip/object-store.js";
-import { processNextDipEmbedding } from "../src/dip/embedding.js";
+import { backfillDocumentObjects } from "../src/dip/documents/backfill.js";
+import {
+  processNextDocument,
+  requestDocument,
+} from "../src/dip/documents/process.js";
+import { documentObjectKey } from "../src/dip/documents/object-store.js";
+import { processNextDipEmbedding } from "../src/dip/jobs/embedding.js";
 import {
   EMBED_DOCUMENT,
   enqueueDocumentEmbeddings,
   ON_DEMAND_PRIORITY,
-} from "../src/dip/jobs.js";
-import { collectSteps } from "../src/dip/steps.js";
+} from "../src/dip/jobs/queue.js";
+import { collectSteps } from "../src/dip/collection/steps.js";
 import { claimNextJob, requeueStaleClaims } from "../src/jobs.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 

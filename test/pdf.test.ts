@@ -7,7 +7,7 @@ import {
   MAX_PDF_BYTES,
   fetchDocumentPdf,
   pymupdfExtractor,
-} from "../src/dip/pdf.js";
+} from "../src/dip/documents/pdf.js";
 
 const publicResolve = async () => ["203.0.113.10"];
 

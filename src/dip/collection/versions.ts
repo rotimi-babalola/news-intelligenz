@@ -1,5 +1,8 @@
-import type { Prisma } from "../generated/prisma/client";
-import { enqueueProceedingEmbedding, enqueueStepEmbedding } from "./jobs";
+import type { Prisma } from "../../generated/prisma/client";
+import {
+  enqueueProceedingEmbedding,
+  enqueueStepEmbedding,
+} from "../jobs/queue";
 import {
   createProceeding,
   createProceedingVersion,
@@ -10,9 +13,19 @@ import {
   latestStepVersion,
   updateProceeding,
   updateStep,
-} from "./repository";
+} from "../db/index";
 import type { StoredDoc, StoredStep } from "./types";
-import { contentHash, isUniqueViolation, stepContentHash } from "./util";
+import { contentHash, stepContentHash } from "./normalize";
+
+// Prisma's unique-violation code, used to resolve concurrent version writes.
+export function isUniqueViolation(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: string }).code === "P2002"
+  );
+}
 
 type Outcome = { created: boolean; versionAdded: boolean; duplicate: boolean };
 

@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PrismaClient } from "../src/generated/prisma/client.js";
-import { addDocumentEvidence, buildDossiers } from "../src/dip/dossiers.js";
-import { generateProceedingBrief, validateAnswer } from "../src/dip/explain.js";
-import type { ProceedingTimeline } from "../src/dip/proceeding.js";
-import type { DipHit } from "../src/dip/search.js";
+import {
+  addDocumentEvidence,
+  buildDossiers,
+} from "../src/dip/search/dossiers.js";
+import {
+  generateProceedingBrief,
+  validateAnswer,
+} from "../src/dip/explain/index.js";
+import type { ProceedingTimeline } from "../src/dip/proceedings/timeline.js";
+import type { DipHit } from "../src/dip/search/search.js";
 
 const approveFixtureClaims: NonNullable<
   Parameters<typeof generateProceedingBrief>[5]

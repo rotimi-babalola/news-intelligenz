@@ -6,10 +6,10 @@ import {
   parseElectoralTerms,
   parseProceedingCap,
   parseRunHour,
-} from "../src/dip/schedule.js";
-import { liveStepsFetcher } from "../src/dip/steps.js";
-import { syncDipTerms } from "../src/dip/sync.js";
-import { liveVorgangFetcher } from "../src/dip/vorgang.js";
+} from "../src/dip/collection/schedule.js";
+import { liveStepsFetcher } from "../src/dip/collection/steps.js";
+import { syncDipTerms } from "../src/dip/collection/sync.js";
+import { liveVorgangFetcher } from "../src/dip/collection/proceedings.js";
 
 // Daily DIP collection for the Render cron, e.g.
 // node dist/scripts/run-dip.js

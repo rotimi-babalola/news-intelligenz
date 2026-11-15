@@ -7,9 +7,10 @@ import {
   finalizeRunIfSettled,
   type ArticleFetcher,
 } from "../import/service";
-import { processNextDocument } from "../dip/documents";
-import { embeddingConfig, processNextDipEmbedding } from "../dip/embedding";
-import { PROCESS_DOCUMENT } from "../dip/jobs";
+import { processNextDocument } from "../dip/documents/process";
+import { embeddingConfig } from "../dip/search/embedding";
+import { processNextDipEmbedding } from "../dip/jobs/embedding";
+import { PROCESS_DOCUMENT } from "../dip/jobs/queue";
 import { database } from "../db";
 import {
   dedupeKey,
@@ -25,7 +26,7 @@ import {
   listDipRuns,
   listParliamentaryDiscoveries,
 } from "./dip.repository";
-import { listDipGaps } from "../dip/repository";
+import { listDipGaps } from "../dip/db/index";
 import { listDiscoveriesByRun } from "./discovery.repository";
 import {
   getPublicationDetail,

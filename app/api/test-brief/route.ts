@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { database } from "../../../src/db";
-import { searchProceedingDossiers } from "../../../src/dip/dossiers";
-import { getDocumentPages } from "../../../src/dip/document-pages";
+import { searchProceedingDossiers } from "../../../src/dip/search/dossiers";
+import { getDocumentPages } from "../../../src/dip/documents/pages";
 import { generateProceedingBrief } from "../../../src/dip/explain";
 
 const bodySchema = z.object({

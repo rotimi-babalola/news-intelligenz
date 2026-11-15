@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { PrismaClient } from "../generated/prisma/client";
+import type { PrismaClient } from "../../generated/prisma/client";
 import { documentObjectKey, putDocumentPdf } from "./object-store";
 import { fetchDocumentPdf } from "./pdf";
 

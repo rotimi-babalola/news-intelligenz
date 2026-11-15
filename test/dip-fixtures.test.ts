@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { stepContentHash, toStoredStep } from "../src/dip/util.js";
+import {
+  stepContentHash,
+  toStoredStep,
+} from "../src/dip/collection/normalize.js";
 
 const dir = path.join("fixtures", "dip");
 
