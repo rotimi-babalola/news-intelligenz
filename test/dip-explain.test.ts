@@ -18,6 +18,9 @@ function generateTestBrief(
   language: "en" | "de",
   dossier: Parameters<typeof generateProceedingBrief>[3],
   generate: NonNullable<Parameters<typeof generateProceedingBrief>[4]>,
+  translate: NonNullable<
+    Parameters<typeof generateProceedingBrief>[6]
+  > = async () => ({ claims: [] }),
 ) {
   return generateProceedingBrief(
     prisma,
@@ -26,6 +29,7 @@ function generateTestBrief(
     dossier,
     generate,
     approveFixtureClaims,
+    translate,
   );
 }
 
@@ -565,6 +569,63 @@ test("the current stage falls back to the latest step when the model omits it", 
     "10.10.2026 · Letzter dokumentierter Schritt: First reading",
   );
   assert.equal(brief.claims.stage[0]?.citation.stepId, "2");
+});
+
+test("both briefs cite the same retrieved page when the model omits it", async () => {
+  const { prisma } = store();
+  const translations = {
+    en: "The bill would provide housing grants.",
+    de: "Das Gesetz würde Wohnbeihilfen vorsehen.",
+  };
+  for (const language of ["en", "de"] as const) {
+    const brief = await generateTestBrief(
+      prisma,
+      "What does it say?",
+      language,
+      dossier,
+      async () => ({}),
+      async () => ({
+        claims: [{ id: "page:3:2", text: translations[language] }],
+      }),
+    );
+    assert.deepEqual(
+      brief.claims.documents.map((claim) => claim.citation),
+      [{ kind: "page", stepId: "2", referenceId: "3", page: 2, url: pdfUrl }],
+    );
+    assert.equal(brief.claims.documents[0]?.text, translations[language]);
+  }
+});
+
+test("an English claim that repeats the German passage is replaced by a translation", async () => {
+  const { prisma } = store();
+  const brief = await generateTestBrief(
+    prisma,
+    "What does it say?",
+    "en",
+    dossier,
+    async () => ({
+      ...answer("en"),
+      documents: [
+        {
+          text: "The bill would provide housing grants.",
+          evidenceId: "page:3:2",
+          quote: "The bill would provide housing grants.",
+        },
+      ],
+    }),
+    async () => ({
+      claims: [
+        {
+          id: "page:3:2",
+          text: "The bill provides housing grants.",
+        },
+      ],
+    }),
+  );
+  assert.equal(
+    brief.claims.documents[0]?.text,
+    "The bill provides housing grants.",
+  );
 });
 
 test("verification drops and never caches an invented status paired with a valid quote", async () => {
