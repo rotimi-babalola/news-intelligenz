@@ -4,7 +4,7 @@ import type { PrismaClient } from "../src/generated/prisma/client.js";
 import {
   addDocumentEvidence,
   buildDossiers,
-} from "../src/dip/search/dossiers.js";
+} from "../src/dip/search/dossier-builders.js";
 import {
   generateProceedingBrief,
   validateAnswer,
