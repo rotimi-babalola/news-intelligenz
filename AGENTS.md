@@ -12,6 +12,10 @@ Use the five default triage labels. See `docs/agents/triage-labels.md`.
 
 Use the single-context layout at the repo root. See `docs/agents/domain.md`.
 
+### Parliamentary research
+
+For questions about DIP proceedings, steps, or documents, check for the `news-intelligenz` MCP server and use its `get_proceeding`, `search_dip_evidence`, or `get_document_pages` tool first, as appropriate. See the MCP setup in `README.md`. If the server is unavailable, the record is missing, or fresh information is needed, consult official DIP sources and say explicitly why the MCP server could not answer.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know

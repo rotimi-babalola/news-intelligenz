@@ -85,6 +85,7 @@ export function buildDossiers(
         apiId,
         parentMissing: timeline.parentMissing,
         title: timeline.proceeding?.title ?? null,
+        proceedingVersionNo: timeline.proceeding?.versionNo ?? null,
         type: timeline.proceeding?.type ?? null,
         deliberationState: timeline.proceeding?.deliberationState ?? null,
         firstActivity,
@@ -104,28 +105,81 @@ export function buildDossiers(
     .slice(0, limit);
 }
 
+export function addDocumentEvidence(
+  dossiers: ReturnType<typeof buildDossiers>,
+  hits: DipHit[],
+) {
+  return dossiers.map((dossier) => {
+    if (
+      dossier.evidence.some(
+        (hit) =>
+          hit.entity === "dokument" &&
+          hit.excerpt.status === "excerpt-eligible",
+      )
+    )
+      return dossier;
+    const documents: DocumentHit[] = [];
+    for (const hit of hits) {
+      if (
+        hit.entity !== "dokument" ||
+        hit.proceedingApiId !== dossier.apiId ||
+        hit.excerpt.status !== "excerpt-eligible" ||
+        !dossier.steps.some((step) => sameDocument(step, hit)) ||
+        documents.some(
+          (document) =>
+            document.document.referenceId === hit.document.referenceId,
+        )
+      )
+        continue;
+      documents.push(hit);
+      if (documents.length === 3) break;
+    }
+    return documents.length
+      ? { ...dossier, evidence: [...dossier.evidence, ...documents] }
+      : dossier;
+  });
+}
+
 export async function searchProceedingDossiers(
   prisma: PrismaClient,
   query: string,
   limit: number,
 ) {
   const embedding = await embedText(query, "query");
-  return prisma.$transaction(
-    async (tx) => {
-      const hits = await searchDip(tx, query, Math.max(100, limit * 5), {
-        embed: async () => embedding,
-      });
-      const ids = [
-        ...new Set(
-          hits
-            .map((hit) =>
-              hit.entity === "vorgang" ? hit.apiId : hit.proceedingApiId,
-            )
-            .filter((id): id is string => Boolean(id)),
-        ),
-      ];
-      return buildDossiers(hits, await getProceedings(tx, ids), limit);
-    },
-    { isolationLevel: "RepeatableRead", timeout: 30_000 },
+  // Read-only: no transaction, so a slow vector scan never hits an interactive
+  // transaction timeout. `isCurrent` already drops hits that changed meanwhile.
+  const hits = await searchDip(prisma, query, Math.max(100, limit * 5), {
+    embed: async () => embedding,
+  });
+  const ids = [
+    ...new Set(
+      hits
+        .map((hit) =>
+          hit.entity === "vorgang" ? hit.apiId : hit.proceedingApiId,
+        )
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const dossiers = buildDossiers(
+    hits,
+    await getProceedings(prisma, ids),
+    limit,
   );
+  const missing = dossiers
+    .filter(
+      (dossier) =>
+        !dossier.evidence.some(
+          (hit) =>
+            hit.entity === "dokument" &&
+            hit.excerpt.status === "excerpt-eligible",
+        ),
+    )
+    .map((dossier) => dossier.apiId);
+  if (!missing.length) return dossiers;
+  // Step hits can fill the global window before a relevant PDF page appears.
+  const documents = await searchDip(prisma, query, missing.length * 5, {
+    embed: async () => embedding,
+    documentProceedingIds: missing,
+  });
+  return addDocumentEvidence(dossiers, documents);
 }

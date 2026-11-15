@@ -15,7 +15,10 @@ export async function searchDip(
   prisma: Client,
   query: string,
   limit: number,
-  options: { embed?: (text: string) => Promise<number[]> } = {},
+  options: {
+    embed?: (text: string) => Promise<number[]>;
+    documentProceedingIds?: string[];
+  } = {},
 ) {
   const config = embeddingConfig();
   const embedding = options.embed
@@ -28,6 +31,7 @@ export async function searchDip(
     documentInstruction: config.documentInstruction,
     queryInstruction: config.queryInstruction,
     limit,
+    documentProceedingIds: options.documentProceedingIds,
   });
   return rows.map((row) => {
     const endpoint =

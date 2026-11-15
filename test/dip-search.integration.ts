@@ -19,6 +19,105 @@ const vector = (first: number, second: number) => [
   ...Array.from({ length: 1022 }, () => 0),
 ];
 
+test("scoped PDF retrieval retains a current citation for every requested proceeding", async () => {
+  const prisma = await isolatedDatabase();
+  const pdfUrl = "https://dserver.bundestag.de/shared.pdf";
+  try {
+    for (const [apiId, proceedingApiId] of [
+      ["1", "123"],
+      ["2", "123"],
+      ["3", "124"],
+      ["4", "125"],
+    ] as const) {
+      await prisma.proceedingStep.create({
+        data: {
+          apiId,
+          proceedingApiId,
+          institution: "BT",
+          stepLabel: "Beratung",
+          title: "Shared document",
+          documentType: "Drucksache",
+          sourceUpdatedAt: new Date("2026-10-14"),
+          metadata: {},
+          latestVersionNo: 1,
+          documentReference: {
+            create: {
+              proceedingApiId,
+              referenceId: "789",
+              documentNumber: "21/1001",
+              pdfUrl,
+              metadata: { herausgeber: "BT", dokumentart: "Drucksache" },
+              observedAt: new Date(`2026-10-0${apiId}`),
+            },
+          },
+        },
+      });
+    }
+    const content = await prisma.documentContent.create({
+      data: {
+        referenceId: "789",
+        variantNo: 1,
+        byteHash: "shared",
+        byteSize: 4,
+        pageCount: 3,
+        objectKey: "documents/789/shared.pdf",
+        requestedUrl: pdfUrl,
+      },
+    });
+    for (const page of [1, 2, 3]) {
+      await prisma.documentChunk.create({
+        data: {
+          contentId: content.id,
+          pageNo: page,
+          chunkNo: 1,
+          text: `Shared page ${page}`,
+        },
+      });
+      await saveDipEmbedding(prisma, {
+        sourceEntity: "dokument",
+        apiId: "789",
+        versionNo: 1,
+        sourcePage: page,
+        sourceChunk: 1,
+        model: embeddingConfig().indexId,
+        documentInstruction: embeddingConfig().documentInstruction,
+        queryInstruction: embeddingConfig().queryInstruction,
+        embedding: vector(1, 0),
+      });
+    }
+    for (const ids of [["123"], ["123", "124"], []]) {
+      const hits = await searchDip(prisma, "Shared", 10, {
+        embed: async () => vector(1, 0),
+        documentProceedingIds: ids,
+      });
+      assert.equal(hits.length, ids.length * 2);
+      for (const id of ids) {
+        const pages = hits.filter((hit) => hit.proceedingApiId === id);
+        assert.deepEqual(
+          pages
+            .map((hit) => (hit.entity === "dokument" ? hit.page : null))
+            .sort(),
+          [1, 2],
+        );
+        assert.ok(
+          pages.every((hit) => hit.source.apiId === (id === "123" ? "2" : "3")),
+        );
+      }
+    }
+    const unscoped = await searchDip(prisma, "Shared", 10, {
+      embed: async () => vector(1, 0),
+    });
+    assert.equal(unscoped.length, 2);
+    assert.ok(
+      unscoped.every(
+        (hit) => hit.proceedingApiId === "125" && hit.source.apiId === "4",
+      ),
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
 test("German and English queries return only current DIP source versions", async () => {
   const prisma = await isolatedDatabase();
   try {
