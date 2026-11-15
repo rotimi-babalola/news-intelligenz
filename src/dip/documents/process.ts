@@ -5,11 +5,11 @@ import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { runNextJob, type ClaimedJob } from "../../jobs/index";
 import { PROCESS_DOCUMENT } from "../constants";
 import {
-  documentJobKey,
   enqueueDocumentEmbeddings,
   enqueueDocumentProcessing,
   raiseDocumentJob,
 } from "../jobs/queue";
+import { documentJobKey, documentProcessingPayload } from "../jobs/identity";
 import { documentObjectKey, putDocumentPdf } from "./object-store";
 import {
   fetchDocumentPdf,
@@ -129,17 +129,10 @@ async function processDocumentJob(
   job: ClaimedJob,
   options: ProcessDocumentOptions,
 ) {
-  const payload = job.payload as {
-    referenceId?: unknown;
-    pdfUrl?: unknown;
-    electoralTerm?: unknown;
-  };
-  if (typeof payload.referenceId !== "string")
-    throw new Error("Document job is missing its reference");
-  const electoralTerm =
-    typeof payload.electoralTerm === "number" ? payload.electoralTerm : null;
+  const payload = documentProcessingPayload.parse(job.payload);
+  const electoralTerm = payload.electoralTerm ?? null;
   const referenceId = payload.referenceId;
-  const pdfUrl = typeof payload.pdfUrl === "string" ? payload.pdfUrl : null;
+  const pdfUrl = payload.pdfUrl;
   if (!pdfUrl) throw new Error("Document reference has no pdf_url");
 
   const fetched = await (options.fetchPdf ?? fetchDocumentPdf)(pdfUrl);
@@ -232,11 +225,12 @@ export async function requestDocument(
     await latestDocumentContent(prisma, referenceId),
   );
   const content = citation.status === "missing" ? null : citation.variant;
-  const key = documentJobKey({
+  const referenceIdentity = {
     referenceId,
     pdfUrl: reference.pdfUrl,
     documentDate: reference.documentDate,
-  });
+  };
+  const key = documentJobKey(referenceIdentity);
   let job = await prisma.processingJob.findUnique({
     where: { dedupeKey: key },
   });
@@ -256,13 +250,11 @@ export async function requestDocument(
           itemIndex: null,
           electoralTerm: null,
           stepApiId: reference.stepApiId,
-          referenceId,
-          pdfUrl: reference.pdfUrl,
-          documentDate: reference.documentDate,
+          ...referenceIdentity,
         }),
       );
     }
-    job = (await raiseDocumentJob(prisma, key)) ?? job;
+    job = (await raiseDocumentJob(prisma, referenceIdentity)) ?? job;
   }
   return {
     eligibility: citation.eligibility,
