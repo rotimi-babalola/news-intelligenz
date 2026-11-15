@@ -96,6 +96,67 @@ async function isolatedDb() {
   };
 }
 
+test("an exhausted extraction records the failure on the publication", async () => {
+  const { prisma, done } = await isolatedDb();
+  try {
+    await collect(
+      prisma,
+      "extract-exhaust",
+      xml(["x"]),
+      feed,
+      stubArticles({
+        "https://example.org/article-x.html": {
+          status: 200,
+          body: article(text60),
+        },
+      }),
+    );
+    const job = await prisma.processingJob.findFirstOrThrow({
+      where: { operation: EXTRACT_TEXT },
+    });
+    // Fresh budget: the extraction already succeeded once, so clear its
+    // attempt history before spending the single remaining attempt.
+    await prisma.jobAttempt.deleteMany({ where: { jobId: job.id } });
+    await prisma.processingJob.update({
+      where: { id: job.id },
+      data: {
+        attempts: 0,
+        maxAttempts: 1,
+        status: "pending",
+        nextAttemptAt: new Date(0),
+      },
+    });
+    // A transient fetch failure burns the last attempt: the job exhausts and
+    // the publication still shows why it stayed metadata-only.
+    const failing: ArticleFetcher = async () => ({
+      ok: false,
+      reason: "HTTP 503",
+    });
+    const outcome = await drainJobs(
+      prisma,
+      "exhaust-worker",
+      { runId: "extract-exhaust" },
+      failing,
+    );
+    assert.deepEqual(outcome, { succeeded: 0, retrying: 0, exhausted: 1 });
+    assert.equal(
+      (await prisma.publication.findFirstOrThrow()).extractionError,
+      "HTTP 503",
+    );
+    assert.equal(
+      (
+        await prisma.processingJob.findUniqueOrThrow({
+          where: { id: job.id },
+        })
+      ).status,
+      "exhausted",
+    );
+  } finally {
+    await prisma.$disconnect();
+    await done();
+  }
+});
+
 test("extraction stores versions, skips identical text, keeps history on change", async () => {
   const { prisma, done } = await isolatedDb();
   try {

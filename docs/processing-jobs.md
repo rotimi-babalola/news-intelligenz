@@ -13,8 +13,8 @@ from the pending jobs; replaying a settled run returns the stored row.
 - Failed attempts back off exponentially from 30s, capped at one hour.
 - A claimed job holds a 5-minute lease. A worker that dies mid-processing
   leaves a stale lease; any worker can reclaim it (safe claiming via
-  `FOR UPDATE SKIP LOCKED`), and `requeueStaleClaims` makes stale claims
-  immediately reclaimable on restart.
+  `FOR UPDATE SKIP LOCKED`), and every worker pass reclaims expired leases
+  before claiming, so recovery is the same whichever entry point runs.
 - Attempt history is durable in `job_attempts`; the job row keeps the last
   error for inspection.
 

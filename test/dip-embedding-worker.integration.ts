@@ -6,7 +6,7 @@ import { processNextDipEmbedding } from "../src/dip/jobs/embedding.js";
 import { EMBED_PROCEEDING, EMBED_STEP } from "../src/dip/constants.js";
 import { collectVorgang } from "../src/dip/collection/proceedings.js";
 import { collectSteps } from "../src/dip/collection/steps.js";
-import { dipSource, enqueueJob } from "../src/jobs.js";
+import { dipSource, enqueueJob } from "../src/jobs/index.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 
 function proceeding(title: string, withSummary = true) {

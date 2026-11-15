@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
-import { dipSource, enqueueJob, retryExhausted } from "../../jobs";
+import { dipSource, enqueueJob, retryExhausted } from "../../jobs/index";
 import {
   EMBED_DOCUMENT,
   EMBED_JOB_BATCH_SIZE,

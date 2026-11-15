@@ -6,7 +6,7 @@ import {
   enqueueJob,
   failJob,
   requeueStaleClaims,
-} from "../src/jobs.js";
+} from "../src/jobs/index.js";
 import {
   EMBED_PROCEEDING,
   EMBED_STEP,

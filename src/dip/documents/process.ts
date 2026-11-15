@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { ensureDocumentChunks } from "./chunks";
 import { resolveDocumentCitation } from "./citation";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
-import { claimNextJob, completeJob, failJob } from "../../jobs";
+import { runNextJob, type ClaimedJob } from "../../jobs/index";
 import { PROCESS_DOCUMENT } from "../constants";
 import {
   documentJobKey,
@@ -115,126 +115,106 @@ export async function processNextDocument(
   workerId: string,
   options: ProcessDocumentOptions = {},
 ) {
-  const job = await claimNextJob(prisma, workerId, undefined, {
-    operation: PROCESS_DOCUMENT,
-    jobId: options.jobId,
-  });
-  if (!job) return { status: "empty" as const };
-  try {
-    const payload = job.payload as {
-      referenceId?: unknown;
-      pdfUrl?: unknown;
-      electoralTerm?: unknown;
-    };
-    if (typeof payload.referenceId !== "string")
-      throw new Error("Document job is missing its reference");
-    const electoralTerm =
-      typeof payload.electoralTerm === "number" ? payload.electoralTerm : null;
-    const referenceId = payload.referenceId;
-    const pdfUrl = typeof payload.pdfUrl === "string" ? payload.pdfUrl : null;
-    if (!pdfUrl) throw new Error("Document reference has no pdf_url");
+  return runNextJob(
+    prisma,
+    workerId,
+    { operation: PROCESS_DOCUMENT, jobId: options.jobId },
+    (job) => processDocumentJob(prisma, job, options),
+    { failureMessage: "Document processing failed" },
+  );
+}
 
-    const fetched = await (options.fetchPdf ?? fetchDocumentPdf)(pdfUrl);
-    if (!fetched.ok)
-      throw new Error(`Document fetch failed: ${fetched.reason}`);
-    const byteHash = createHash("sha256").update(fetched.bytes).digest("hex");
+async function processDocumentJob(
+  prisma: PrismaClient,
+  job: ClaimedJob,
+  options: ProcessDocumentOptions,
+) {
+  const payload = job.payload as {
+    referenceId?: unknown;
+    pdfUrl?: unknown;
+    electoralTerm?: unknown;
+  };
+  if (typeof payload.referenceId !== "string")
+    throw new Error("Document job is missing its reference");
+  const electoralTerm =
+    typeof payload.electoralTerm === "number" ? payload.electoralTerm : null;
+  const referenceId = payload.referenceId;
+  const pdfUrl = typeof payload.pdfUrl === "string" ? payload.pdfUrl : null;
+  if (!pdfUrl) throw new Error("Document reference has no pdf_url");
 
-    // Identical bytes are the same content variant: reuse the cached row and
-    // skip extraction entirely. Changed bytes become a new retained variant.
-    // Reverting to earlier bytes promotes that retained variant back to
-    // latest; only the latest variant is searchable.
-    let content = await findDocumentContentByHash(
-      prisma,
-      referenceId,
-      byteHash,
-    );
-    let reused = content !== null;
-    if (!content) {
-      const pages = await (options.extract ?? pymupdfExtractor)(fetched.bytes);
+  const fetched = await (options.fetchPdf ?? fetchDocumentPdf)(pdfUrl);
+  if (!fetched.ok) throw new Error(`Document fetch failed: ${fetched.reason}`);
+  const byteHash = createHash("sha256").update(fetched.bytes).digest("hex");
+
+  // Identical bytes are the same content variant: reuse the cached row and
+  // skip extraction entirely. Changed bytes become a new retained variant.
+  // Reverting to earlier bytes promotes that retained variant back to
+  // latest; only the latest variant is searchable.
+  let content = await findDocumentContentByHash(prisma, referenceId, byteHash);
+  let reused = content !== null;
+  if (!content) {
+    const pages = await (options.extract ?? pymupdfExtractor)(fetched.bytes);
+    const objectKey = documentObjectKey(referenceId, byteHash);
+    // Upload before the transaction: a failed upload retries the job, and a
+    // failed transaction leaves an unreferenced object that the same
+    // content-addressed key overwrites on retry.
+    await (options.putPdf ?? putDocumentPdf)(objectKey, fetched.bytes);
+    content = await prisma.$transaction(async (tx) => {
+      await lockDocumentReference(tx, referenceId);
+      const stored = await storeNewVariant(tx, {
+        referenceId,
+        byteHash,
+        objectKey,
+        byteSize: fetched.bytes.byteLength,
+        finalUrl: fetched.finalUrl,
+        pages,
+      });
+      reused = stored.reused;
+      return stored.content;
+    });
+  } else {
+    const cached = content;
+    // Rows written before the object-storage move, or left by an upload that
+    // committed no key, still need their bytes archived. The fetched bytes
+    // are the same content-addressed variant, so upload with the same key.
+    if (!cached.objectKey) {
       const objectKey = documentObjectKey(referenceId, byteHash);
-      // Upload before the transaction: a failed upload retries the job, and a
-      // failed transaction leaves an unreferenced object that the same
-      // content-addressed key overwrites on retry.
       await (options.putPdf ?? putDocumentPdf)(objectKey, fetched.bytes);
+      content = await prisma.documentContent.update({
+        where: { id: cached.id },
+        // The fetched bytes now live in object storage, so a legacy row no
+        // longer needs its database copy.
+        data: { objectKey, bytes: null },
+      });
+    }
+    if (!cached.isLatest) {
       content = await prisma.$transaction(async (tx) => {
         await lockDocumentReference(tx, referenceId);
-        const stored = await storeNewVariant(tx, {
-          referenceId,
-          byteHash,
-          objectKey,
-          byteSize: fetched.bytes.byteLength,
-          finalUrl: fetched.finalUrl,
-          pages,
-        });
-        reused = stored.reused;
-        return stored.content;
-      });
-    } else {
-      const cached = content;
-      // Rows written before the object-storage move, or left by an upload that
-      // committed no key, still need their bytes archived. The fetched bytes
-      // are the same content-addressed variant, so upload with the same key.
-      if (!cached.objectKey) {
-        const objectKey = documentObjectKey(referenceId, byteHash);
-        await (options.putPdf ?? putDocumentPdf)(objectKey, fetched.bytes);
-        content = await prisma.documentContent.update({
+        await supersedeDocumentContents(tx, referenceId);
+        return tx.documentContent.update({
           where: { id: cached.id },
-          // The fetched bytes now live in object storage, so a legacy row no
-          // longer needs its database copy.
-          data: { objectKey, bytes: null },
+          data: { isLatest: true },
         });
-      }
-      if (!cached.isLatest) {
-        content = await prisma.$transaction(async (tx) => {
-          await lockDocumentReference(tx, referenceId);
-          await supersedeDocumentContents(tx, referenceId);
-          return tx.documentContent.update({
-            where: { id: cached.id },
-            data: { isLatest: true },
-          });
-        });
-      }
+      });
     }
-    const pageRows = await listDocumentPages(prisma, content.id);
-    const chunks = await ensureDocumentChunks(prisma, content.id, pageRows);
-    await ensureDocumentSections(prisma, content.id, pageRows);
-    await prisma.documentContent.update({
-      where: { id: content.id },
-      data: { requestedUrl: pdfUrl },
-    });
-    await enqueueDocumentEmbeddings(prisma, {
-      runId: job.runId,
-      itemIndex: job.itemIndex,
-      electoralTerm,
-      referenceId,
-      variantNo: content.variantNo,
-      chunks,
-      priority: job.priority,
-    });
-    if (!(await completeJob(prisma, job, workerId)))
-      return { status: "stale" as const, jobId: job.id };
-    return {
-      status: "succeeded" as const,
-      jobId: job.id,
-      variantNo: content.variantNo,
-      reused,
-    };
-  } catch (error) {
-    const { exhausted, stale } = await failJob(
-      prisma,
-      job,
-      workerId,
-      error instanceof Error ? error : new Error("Document processing failed"),
-    );
-    return {
-      status: stale
-        ? ("stale" as const)
-        : exhausted
-          ? ("exhausted" as const)
-          : ("retrying" as const),
-      jobId: job.id,
-    };
   }
+  const pageRows = await listDocumentPages(prisma, content.id);
+  const chunks = await ensureDocumentChunks(prisma, content.id, pageRows);
+  await ensureDocumentSections(prisma, content.id, pageRows);
+  await prisma.documentContent.update({
+    where: { id: content.id },
+    data: { requestedUrl: pdfUrl },
+  });
+  await enqueueDocumentEmbeddings(prisma, {
+    runId: job.runId,
+    itemIndex: job.itemIndex,
+    electoralTerm,
+    referenceId,
+    variantNo: content.variantNo,
+    chunks,
+    priority: job.priority,
+  });
+  return { variantNo: content.variantNo, reused };
 }
 
 // On-demand request: stored metadata and the original link return immediately,
