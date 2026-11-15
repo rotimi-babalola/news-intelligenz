@@ -9,7 +9,11 @@ import {
 } from "../src/dip/documents/process.js";
 import { documentObjectKey } from "../src/dip/documents/object-store.js";
 import { processNextDipEmbedding } from "../src/dip/jobs/embedding.js";
-import { EMBED_DOCUMENT, ON_DEMAND_PRIORITY } from "../src/dip/constants.js";
+import {
+  EMBED_DOCUMENT,
+  EMBED_PROCEEDING,
+  ON_DEMAND_PRIORITY,
+} from "../src/dip/constants.js";
 import { enqueueDocumentEmbeddings } from "../src/dip/jobs/queue.js";
 import { collectSteps } from "../src/dip/collection/steps.js";
 import { claimNextJob, requeueStaleClaims } from "../src/jobs.js";
@@ -622,6 +626,49 @@ test("an on-demand request revives an exhausted document job", async () => {
     assert.equal(revived.status, "pending");
     assert.equal(revived.maxAttempts, job.maxAttempts * 2);
     assert.equal(revived.lastError, null);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("every worker pass reclaims expired leases, whichever entry point runs", async () => {
+  const prisma = await isolatedDatabase();
+  try {
+    await collect(prisma, "doc-recovery");
+    const claimed = await claimNextJob(prisma, "dying-worker", 20, {
+      operation: "process_document",
+    });
+    assert.ok(claimed);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    // The embedding entry point has nothing to embed, but the pass still
+    // reclaims the document worker's expired lease before claiming.
+    assert.equal(
+      (
+        await processNextDipEmbedding(prisma, "embedding-worker", {
+          operation: EMBED_PROCEEDING,
+        })
+      ).status,
+      "empty",
+    );
+    const recovered = await prisma.processingJob.findUniqueOrThrow({
+      where: { id: claimed.id },
+    });
+    assert.equal(recovered.status, "retrying");
+    assert.equal(recovered.nextAttemptAt.getTime(), 0);
+    // The document drain then processes the reclaimed job on its next pass.
+    assert.equal(
+      (
+        await processDoc(prisma, "document-worker", {
+          fetchPdf: async () => ({
+            ok: true,
+            bytes: Buffer.from("%PDF recovered"),
+            finalUrl: PDF_URL,
+          }),
+          extract: async () => pages,
+        })
+      ).status,
+      "succeeded",
+    );
   } finally {
     await prisma.$disconnect();
   }

@@ -20,6 +20,7 @@ import {
   listJobs,
   requeueStaleClaims,
   retryExhausted,
+  runJobs,
   searchSource,
 } from "../src/jobs.js";
 import type { Feed } from "../src/sources.js";
@@ -157,6 +158,131 @@ test("concurrent claims hand each job to exactly one worker", async () => {
         .findUniqueOrThrow({ where: { id: winner.id } })
         .then((job) => job.status),
       "succeeded",
+    );
+  } finally {
+    await prisma.$disconnect();
+    await done();
+  }
+});
+
+test("the runner settles succeeded, retrying and exhausted through one union", async () => {
+  const { prisma, done } = await isolatedDb();
+  try {
+    await prisma.run.create({
+      data: {
+        id: "runner",
+        feedId: "runner",
+        sourceKind: "news_feed",
+        inputHash: "h",
+        status: "running",
+      },
+    });
+    const enqueue = (dedupeKey: string, payload: object, maxAttempts = 5) =>
+      prisma.processingJob.create({
+        data: {
+          dedupeKey,
+          sourceKind: "news_feed",
+          sourceKey: "runner",
+          runId: "runner",
+          operation: "runner-test",
+          payload,
+          maxAttempts,
+        },
+      });
+    const ok = await enqueue("runner-ok", {});
+    const retrying = await enqueue("runner-retrying", { fail: true }, 2);
+    const exhausted = await enqueue("runner-exhausted", { fail: true }, 1);
+    const outcomes = await runJobs(
+      prisma,
+      "runner-worker",
+      { runId: "runner" },
+      async (job) => {
+        if ((job.payload as { fail?: boolean }).fail)
+          throw new Error("handler failed");
+        return { handled: job.id };
+      },
+    );
+    const settled = new Map(
+      outcomes.map((outcome) => [outcome.jobId, outcome]),
+    );
+    assert.equal(outcomes.length, 3);
+    const success = settled.get(ok.id);
+    assert.equal(success?.status, "succeeded");
+    if (success?.status === "succeeded") assert.equal(success.handled, ok.id);
+    assert.equal(settled.get(retrying.id)?.status, "retrying");
+    assert.equal(settled.get(exhausted.id)?.status, "exhausted");
+    assert.equal(
+      (
+        await prisma.processingJob.findUniqueOrThrow({
+          where: { id: retrying.id },
+        })
+      ).lastError,
+      "handler failed",
+    );
+    assert.equal(
+      (
+        await prisma.processingJob.findUniqueOrThrow({
+          where: { id: exhausted.id },
+        })
+      ).attempts,
+      1,
+    );
+  } finally {
+    await prisma.$disconnect();
+    await done();
+  }
+});
+
+test("the runner reports a stale outcome when its claim is taken over", async () => {
+  const { prisma, done } = await isolatedDb();
+  try {
+    await prisma.run.create({
+      data: {
+        id: "stale-run",
+        feedId: "stale-run",
+        sourceKind: "news_feed",
+        inputHash: "h",
+        status: "running",
+      },
+    });
+    const job = await prisma.processingJob.create({
+      data: {
+        dedupeKey: "runner-stale",
+        sourceKind: "news_feed",
+        sourceKey: "stale-run",
+        runId: "stale-run",
+        operation: "runner-test",
+        payload: {},
+      },
+    });
+    const outcomes = await runJobs(
+      prisma,
+      "worker-a",
+      { runId: "stale-run" },
+      async (claimed) => {
+        // Another worker takes the job over while this attempt is running.
+        await prisma.processingJob.update({
+          where: { id: claimed.id },
+          data: { leaseExpiresAt: new Date(0) },
+        });
+        assert.ok(
+          await claimNextJob(prisma, "worker-b", undefined, {
+            jobId: claimed.id,
+          }),
+        );
+      },
+    );
+    assert.deepEqual(
+      outcomes.map((outcome) => [outcome.status, outcome.jobId]),
+      [["stale", job.id]],
+    );
+    assert.equal(
+      (
+        await prisma.processingJob.findUniqueOrThrow({
+          where: { id: job.id },
+        })
+      ).status,
+      "claimed",
     );
   } finally {
     await prisma.$disconnect();

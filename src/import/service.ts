@@ -13,15 +13,12 @@ import {
   resolvePublication,
 } from "./publication";
 import {
-  claimNextJob,
-  completeJob,
   countOpenJobs,
   dedupeKey,
   enqueueJob,
-  failJob,
   feedSource,
-  requeueStaleClaims,
   retryExhausted,
+  runJobs,
   searchSource,
   type ClaimedJob,
 } from "../jobs";
@@ -543,50 +540,38 @@ async function processExtractJob(
 
 // A worker pass: claim ready jobs one at a time until none remain claimable
 // now. One job's failure is recorded on that job and never stops the rest,
-// so independent sources keep moving while a failing source backs off.
+// so independent sources keep moving while a failing source backs off. The
+// runner owns settlement; this worker only maps its outcomes to counters.
 export async function drainJobs(
   prisma: PrismaClient,
   workerId: string,
   filter: { runId?: string; jobId?: string } = {},
   fetchArticle: ArticleFetcher = fetchArticleHtml,
 ) {
+  const outcomes = await runJobs(
+    prisma,
+    workerId,
+    { ...filter, excludeSourceKind: "dip_endpoint" },
+    (job) => processJob(prisma, job, fetchArticle),
+    {
+      // An exhausted extraction still leaves a visible metadata-only
+      // fallback: record the failure on the publication itself.
+      onExhausted: async (job, error) => {
+        if (job.operation !== EXTRACT_TEXT) return;
+        const payload = job.payload as { publicationId?: unknown };
+        if (typeof payload.publicationId !== "string") return;
+        await recordExtractionFailure(
+          prisma,
+          payload.publicationId,
+          error.message,
+        ).catch(() => {});
+      },
+    },
+  );
   const outcome = { succeeded: 0, retrying: 0, exhausted: 0 };
-  for (;;) {
-    const job = await claimNextJob(prisma, workerId, undefined, {
-      ...filter,
-      excludeSourceKind: "dip_endpoint",
-    });
-    if (!job) return outcome;
-    try {
-      await processJob(prisma, job, fetchArticle);
-      if (await completeJob(prisma, job, workerId)) outcome.succeeded++;
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Job processing failed";
-      const { exhausted, stale } = await failJob(
-        prisma,
-        job,
-        workerId,
-        error instanceof Error ? error : new Error("Job processing failed"),
-      );
-      if (stale) continue;
-      if (exhausted) {
-        outcome.exhausted++;
-        // An exhausted extraction still leaves a visible metadata-only
-        // fallback: record the failure on the publication itself.
-        if (job.operation === EXTRACT_TEXT) {
-          const payload = job.payload as { publicationId?: unknown };
-          if (typeof payload.publicationId === "string") {
-            await recordExtractionFailure(
-              prisma,
-              payload.publicationId,
-              message,
-            ).catch(() => {});
-          }
-        }
-      } else outcome.retrying++;
-    }
-  }
+  for (const settled of outcomes)
+    if (settled.status !== "stale") outcome[settled.status]++;
+  return outcome;
 }
 
 export async function finalizeRunIfSettled(
@@ -624,16 +609,15 @@ export async function collect(
   return finalizeRunIfSettled(prisma, runId, intake.parseError);
 }
 
-// Standalone worker pass without new intake: recover stale claims, drain
-// ready jobs (optionally for one run), and settle finished runs. This is the
-// entry point for out-of-band retries and the future scheduler.
+// Standalone worker pass without new intake: drain ready jobs (optionally for
+// one run) and settle finished runs. The runner reclaims expired leases, so
+// this is the entry point for out-of-band retries and the future scheduler.
 export async function drainOpenJobs(
   prisma: PrismaClient,
   workerId: string,
   runId?: string,
   fetchArticle: ArticleFetcher = fetchArticleHtml,
 ) {
-  await requeueStaleClaims(prisma);
   const outcome = await drainJobs(
     prisma,
     workerId,

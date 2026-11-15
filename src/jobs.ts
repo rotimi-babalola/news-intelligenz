@@ -141,6 +141,15 @@ async function exhaustExpiredClaims(tx: Prisma.TransactionClient) {
       AND log.attempt_no = expired.attempts AND log.finished_at IS NULL`);
 }
 
+export type ClaimFilter = {
+  runId?: string;
+  jobId?: string;
+  excludeSourceKind?: SourceKind;
+  operation?: string | string[];
+  payloadModel?: string;
+  includeModelLess?: boolean;
+};
+
 // One atomic claim: exactly one worker wins each ready job. Stale leases
 // (worker died mid-processing) are reclaimable by any worker, which is how
 // restarts recover without a separate recovery pass.
@@ -148,14 +157,7 @@ export async function claimNextJob(
   prisma: PrismaClient,
   workerId: string,
   leaseMs: number = LEASE_MS_DEFAULT,
-  filter: {
-    runId?: string;
-    jobId?: string;
-    excludeSourceKind?: SourceKind;
-    operation?: string | string[];
-    payloadModel?: string;
-    includeModelLess?: boolean;
-  } = {},
+  filter: ClaimFilter = {},
 ): Promise<ClaimedJob | null> {
   const params: unknown[] = [workerId, leaseMs / 1000];
   let filterClause = "";
@@ -304,10 +306,11 @@ export async function failJob(
   };
 }
 
-// Explicit restart recovery: stale claims become immediately reclaimable
-// instead of waiting for the next claim scan to pick up the expired lease.
-// Epoch makes "now" independent of clock agreement between the app and
-// PostgreSQL, so a restart always reclaims its own work first.
+// Restart recovery: stale claims become immediately reclaimable instead of
+// waiting for the next claim scan to pick up the expired lease. Epoch makes
+// "now" independent of clock agreement between the app and PostgreSQL, so a
+// restart always reclaims its own work first. Every runner pass calls this,
+// so recovery does not depend on which entry point invoked the worker.
 export async function requeueStaleClaims(prisma: PrismaClient) {
   return prisma.$transaction(async (tx) => {
     await exhaustExpiredClaims(tx);
@@ -318,6 +321,82 @@ export async function requeueStaleClaims(prisma: PrismaClient) {
         AND attempts < max_attempts`);
     return { count };
   });
+}
+
+// One settled job's whole life in one value. A handler returns to succeed and
+// throws to fail with the job's retry and backoff semantics; it never settles
+// the job itself. Data a handler returns rides on the success outcome.
+export type JobOutcome<T extends object = Record<never, never>> =
+  | ({ status: "succeeded"; jobId: string } & Omit<T, "status" | "jobId">)
+  | { status: "retrying" | "exhausted" | "stale"; jobId: string };
+
+export type RunOptions = {
+  limit?: number;
+  failureMessage?: string;
+  onExhausted?: (job: ClaimedJob, error: Error) => Promise<void> | void;
+};
+
+async function settleClaimedJob<T extends object>(
+  prisma: PrismaClient,
+  job: ClaimedJob,
+  workerId: string,
+  handler: (job: ClaimedJob) => Promise<T | void>,
+  options: RunOptions,
+): Promise<JobOutcome<T>> {
+  try {
+    const result = await handler(job);
+    if (!(await completeJob(prisma, job, workerId)))
+      return { status: "stale", jobId: job.id };
+    return { status: "succeeded", jobId: job.id, ...(result ?? ({} as T)) };
+  } catch (error) {
+    const failure =
+      error instanceof Error
+        ? error
+        : new Error(options.failureMessage ?? "Job processing failed");
+    const { exhausted, stale } = await failJob(prisma, job, workerId, failure);
+    if (exhausted) await options.onExhausted?.(job, failure);
+    return {
+      status: stale ? "stale" : exhausted ? "exhausted" : "retrying",
+      jobId: job.id,
+    };
+  }
+}
+
+// One worker pass: reclaim expired leases, then claim and settle ready jobs
+// until none remain claimable or the limit is reached. Claim, settlement and
+// the outcome union live here, so every worker only supplies a filter and a
+// handler.
+export async function runJobs<T extends object = Record<never, never>>(
+  prisma: PrismaClient,
+  workerId: string,
+  filter: ClaimFilter,
+  handler: (job: ClaimedJob) => Promise<T | void>,
+  options: RunOptions = {},
+): Promise<JobOutcome<T>[]> {
+  await requeueStaleClaims(prisma);
+  const outcomes: JobOutcome<T>[] = [];
+  while (options.limit === undefined || outcomes.length < options.limit) {
+    const job = await claimNextJob(prisma, workerId, undefined, filter);
+    if (!job) break;
+    outcomes.push(
+      await settleClaimedJob(prisma, job, workerId, handler, options),
+    );
+  }
+  return outcomes;
+}
+
+export async function runNextJob<T extends object = Record<never, never>>(
+  prisma: PrismaClient,
+  workerId: string,
+  filter: ClaimFilter,
+  handler: (job: ClaimedJob) => Promise<T | void>,
+  options: RunOptions = {},
+): Promise<JobOutcome<T> | { status: "empty" }> {
+  const [outcome] = await runJobs(prisma, workerId, filter, handler, {
+    ...options,
+    limit: 1,
+  });
+  return outcome ?? { status: "empty" };
 }
 
 export async function retryExhausted(
