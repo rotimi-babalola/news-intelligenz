@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { Badge } from "../../../src/components/ui/badge";
 import { Button } from "../../../src/components/ui/button";
-import type { generateProceedingBrief } from "../../../src/dip/explain";
+import type { generateProceedingBrief } from "../../../src/dip/explain/index";
 
 type Brief = Awaited<ReturnType<typeof generateProceedingBrief>>;
 type Result = {

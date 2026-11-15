@@ -1,10 +1,10 @@
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { PrismaClient } from "../generated/prisma/client";
-import { getProceeding } from "../dip/proceeding";
-import { searchProceedingDossiers } from "../dip/dossiers";
-import { getDocumentPages } from "../dip/document-pages";
-import { verifyDocumentSection } from "../dip/section-verification";
+import { getProceeding } from "../dip/proceedings/timeline";
+import { searchProceedingDossiers } from "../dip/search/dossiers";
+import { getDocumentPages } from "../dip/documents/pages";
+import { verifyDocumentSection } from "../dip/documents/verify";
 
 export function proceedingHandler(prisma: PrismaClient) {
   return createMcpHandler(() => {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { database } from "../../../src/db";
-import { processNextDipEmbedding } from "../../../src/dip/embedding";
+import { processNextDipEmbedding } from "../../../src/dip/jobs/embedding";
 
 export async function POST() {
   const prisma = database();

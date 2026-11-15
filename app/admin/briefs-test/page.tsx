@@ -1,5 +1,5 @@
 import { database } from "../../../src/db";
-import { listRecentProceedings } from "../../../src/dip/repository";
+import { listRecentProceedings } from "../../../src/dip/db/index";
 import { BriefTester } from "./tester";
 
 export const dynamic = "force-dynamic";

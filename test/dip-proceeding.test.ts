@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PrismaClient } from "../src/generated/prisma/client.js";
-import { getProceeding } from "../src/dip/proceeding.js";
+import { getProceeding } from "../src/dip/proceedings/timeline.js";
 import { proceedingHandler } from "../src/mcp/proceeding.js";
 
 const date = (day: number) =>

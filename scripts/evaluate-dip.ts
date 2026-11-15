@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { database } from "../src/db.js";
-import { embeddingConfig, embeddingCost } from "../src/dip/embedding.js";
-import { scoreRanking } from "../src/dip/evaluate.js";
-import { searchDip } from "../src/dip/search.js";
+import { embeddingConfig, embeddingCost } from "../src/dip/search/embedding.js";
+import { scoreRanking } from "../src/dip/search/evaluate.js";
+import { searchDip } from "../src/dip/search/search.js";
 
 const item = z
   .object({

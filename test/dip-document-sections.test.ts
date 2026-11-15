@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Client } from "../src/dip/repository.js";
+import type { Client } from "../src/dip/db/index.js";
 import {
   backfillDocumentSections,
   detectDocumentSections,
-} from "../src/dip/sections.js";
+} from "../src/dip/documents/sections.js";
 
 test("omnibus headings produce ordered sections with page ranges and skip the contents list", () => {
   const sections = detectDocumentSections([

@@ -1,0 +1,250 @@
+import type { Prisma, PrismaClient } from "../../generated/prisma/client";
+import { dipSource, enqueueJob, retryExhausted } from "../../jobs";
+import {
+  EMBED_DOCUMENT,
+  EMBED_JOB_BATCH_SIZE,
+  EMBED_PROCEEDING,
+  EMBED_STEP,
+  ON_DEMAND_PRIORITY,
+  PROCESS_DOCUMENT,
+} from "../constants";
+
+// Downstream DIP work submits as durable jobs at collection time and runs
+// independently: model outages or PDF failures never hold a collection
+// checkpoint open, and replaying a run never enqueues twice (dedupeKey).
+// Collection only promises the jobs exist exactly once per new record version;
+// document processing remains a separate downstream path.
+
+function dipJobKey(
+  runId: string,
+  operation: string,
+  apiId: string,
+  version: number | string,
+) {
+  return JSON.stringify([runId, operation, apiId, version]);
+}
+
+function recordEmbeddingJob(input: {
+  runId: string;
+  itemIndex: number | null;
+  electoralTerm: number | null;
+  operation: typeof EMBED_PROCEEDING | typeof EMBED_STEP;
+  apiId: string;
+  versionNo: number;
+  model?: string;
+}) {
+  const endpoint =
+    input.operation === EMBED_PROCEEDING ? "/vorgang" : "/vorgangsposition";
+  return {
+    source: dipSource(
+      endpoint,
+      input.electoralTerm === null ? undefined : String(input.electoralTerm),
+    ),
+    runId: input.runId,
+    itemIndex: input.itemIndex,
+    dedupeKey:
+      input.model !== undefined
+        ? JSON.stringify([
+            "reindex",
+            input.model,
+            input.operation,
+            input.apiId,
+            input.versionNo,
+          ])
+        : dipJobKey(input.runId, input.operation, input.apiId, input.versionNo),
+    operation: input.operation,
+    payload: {
+      apiId: input.apiId,
+      versionNo: input.versionNo,
+      ...(input.model === undefined ? {} : { model: input.model }),
+    },
+  };
+}
+
+export function enqueueRecordReindex(
+  db: PrismaClient,
+  input: {
+    runId: string;
+    model: string;
+    operation: typeof EMBED_PROCEEDING | typeof EMBED_STEP;
+    rows: { apiId: string; latestVersionNo: number }[];
+  },
+) {
+  return db.processingJob.createMany({
+    data: input.rows.map((row) => {
+      const job = recordEmbeddingJob({
+        runId: input.runId,
+        itemIndex: null,
+        electoralTerm: null,
+        operation: input.operation,
+        apiId: row.apiId,
+        versionNo: row.latestVersionNo,
+        model: input.model,
+      });
+      return {
+        dedupeKey: job.dedupeKey,
+        sourceKind: job.source.kind,
+        sourceKey: job.source.key,
+        runId: job.runId,
+        operation: job.operation,
+        payload: job.payload,
+      };
+    }),
+    skipDuplicates: true,
+  });
+}
+
+// Document work is keyed by the document it processes rather than the run that
+// noticed it, so the background hot subset and an on-demand request converge
+// on one job. A changed reference (url or date) is a new revision and gets its
+// own job; identical bytes are recognised from the cache at processing time.
+export function documentJobKey(input: {
+  referenceId: string;
+  pdfUrl: string | null;
+  documentDate: Date | null;
+}) {
+  return JSON.stringify([
+    PROCESS_DOCUMENT,
+    input.referenceId,
+    input.pdfUrl,
+    input.documentDate?.toISOString() ?? null,
+  ]);
+}
+
+export function enqueueProceedingEmbedding(
+  tx: Prisma.TransactionClient,
+  input: {
+    runId: string;
+    itemIndex: number;
+    electoralTerm: number;
+    apiId: string;
+    versionNo: number;
+  },
+) {
+  return enqueueJob(
+    tx,
+    recordEmbeddingJob({ ...input, operation: EMBED_PROCEEDING }),
+  );
+}
+
+export function enqueueStepEmbedding(
+  tx: Prisma.TransactionClient,
+  input: {
+    runId: string;
+    itemIndex: number;
+    electoralTerm: number;
+    apiId: string;
+    versionNo: number;
+  },
+) {
+  return enqueueJob(
+    tx,
+    recordEmbeddingJob({ ...input, operation: EMBED_STEP }),
+  );
+}
+
+export function enqueueDocumentProcessing(
+  tx: Prisma.TransactionClient,
+  input: {
+    runId: string;
+    itemIndex: number | null;
+    electoralTerm: number | null;
+    stepApiId: string;
+    referenceId: string;
+    pdfUrl: string | null;
+    documentDate: Date | null;
+  },
+) {
+  return enqueueJob(tx, {
+    source: dipSource(
+      "/vorgangsposition",
+      input.electoralTerm === null ? undefined : String(input.electoralTerm),
+    ),
+    runId: input.runId,
+    itemIndex: input.itemIndex,
+    dedupeKey: documentJobKey(input),
+    operation: PROCESS_DOCUMENT,
+    payload: {
+      stepApiId: input.stepApiId,
+      referenceId: input.referenceId,
+      pdfUrl: input.pdfUrl,
+      ...(input.electoralTerm === null
+        ? {}
+        : { electoralTerm: input.electoralTerm }),
+    },
+  });
+}
+
+// Each passage gets a durable job, so provider retries never repeat PDF work.
+export async function enqueueDocumentEmbeddings(
+  db: PrismaClient | Prisma.TransactionClient,
+  input: {
+    runId: string;
+    itemIndex: number | null;
+    electoralTerm: number | null;
+    referenceId: string;
+    variantNo: number;
+    chunks: { pageNo: number; chunkNo: number }[];
+    model?: string;
+    priority?: number;
+  },
+) {
+  let added = 0;
+  for (let i = 0; i < input.chunks.length; i += EMBED_JOB_BATCH_SIZE) {
+    const result = await db.processingJob.createMany({
+      data: input.chunks.slice(i, i + EMBED_JOB_BATCH_SIZE).map((chunk) => ({
+        sourceKind: "dip_endpoint" as const,
+        sourceKey: "/vorgangsposition",
+        sourceScope:
+          input.electoralTerm === null
+            ? undefined
+            : { electoralTerm: String(input.electoralTerm) },
+        runId: input.runId,
+        itemIndex: input.itemIndex,
+        dedupeKey: JSON.stringify([
+          ...(input.model ? ["reindex", input.model] : []),
+          EMBED_DOCUMENT,
+          input.referenceId,
+          input.variantNo,
+          chunk.pageNo,
+          chunk.chunkNo,
+        ]),
+        operation: EMBED_DOCUMENT,
+        payload: {
+          referenceId: input.referenceId,
+          variantNo: input.variantNo,
+          pageNo: chunk.pageNo,
+          chunkNo: chunk.chunkNo,
+          ...(input.model ? { model: input.model } : {}),
+        },
+        priority: input.priority ?? 0,
+      })),
+      skipDuplicates: true,
+    });
+    added += result.count;
+  }
+  return added;
+}
+
+// On-demand requests raise the priority of work that already exists instead of
+// adding a second job for the same document. Only unprocessed work moves; a
+// succeeded document already has its bytes and text cached. An exhausted job
+// gets a fresh retry budget every time a person asks for it.
+export async function raiseDocumentJob(
+  db: PrismaClient | Prisma.TransactionClient,
+  key: string,
+) {
+  const job = await db.processingJob.findUnique({ where: { dedupeKey: key } });
+  if (!job || job.status === "succeeded") return job;
+  if (job.status === "exhausted") {
+    await db.processingJob.update({
+      where: { id: job.id },
+      data: { priority: ON_DEMAND_PRIORITY },
+    });
+    return retryExhausted(db, job.id);
+  }
+  return db.processingJob.update({
+    where: { id: job.id },
+    data: { priority: ON_DEMAND_PRIORITY, nextAttemptAt: new Date() },
+  });
+}

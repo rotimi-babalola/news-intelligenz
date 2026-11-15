@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { collectVorgang, type FetchVorgangPage } from "../src/dip/vorgang.js";
+import {
+  collectVorgang,
+  type FetchVorgangPage,
+} from "../src/dip/collection/proceedings.js";
 import { qualifiedTable } from "../src/db.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 

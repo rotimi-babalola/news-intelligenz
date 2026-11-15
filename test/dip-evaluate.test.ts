@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { scoreRanking } from "../src/dip/evaluate.js";
+import { scoreRanking } from "../src/dip/search/evaluate.js";
 
 test("ranking scores current evidence identities including document pages", () => {
   const relevant = [

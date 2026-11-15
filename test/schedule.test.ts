@@ -8,7 +8,7 @@ import {
   parseElectoralTerms,
   parseProceedingCap,
   parseRunHour,
-} from "../src/dip/schedule.js";
+} from "../src/dip/collection/schedule.js";
 
 test("default terms collect 21 then 20", () => {
   assert.deepEqual(parseElectoralTerms(undefined), [21, 20]);

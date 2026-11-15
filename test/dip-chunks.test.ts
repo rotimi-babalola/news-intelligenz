@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { splitDocumentPage } from "../src/dip/chunks.js";
+import { splitDocumentPage } from "../src/dip/documents/chunks.js";
 
 test("PDF passages are bounded, overlapping, and deterministic", async () => {
   const text = `${"First topic. ".repeat(110)}\n\n${"Second topic. ".repeat(110)}`;

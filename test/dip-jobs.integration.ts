@@ -11,10 +11,13 @@ import {
   EMBED_PROCEEDING,
   EMBED_STEP,
   PROCESS_DOCUMENT,
-  raiseDocumentJob,
-} from "../src/dip/jobs.js";
-import { collectVorgang } from "../src/dip/vorgang.js";
-import { collectSteps, type FetchStepPage } from "../src/dip/steps.js";
+} from "../src/dip/constants.js";
+import { raiseDocumentJob } from "../src/dip/jobs/queue.js";
+import { collectVorgang } from "../src/dip/collection/proceedings.js";
+import {
+  collectSteps,
+  type FetchStepPage,
+} from "../src/dip/collection/steps.js";
 import { drainJobs } from "../src/import/service.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 

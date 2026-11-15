@@ -1,0 +1,218 @@
+import type { Prisma, PrismaClient } from "../../generated/prisma/client";
+import { RateLimitedError, parseRetryAfterMs } from "../../jobs";
+import {
+  countProceedingsByTerm,
+  findProceeding,
+  upsertDipCandidate,
+  upsertParliamentaryDiscovery,
+} from "../db/index";
+import {
+  DIP_API_BASE_URL,
+  DIP_INTAKE_LOCK_ID,
+  PAGE_WRITE_BATCH_SIZE,
+  VORGANG_ENDPOINT,
+} from "../constants";
+import { TerminalPageError, collectDipPages } from "./pages";
+import type {
+  CollectVorgangOptions,
+  CollectVorgangResult,
+  FetchVorgangPage,
+  StoredDoc,
+} from "./types";
+import { toStored } from "./normalize";
+import { captureProceedingVersion } from "./versions";
+
+export type {
+  CollectVorgangOptions,
+  CollectVorgangResult,
+  FetchVorgangPage,
+  VorgangPage,
+} from "./types";
+
+// DIP /vorgang import. Collection state persists idempotently in PostgreSQL:
+// rerunning a run reuses its rows, and the checkpoint advances only after all
+// pages are durably stored. Embedding and PDF work (later slices) enqueue
+// independently and never hold the checkpoint open.
+
+// Shared with step collection for missing-parent backfill: stores one page of
+// validated proceedings idempotently, honoring the local cap.
+export async function storeProceedingPage(
+  tx: Prisma.TransactionClient,
+  runId: string,
+  stored: StoredDoc[],
+  cap: number | undefined,
+) {
+  let versionsAdded = 0;
+  let capped = 0;
+  // The page transaction holds the intake advisory lock, so one count per
+  // term per page stays exact across concurrent same-run writers.
+  const remainingByTerm = new Map<number, number>();
+  for (const { doc, raw, index } of stored) {
+    let remaining: number | null = null;
+    if (cap !== undefined) {
+      const cached = remainingByTerm.get(doc.wahlperiode);
+      if (cached !== undefined) {
+        remaining = cached;
+      } else {
+        const count = await countProceedingsByTerm(tx, doc.wahlperiode);
+        remaining = Math.max(0, cap - count);
+        remainingByTerm.set(doc.wahlperiode, remaining);
+      }
+    }
+    const known = await findProceeding(tx, doc.id);
+    if (!known && remaining === 0) {
+      capped += 1;
+      await upsertDipCandidate(
+        tx,
+        runId,
+        index,
+        { endpoint: VORGANG_ENDPOINT, id: doc.id },
+        [],
+      );
+      continue;
+    }
+    const outcome = await captureProceedingVersion(
+      tx,
+      runId,
+      { doc, raw, index },
+      known !== null,
+    );
+    if (outcome.created && remaining !== null)
+      remainingByTerm.set(doc.wahlperiode, remaining - 1);
+    if (outcome.duplicate) continue;
+    if (outcome.versionAdded) versionsAdded += 1;
+    await upsertDipCandidate(
+      tx,
+      runId,
+      index,
+      { endpoint: VORGANG_ENDPOINT, id: doc.id },
+      [],
+    );
+    await upsertParliamentaryDiscovery(tx, runId, "vorgang", doc.id);
+  }
+  return { versionsAdded, capped };
+}
+
+export async function collectVorgang(
+  prisma: PrismaClient,
+  options: CollectVorgangOptions,
+): Promise<CollectVorgangResult> {
+  const { backfilled: _backfilled, ...result } = await collectDipPages(
+    prisma,
+    VORGANG_ENDPOINT,
+    options,
+    async (documents, firstIndex, runId) => {
+      const storedDocs: StoredDoc[] = [];
+      const invalidDocs: { index: number; error: string; id: string | null }[] =
+        [];
+      for (const [offset, input] of documents.entries()) {
+        const converted = toStored(input, firstIndex + offset);
+        if ("error" in converted) {
+          invalidDocs.push({
+            index: converted.index,
+            error: converted.error,
+            id:
+              typeof input === "object" && input !== null && "id" in input
+                ? String((input as Record<string, unknown>)["id"])
+                : null,
+          });
+        } else {
+          storedDocs.push(converted);
+        }
+      }
+      for (let i = 0; i < invalidDocs.length; i += PAGE_WRITE_BATCH_SIZE) {
+        await prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DIP_INTAKE_LOCK_ID})`;
+          for (const { index, error, id } of invalidDocs.slice(
+            i,
+            i + PAGE_WRITE_BATCH_SIZE,
+          )) {
+            await upsertDipCandidate(
+              tx,
+              runId,
+              index,
+              { endpoint: VORGANG_ENDPOINT, id },
+              [error],
+            );
+          }
+        });
+      }
+      const counts = { versionsAdded: 0, capped: 0 };
+      for (let i = 0; i < storedDocs.length; i += PAGE_WRITE_BATCH_SIZE) {
+        const batch = await prisma.$transaction(
+          async (tx) => {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DIP_INTAKE_LOCK_ID})`;
+            return storeProceedingPage(
+              tx,
+              runId,
+              storedDocs.slice(i, i + PAGE_WRITE_BATCH_SIZE),
+              options.proceedingCap,
+            );
+          },
+          { timeout: 15_000 },
+        );
+        counts.versionsAdded += batch.versionsAdded;
+        counts.capped += batch.capped;
+      }
+      let maxObserved: Date | null = null;
+      for (const { doc } of storedDocs) {
+        const observed = new Date(doc.aktualisiert);
+        if (!maxObserved || observed > maxObserved) maxObserved = observed;
+      }
+      return {
+        valid: storedDocs.length,
+        invalid: invalidDocs.length,
+        stored: storedDocs.length - counts.capped,
+        backfilled: 0,
+        ...counts,
+        maxObserved,
+      };
+    },
+  );
+  return result;
+}
+
+// Live page fetcher for operational use (tests inject fakes). Sends explicit
+// timezone offsets; callers pass real Date objects, never bare local times.
+export function liveVorgangFetcher(apiKey: string): FetchVorgangPage {
+  return async ({
+    wahlperiode,
+    aktualisiertStart,
+    aktualisiertEnd,
+    cursor,
+  }) => {
+    // The API names its filters f.wahlperiode etc.; URLSearchParams encodes
+    // the dots literally, which the endpoint accepts.
+    const query = new URLSearchParams({ format: "json" });
+    query.set("f.wahlperiode", String(wahlperiode));
+    if (aktualisiertStart) query.set("f.aktualisiert.start", aktualisiertStart);
+    if (aktualisiertEnd) query.set("f.aktualisiert.end", aktualisiertEnd);
+    if (cursor) query.set("cursor", cursor);
+    const response = await fetch(`${DIP_API_BASE_URL}/vorgang?${query}`, {
+      headers: { Authorization: `ApiKey ${apiKey}` },
+    });
+    if (response.status === 429)
+      throw new RateLimitedError(
+        "DIP /vorgang responded 429",
+        parseRetryAfterMs(response.headers.get("retry-after")) ?? 60_000,
+      );
+    if (!response.ok) {
+      const message = `DIP /vorgang responded ${response.status}`;
+      if (response.status >= 400 && response.status < 500)
+        throw new TerminalPageError(message);
+      throw new Error(message);
+    }
+    const body = (await response.json()) as {
+      documents?: unknown[];
+      cursor?: string;
+      numFound?: number;
+    };
+    if (!Array.isArray(body.documents) || typeof body.cursor !== "string")
+      throw new Error("DIP /vorgang returned an unexpected payload");
+    return {
+      documents: body.documents,
+      cursor: body.cursor,
+      numFound: body.numFound ?? 0,
+    };
+  };
+}

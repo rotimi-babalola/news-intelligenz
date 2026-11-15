@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import type { PrismaClient } from "../src/generated/prisma/client.js";
-import { verifyDocumentSection } from "../src/dip/section-verification.js";
+import { verifyDocumentSection } from "../src/dip/documents/verify.js";
 
 const pdfUrl = "https://dserver.bundestag.de/section.pdf";
 const bytes = Buffer.from("archived PDF fixture");

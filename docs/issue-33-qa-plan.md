@@ -93,7 +93,7 @@ clock. `2026-10-10` makes the fixture's `2026-10-08/09` references hot.
 ```sh
 node --env-file-if-exists=.env --input-type=module -e "
 const { database } = await import('./dist/src/db.js');
-const { collectSteps } = await import('./dist/src/dip/steps.js');
+const { collectSteps } = await import('./dist/src/dip/collection/steps.js');
 const prisma = database();
 const fundstelle = (id, datum, pdfUrl) => ({
   id, dokumentnummer: '21/1001', datum,
@@ -141,7 +141,7 @@ Uses stubs so it is offline; the real extractor is QA-6/QA-11.
 ```sh
 node --env-file-if-exists=.env --input-type=module -e "
 const { database } = await import('./dist/src/db.js');
-const { processNextDocument } = await import('./dist/src/dip/documents.js');
+const { processNextDocument } = await import('./dist/src/dip/documents/process.js');
 const prisma = database();
 const pages = [
   { page: 1, text: 'Deutscher Bundestag Drucksache 21/1001' },
@@ -176,8 +176,8 @@ failed extraction path is covered by `pdf.test.ts`.
 ```sh
 node --env-file-if-exists=.env --input-type=module -e "
 const { database } = await import('./dist/src/db.js');
-const { collectSteps } = await import('./dist/src/dip/steps.js');
-const { processNextDocument } = await import('./dist/src/dip/documents.js');
+const { collectSteps } = await import('./dist/src/dip/collection/steps.js');
+const { processNextDocument } = await import('./dist/src/dip/documents/process.js');
 const prisma = database();
 const step = (datum, pdfUrl) => ({
   id: '701410', typ: 'Vorgangsposition', vorgangsposition: 'Kleine Anfrage',
@@ -235,7 +235,7 @@ export PATH="$PWD/.venv/bin:$PATH"   # pymupdf lives in the repo venv, not Homeb
 python3 -c "import pymupdf; d=pymupdf.open(); p=d.new_page(); p.insert_text((72,72),'Deutscher Bundestag 21/1001 Haushalt'); d.save('/tmp/qa-doc.pdf')"
 node --input-type=module -e "
 import { readFile } from 'node:fs/promises';
-const { pymupdfExtractor } = await import('./dist/src/dip/pdf.js');
+const { pymupdfExtractor } = await import('./dist/src/dip/documents/pdf.js');
 console.log(JSON.stringify(await pymupdfExtractor(await readFile('/tmp/qa-doc.pdf'))));
 "
 ```

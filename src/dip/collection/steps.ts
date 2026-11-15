@@ -1,0 +1,326 @@
+import type { Prisma, PrismaClient } from "../../generated/prisma/client";
+import { RateLimitedError, parseRetryAfterMs } from "../../jobs";
+import {
+  findDocumentReference,
+  findProceeding,
+  listProceedingApiIdsByTerm,
+  upsertDipCandidate,
+  upsertDocumentReference,
+  upsertParliamentaryDiscovery,
+} from "../db/index";
+import {
+  DIP_API_BASE_URL,
+  DIP_INTAKE_LOCK_ID,
+  HOT_DOCUMENT_MS,
+  PAGE_WRITE_BATCH_SIZE,
+  STEPS_ENDPOINT,
+} from "../constants";
+import { enqueueDocumentProcessing } from "../jobs/queue";
+import { TerminalPageError, collectDipPages } from "./pages";
+import type {
+  CollectStepsOptions,
+  CollectStepsResult,
+  StoredDoc,
+  StoredStep,
+} from "./types";
+import { toStored, toStoredStep } from "./normalize";
+import { storeProceedingPage } from "./proceedings";
+import { captureStepVersion } from "./versions";
+
+// Older references wait for an on-demand request; the document date is never a
+// sync filter, only this queue selection.
+function isHotDocument(documentDate: Date, now: Date) {
+  const ageMs = now.getTime() - documentDate.getTime();
+  return ageMs >= 0 && ageMs <= HOT_DOCUMENT_MS;
+}
+
+export type {
+  CollectStepsOptions,
+  CollectStepsResult,
+  FetchStepPage,
+  FetchVorgang,
+  StepPage,
+} from "./types";
+
+// DIP /vorgangsposition import. Steps link to proceedings through vorgang_id;
+// a step whose parent is not stored is retained either way — unresolved
+// parents stay inspectable on the step row, never silently discarded. An
+// optional single-item parent fetch backfills genuinely missing context, but
+// independently fetched endpoints are not an atomic snapshot and complete
+// lifecycle coverage is never claimed from term filters alone.
+
+async function storeStepsPage(
+  tx: Prisma.TransactionClient,
+  runId: string,
+  steps: StoredStep[],
+  parent: {
+    followStored: boolean;
+    cap: number | undefined;
+    fetched: ReadonlyMap<string, StoredDoc>;
+    electoralTerm: number;
+    now: Date;
+  },
+) {
+  let versionsAdded = 0;
+  let capped = 0;
+  let backfilled = 0;
+  for (const { doc, raw, fundstelleRest, index } of steps) {
+    const candidateMeta = { endpoint: STEPS_ENDPOINT, id: doc.id };
+    let skipForCap = false;
+    if (parent.followStored && !(await findProceeding(tx, doc.vorgang_id))) {
+      const converted = parent.fetched.get(doc.vorgang_id);
+      if (converted) {
+        const outcome = await storeProceedingPage(
+          tx,
+          runId,
+          [converted],
+          parent.cap,
+        );
+        versionsAdded += outcome.versionsAdded;
+        if (outcome.capped === 0) backfilled += 1;
+        skipForCap = outcome.capped > 0;
+      }
+    }
+    if (skipForCap) {
+      capped += 1;
+      await upsertDipCandidate(tx, runId, index, candidateMeta, []);
+      continue;
+    }
+    const outcome = await captureStepVersion(
+      tx,
+      runId,
+      { doc, raw, fundstelleRest, index },
+      parent.electoralTerm,
+    );
+    if (outcome.duplicate) continue;
+    if (outcome.versionAdded) versionsAdded += 1;
+    // Document references persist eagerly with the step; PDF bytes are never
+    // fetched here. Only new or changed hot-subset references queue document
+    // work; older references wait for an on-demand request (later slice).
+    const previousRef = await findDocumentReference(tx, doc.id);
+    const refDocumentDate = new Date(doc.fundstelle.datum);
+    await upsertDocumentReference(tx, {
+      stepApiId: doc.id,
+      proceedingApiId: doc.vorgang_id,
+      referenceId: doc.fundstelle.id,
+      documentNumber: doc.fundstelle.dokumentnummer,
+      pdfUrl: doc.fundstelle.pdf_url ?? null,
+      documentDate: refDocumentDate,
+      metadata: fundstelleRest as Prisma.InputJsonValue,
+    });
+    const refChanged =
+      !previousRef ||
+      previousRef.referenceId !== doc.fundstelle.id ||
+      previousRef.documentNumber !== doc.fundstelle.dokumentnummer ||
+      previousRef.pdfUrl !== (doc.fundstelle.pdf_url ?? null) ||
+      previousRef.documentDate?.getTime() !== refDocumentDate.getTime();
+    if (refChanged && isHotDocument(refDocumentDate, parent.now)) {
+      await enqueueDocumentProcessing(tx, {
+        runId,
+        itemIndex: index,
+        electoralTerm: parent.electoralTerm,
+        stepApiId: doc.id,
+        referenceId: doc.fundstelle.id,
+        pdfUrl: doc.fundstelle.pdf_url ?? null,
+        documentDate: refDocumentDate,
+      });
+    }
+    await upsertDipCandidate(tx, runId, index, candidateMeta, []);
+    await upsertParliamentaryDiscovery(tx, runId, "vorgangsposition", doc.id);
+  }
+  return { versionsAdded, capped, backfilled };
+}
+
+export async function collectSteps(
+  prisma: PrismaClient,
+  options: CollectStepsOptions,
+): Promise<CollectStepsResult> {
+  const now = options.now ?? new Date();
+  // A stored-proceeding run only needs steps for the stored parent set;
+  // querying by parent avoids paginating every step in the term.
+  const vorgangIds = options.scopeToStoredProceedings
+    ? (await listProceedingApiIdsByTerm(prisma, options.electoralTerm)).map(
+        ({ apiId }) => apiId,
+      )
+    : undefined;
+  return collectDipPages(
+    prisma,
+    STEPS_ENDPOINT,
+    {
+      ...options,
+      vorgangIds,
+    },
+    async (documents, firstIndex, runId) => {
+      const kept: StoredStep[] = [];
+      const invalidDocs: { index: number; error: string; id: string | null }[] =
+        [];
+      for (const [offset, input] of documents.entries()) {
+        const converted = toStoredStep(input, firstIndex + offset);
+        if ("error" in converted) {
+          invalidDocs.push({
+            index: converted.index,
+            error: converted.error,
+            id:
+              typeof input === "object" && input !== null && "id" in input
+                ? String((input as Record<string, unknown>)["id"])
+                : null,
+          });
+        } else {
+          kept.push(converted);
+        }
+      }
+      const fetchedParents = new Map<string, StoredDoc>();
+      if (options.followStoredParents && options.fetchVorgang) {
+        const missing = new Map<string, number>();
+        for (const { doc, index } of kept)
+          if (!missing.has(doc.vorgang_id))
+            missing.set(doc.vorgang_id, -index - 1);
+        const existing = await prisma.proceeding.findMany({
+          where: { apiId: { in: [...missing.keys()] } },
+          select: { apiId: true },
+        });
+        for (const { apiId } of existing) missing.delete(apiId);
+        for (const [apiId, index] of missing) {
+          // Parent context is optional: one missing, rate-limited or
+          // bot-challenged parent must not fail the whole step run. The step
+          // is still stored with its unresolved parent id.
+          let fetched: unknown;
+          try {
+            fetched = await options.fetchVorgang(apiId);
+          } catch {
+            continue;
+          }
+          if (fetched === null) continue;
+          const converted = toStored(fetched, index);
+          if (!("error" in converted) && converted.doc.id === apiId)
+            fetchedParents.set(apiId, converted);
+        }
+      }
+      for (let i = 0; i < invalidDocs.length; i += PAGE_WRITE_BATCH_SIZE) {
+        await prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DIP_INTAKE_LOCK_ID})`;
+          for (const { index, error, id } of invalidDocs.slice(
+            i,
+            i + PAGE_WRITE_BATCH_SIZE,
+          )) {
+            await upsertDipCandidate(
+              tx,
+              runId,
+              index,
+              { endpoint: STEPS_ENDPOINT, id },
+              [error],
+            );
+          }
+        });
+      }
+      const counts = { versionsAdded: 0, capped: 0, backfilled: 0 };
+      for (let i = 0; i < kept.length; i += PAGE_WRITE_BATCH_SIZE) {
+        const batch = await prisma.$transaction(
+          async (tx) => {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DIP_INTAKE_LOCK_ID})`;
+            return storeStepsPage(
+              tx,
+              runId,
+              kept.slice(i, i + PAGE_WRITE_BATCH_SIZE),
+              {
+                followStored: options.followStoredParents ?? false,
+                cap: options.proceedingCap,
+                fetched: fetchedParents,
+                electoralTerm: options.electoralTerm,
+                now,
+              },
+            );
+          },
+          { timeout: 15_000 },
+        );
+        counts.versionsAdded += batch.versionsAdded;
+        counts.capped += batch.capped;
+        counts.backfilled += batch.backfilled;
+      }
+      let maxObserved: Date | null = null;
+      for (const { doc } of kept) {
+        const observed = new Date(doc.aktualisiert);
+        if (!maxObserved || observed > maxObserved) maxObserved = observed;
+      }
+      return {
+        valid: kept.length,
+        invalid: invalidDocs.length,
+        stored: kept.length - counts.capped,
+        ...counts,
+        maxObserved,
+      };
+    },
+  );
+}
+
+// Live page fetcher for operational use (tests inject fakes). Single-item
+// parent/step retrieval reuses the same auth and filter conventions.
+export function liveStepsFetcher(apiKey: string): {
+  fetchPage: CollectStepsOptions["fetchPage"];
+  fetchVorgang: NonNullable<CollectStepsOptions["fetchVorgang"]>;
+} {
+  const headers = { Authorization: `ApiKey ${apiKey}` };
+  return {
+    fetchPage: async ({
+      wahlperiode,
+      aktualisiertStart,
+      aktualisiertEnd,
+      cursor,
+      vorgangIds,
+    }) => {
+      const query = new URLSearchParams({ format: "json" });
+      query.set("f.wahlperiode", String(wahlperiode));
+      for (const id of vorgangIds ?? []) query.append("f.vorgang", id);
+      if (aktualisiertStart)
+        query.set("f.aktualisiert.start", aktualisiertStart);
+      if (aktualisiertEnd) query.set("f.aktualisiert.end", aktualisiertEnd);
+      if (cursor) query.set("cursor", cursor);
+      const response = await fetch(
+        `${DIP_API_BASE_URL}/vorgangsposition?${query}`,
+        { headers },
+      );
+      if (response.status === 429)
+        throw new RateLimitedError(
+          "DIP /vorgangsposition responded 429",
+          parseRetryAfterMs(response.headers.get("retry-after")) ?? 60_000,
+        );
+      if (!response.ok) {
+        const message = `DIP /vorgangsposition responded ${response.status}`;
+        if (response.status >= 400 && response.status < 500)
+          throw new TerminalPageError(message);
+        throw new Error(message);
+      }
+      const body = (await response.json()) as {
+        documents?: unknown[];
+        cursor?: string;
+        numFound?: number;
+      };
+      if (!Array.isArray(body.documents) || typeof body.cursor !== "string")
+        throw new Error("DIP /vorgangsposition returned an unexpected payload");
+      return {
+        documents: body.documents,
+        cursor: body.cursor,
+        numFound: body.numFound ?? 0,
+      };
+    },
+    fetchVorgang: async (id: string) => {
+      const response = await fetch(
+        `${DIP_API_BASE_URL}/vorgang/${id}?format=json`,
+        { headers },
+      );
+      if (response.status === 404) return null;
+      if (response.status === 429)
+        throw new RateLimitedError(
+          `DIP /vorgang/${id} responded 429`,
+          parseRetryAfterMs(response.headers.get("retry-after")) ?? 60_000,
+        );
+      if (!response.ok) {
+        const message = `DIP /vorgang/${id} responded ${response.status}`;
+        if (response.status >= 400 && response.status < 500)
+          throw new TerminalPageError(message);
+        throw new Error(message);
+      }
+      return (await response.json()) as unknown;
+    },
+  };
+}

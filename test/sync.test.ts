@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { pickCheckpointTarget } from "../src/dip/collect.js";
-import { resolveSyncWindow, SYNC_OVERLAP_MS } from "../src/dip/sync.js";
+import { pickCheckpointTarget } from "../src/dip/collection/pages.js";
+import { SYNC_OVERLAP_MS } from "../src/dip/constants.js";
+import { resolveSyncWindow } from "../src/dip/collection/sync.js";
 
 test("null checkpoint imports baseline without a start filter", () => {
   const now = new Date("2026-10-11T07:00:00+02:00");

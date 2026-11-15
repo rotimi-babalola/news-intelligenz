@@ -1,6 +1,6 @@
 import { database } from "../src/db.js";
-import { embeddingConfig } from "../src/dip/embedding.js";
-import { enqueueDipReindex } from "../src/dip/reindex.js";
+import { embeddingConfig } from "../src/dip/search/embedding.js";
+import { enqueueDipReindex } from "../src/dip/jobs/reindex.js";
 
 const prisma = database();
 try {

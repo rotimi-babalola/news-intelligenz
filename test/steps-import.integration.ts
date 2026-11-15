@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { collectVorgang } from "../src/dip/vorgang.js";
+import { collectVorgang } from "../src/dip/collection/proceedings.js";
 import { qualifiedTable } from "../src/db.js";
-import { collectSteps, type FetchStepPage } from "../src/dip/steps.js";
 import {
-  findDipCheckpoint,
-  upsertDipCheckpoint,
-} from "../src/dip/repository.js";
+  collectSteps,
+  type FetchStepPage,
+} from "../src/dip/collection/steps.js";
+import { findDipCheckpoint, upsertDipCheckpoint } from "../src/dip/db/index.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 
 function proceeding(id: string, term = 21) {

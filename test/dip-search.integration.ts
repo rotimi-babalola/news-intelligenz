@@ -4,13 +4,13 @@ import { test } from "node:test";
 import {
   embeddingConfig,
   embeddingInput,
-  processNextDipEmbedding,
-} from "../src/dip/embedding.js";
-import { saveDipEmbedding } from "../src/dip/repository.js";
-import { searchDip } from "../src/dip/search.js";
-import { EMBED_PROCEEDING } from "../src/dip/jobs.js";
-import type { VorgangPage } from "../src/dip/types.js";
-import { collectVorgang } from "../src/dip/vorgang.js";
+} from "../src/dip/search/embedding.js";
+import { processNextDipEmbedding } from "../src/dip/jobs/embedding.js";
+import { saveDipEmbedding } from "../src/dip/db/index.js";
+import { searchDip } from "../src/dip/search/search.js";
+import { EMBED_PROCEEDING } from "../src/dip/constants.js";
+import type { VorgangPage } from "../src/dip/collection/types.js";
+import { collectVorgang } from "../src/dip/collection/proceedings.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 
 const vector = (first: number, second: number) => [
