@@ -96,4 +96,3 @@ jobs:
           [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/missing)" = "404" ]
           [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3000/)" = "405" ]
           [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: attacker.example' http://127.0.0.1:3000/)" = "403" ]
-
