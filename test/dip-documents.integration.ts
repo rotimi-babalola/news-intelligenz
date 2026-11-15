@@ -231,7 +231,7 @@ test("long and empty PDF pages produce bounded passage jobs", async () => {
       chunks.length,
     );
     const inputs: string[] = [];
-    for (const chunk of chunks)
+    for (let i = 0; i < chunks.length; i++)
       assert.equal(
         (
           await processNextDipEmbedding(prisma, "worker", {

@@ -5,7 +5,6 @@ import { runIdSchema } from "../../validation";
 import {
   DIP_INTAKE_LOCK_ID,
   PAGE_FETCH_ATTEMPTS,
-  PAGE_WRITE_BATCH_SIZE,
   STEP_FILTER_BATCH,
 } from "../constants";
 import {

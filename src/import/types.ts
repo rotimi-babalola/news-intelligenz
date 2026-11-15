@@ -1,6 +1,5 @@
 import type { FetchResult } from "../extract";
 import type { SourceRef } from "../jobs";
-import type { SearchProvider } from "../search";
 import type { ProviderFetch } from "../search-providers";
 
 export type FeedResult = {

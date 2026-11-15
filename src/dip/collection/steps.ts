@@ -14,7 +14,6 @@ import {
   HOT_DOCUMENT_MS,
   PAGE_WRITE_BATCH_SIZE,
   STEPS_ENDPOINT,
-  VORGANG_ENDPOINT,
 } from "../constants";
 import { enqueueDocumentProcessing } from "../jobs/queue";
 import { TerminalPageError, collectDipPages } from "./pages";

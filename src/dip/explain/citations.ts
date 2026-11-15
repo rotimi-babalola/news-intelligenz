@@ -4,7 +4,6 @@ import { verifyClaims, type Verify } from "./provider";
 import {
   sections,
   type BriefLanguage,
-  type Claim,
   type Claims,
   type Evidence,
 } from "./types";
