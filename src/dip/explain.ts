@@ -37,11 +37,11 @@ const claimSchema = z.object({
   quote: z.string().trim().min(12),
 });
 const answerSchema = z.object({
-  matter: z.array(claimSchema),
-  stage: z.array(claimSchema),
-  steps: z.array(claimSchema),
-  documents: z.array(claimSchema),
-  unresolved: z.array(claimSchema),
+  matter: z.array(z.unknown()).catch([]),
+  stage: z.array(z.unknown()).catch([]),
+  steps: z.array(z.unknown()).catch([]),
+  documents: z.array(z.unknown()).catch([]),
+  unresolved: z.array(z.unknown()).catch([]),
 });
 type Generate = (input: {
   question: string;
@@ -113,7 +113,10 @@ export function validateAnswer(raw: unknown, evidence: Evidence[]) {
     { text: string; quote: string; citation: Evidence["citation"] }[]
   >;
   for (const section of sections) {
-    result[section] = parsed[section].flatMap((claim) => {
+    result[section] = parsed[section].flatMap((item) => {
+      const parsedClaim = claimSchema.safeParse(item);
+      if (!parsedClaim.success) return [];
+      const claim = parsedClaim.data;
       const source = sources.get(claim.evidenceId);
       const quote = source && sourceQuote(source.text, claim.quote);
       if (!source || !quote) return [];
@@ -211,7 +214,7 @@ export async function generateProceedingBrief(
   const key = createHash("sha256")
     .update(
       JSON.stringify([
-        4,
+        5,
         question.trim(),
         language,
         model,
@@ -240,6 +243,7 @@ export async function generateProceedingBrief(
         evidence,
       )
     : emptyClaims();
+  claims.steps = orderedStepClaims(current.steps, claims.steps, language);
   const latest = await getProceeding(prisma, dossier.apiId);
   if (!latest || !matchesDossier(latest, dossier))
     throw new Error("Dossier changed during generation; search again");
@@ -283,6 +287,46 @@ function emptyClaims() {
     documents: [],
     unresolved: [],
   } as ReturnType<typeof validateAnswer>;
+}
+
+function orderedStepClaims(
+  steps: NonNullable<Awaited<ReturnType<typeof getProceeding>>>["steps"],
+  claims: ReturnType<typeof validateAnswer>["steps"],
+  language: BriefLanguage,
+) {
+  return steps.flatMap((step) => {
+    const cited = claims.filter(
+      (claim) => claim.citation.stepId === step.apiId,
+    );
+    if (cited.length) return cited;
+    const label = step.label || step.title;
+    if (!label) return [];
+    const date = step.documentDate
+      ? new Intl.DateTimeFormat(language === "de" ? "de-DE" : "en-GB", {
+          dateStyle: "medium",
+          timeZone: "UTC",
+        }).format(new Date(step.documentDate))
+      : null;
+    return [
+      {
+        text: [date, label].filter(Boolean).join(" · "),
+        quote: [
+          step.documentDate,
+          step.institution,
+          step.label,
+          step.title,
+          step.text,
+        ]
+          .filter(Boolean)
+          .join(" | "),
+        citation: {
+          kind: "step" as const,
+          stepId: step.apiId,
+          url: step.sourceUrl,
+        },
+      },
+    ];
+  });
 }
 
 function buildBrief(

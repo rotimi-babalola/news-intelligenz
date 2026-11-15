@@ -75,7 +75,7 @@ const hit = {
 } as DipHit;
 const dossier = buildDossiers([hit], new Map([["1", timeline]]), 1)[0]!;
 
-function store() {
+function store(noSteps = false) {
   let proceedingVersion = 1;
   let variantNo = 1;
   let byteHash = "hash-one";
@@ -97,30 +97,33 @@ function store() {
       }),
     },
     proceedingStep: {
-      findMany: async () => [
-        {
-          apiId: "2",
-          institution: "BT",
-          stepLabel: "First reading",
-          title: "Housing bill introduced",
-          documentType: "Drucksache",
-          documentDate: date,
-          sourceUpdatedAt: date,
-          firstObservedAt: date,
-          lastObservedAt: date,
-          metadata: {},
-          latestVersionNo: 1,
-          versions: [{ id: "s1", observedAt: date }],
-          documentReference: {
-            referenceId: "3",
-            documentNumber: "1/1",
-            documentDate: null,
-            pdfUrl,
-            metadata: {},
-            observedAt: date,
-          },
-        },
-      ],
+      findMany: async () =>
+        noSteps
+          ? []
+          : [
+              {
+                apiId: "2",
+                institution: "BT",
+                stepLabel: "First reading",
+                title: "Housing bill introduced",
+                documentType: "Drucksache",
+                documentDate: date,
+                sourceUpdatedAt: date,
+                firstObservedAt: date,
+                lastObservedAt: date,
+                metadata: {},
+                latestVersionNo: 1,
+                versions: [{ id: "s1", observedAt: date }],
+                documentReference: {
+                  referenceId: "3",
+                  documentNumber: "1/1",
+                  documentDate: null,
+                  pdfUrl,
+                  metadata: {},
+                  observedAt: date,
+                },
+              },
+            ],
     },
     documentContent: {
       findFirst: async () => ({
@@ -247,7 +250,7 @@ test("a broad question can cite a linked PDF added after proceeding selection", 
   assert.equal(brief.claims.documents[0]?.citation.referenceId, "3");
 });
 
-test("unsupported citations and missing evidence produce a qualified answer or abstention", async () => {
+test("unsupported citations are dropped while documented steps remain", async () => {
   const { prisma, setVariant } = store();
   const unsupported = validateAnswer(
     {
@@ -289,9 +292,46 @@ test("unsupported citations and missing evidence produce a qualified answer or a
       unresolved: [],
     }),
   );
-  assert.equal(brief.answerConfidence, "abstain");
+  assert.equal(brief.answerConfidence, "partial");
   assert.deepEqual(brief.claims.documents, []);
+  assert.equal(brief.claims.steps[0]?.citation.stepId, "2");
   assert.match(brief.qualification!, /does not establish/);
+});
+
+test("a proceeding with no step or page evidence abstains", async () => {
+  const { prisma } = store(true);
+  const noEvidence = buildDossiers(
+    [
+      {
+        entity: "vorgang",
+        apiId: "1",
+        proceedingApiId: "1",
+        versionNo: 1,
+        score: 0.8,
+        title: "Housing bill",
+        summary: null,
+        stepLabel: null,
+        source: {
+          endpoint: "/vorgang",
+          apiId: "1",
+          url: "https://example.org/proceeding/1",
+        },
+      } as DipHit,
+    ],
+    new Map([["1", { ...timeline, steps: [] }]]),
+    1,
+  )[0]!;
+  const brief = await generateProceedingBrief(
+    prisma,
+    "What happened?",
+    "en",
+    noEvidence,
+    async () => {
+      throw new Error("No evidence should reach the model");
+    },
+  );
+  assert.equal(brief.answerConfidence, "abstain");
+  assert.deepEqual(brief.claims.steps, []);
 });
 
 test("PDF line wrapping does not discard an otherwise exact cited quote", () => {
@@ -325,6 +365,45 @@ test("PDF line wrapping does not discard an otherwise exact cited quote", () => 
   );
   assert.equal(result.documents[0]?.quote, original);
   assert.equal(result.documents[0]?.citation.referenceId, "3");
+});
+
+test("malformed document claims do not discard valid ordered steps", async () => {
+  const { prisma } = store();
+  const brief = await generateProceedingBrief(
+    prisma,
+    "What happened?",
+    "de",
+    dossier,
+    async () => ({
+      ...answer("de"),
+      documents: [
+        {
+          evidenceId: "page:3:2",
+          quote: "The bill would provide housing grants.",
+        },
+        answer("de").documents[0],
+      ],
+    }),
+  );
+  assert.equal(
+    brief.claims.steps[0]?.text,
+    "Die erste Lesung ist dokumentiert.",
+  );
+  assert.equal(brief.claims.documents.length, 1);
+});
+
+test("stored steps fill an omitted model timeline with source citations", async () => {
+  const { prisma } = store();
+  const brief = await generateProceedingBrief(
+    prisma,
+    "What happened?",
+    "de",
+    dossier,
+    async () => ({ ...answer("de"), steps: [] }),
+  );
+  assert.match(brief.claims.steps[0]?.text ?? "", /First reading/);
+  assert.equal(brief.claims.steps[0]?.citation.stepId, "2");
+  assert.match(brief.claims.steps[0]?.quote ?? "", /First reading/);
 });
 
 test("extra model claims retain all cited steps without rejecting the answer", () => {
