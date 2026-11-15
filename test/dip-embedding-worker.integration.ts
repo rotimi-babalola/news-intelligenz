@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { retryJob } from "../src/admin/service.js";
 import { embeddingConfig } from "../src/dip/search/embedding.js";
 import { processNextDipEmbedding } from "../src/dip/jobs/embedding.js";
-import { EMBED_PROCEEDING, EMBED_STEP } from "../src/dip/jobs/queue.js";
+import { EMBED_PROCEEDING, EMBED_STEP } from "../src/dip/constants.js";
 import { collectVorgang } from "../src/dip/collection/proceedings.js";
 import { collectSteps } from "../src/dip/collection/steps.js";
 import { dipSource, enqueueJob } from "../src/jobs.js";

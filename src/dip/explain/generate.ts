@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "../../generated/prisma/client";
+import { BRIEF_CACHE_VERSION, MAX_BRIEF_QUESTION_LENGTH } from "../constants";
 import {
   findProceedingBrief,
   latestDocumentContent,
@@ -34,7 +35,7 @@ export async function generateProceedingBrief(
   verify: Verify = verifyClaims,
   translate: Translate = translatePages,
 ) {
-  if (!question.trim() || question.length > 1000)
+  if (!question.trim() || question.length > MAX_BRIEF_QUESTION_LENGTH)
     throw new Error("Question must contain 1–1000 characters");
   if (language !== "en" && language !== "de")
     throw new Error("Unsupported language");
@@ -54,7 +55,7 @@ export async function generateProceedingBrief(
   const key = createHash("sha256")
     .update(
       JSON.stringify([
-        9,
+        BRIEF_CACHE_VERSION,
         question.trim(),
         language,
         model,

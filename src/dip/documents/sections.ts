@@ -1,4 +1,5 @@
 import type { Client } from "../db/index";
+import { MAX_SECTION_HEADING_LENGTH } from "../constants";
 import {
   createDocumentSections,
   listDocumentPages,
@@ -77,7 +78,7 @@ const CONTENTS_PAGE =
 
 function readHeading(line: string): Heading | null {
   const trimmed = line.trim();
-  if (!trimmed || trimmed.length > 200) return null;
+  if (!trimmed || trimmed.length > MAX_SECTION_HEADING_LENGTH) return null;
   for (const { pattern, label } of HEADING_PATTERNS) {
     const match = pattern.exec(trimmed);
     if (!match) continue;

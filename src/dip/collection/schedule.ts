@@ -1,7 +1,8 @@
+import { DEFAULT_ELECTORAL_TERMS } from "../constants";
+
 // Scheduled DIP collection runs at 07:00 Europe/Berlin, but Render cron
 // schedules are UTC. Trigger at 05:00 and 06:00 UTC; the hour guard lets only
 // the trigger that lands on 07:00 Berlin collect, so DST needs no change.
-export const DEFAULT_ELECTORAL_TERMS = [21, 20];
 
 // "21,20" -> [21, 20]. The DIP API accepts terms 1-30; the order given is kept
 // because terms are collected independently and a later term need not wait.

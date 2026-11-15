@@ -3,6 +3,12 @@ import { createRun, finalizeRun, findRun } from "../../import/run.repository";
 import { RateLimitedError, backoffMs } from "../../jobs";
 import { runIdSchema } from "../../validation";
 import {
+  DIP_INTAKE_LOCK_ID,
+  PAGE_FETCH_ATTEMPTS,
+  PAGE_WRITE_BATCH_SIZE,
+  STEP_FILTER_BATCH,
+} from "../constants";
+import {
   countProceedingsByTerm,
   findDipCheckpoint,
   upsertDipCheckpoint,
@@ -40,15 +46,6 @@ export function pickCheckpointTarget(
   if (!current || target > current) return target;
   return current;
 }
-
-const PAGE_FETCH_ATTEMPTS = 3;
-// Each record makes several sequential DB calls; keep interactive transactions short.
-export const PAGE_WRITE_BATCH_SIZE = 5;
-
-// The DIP API takes `f.vorgang` as a repeatable query parameter, so capped
-// step collection asks for the stored parent set in URL-sized batches instead
-// of paginating the whole term.
-const STEP_FILTER_BATCH = 50;
 
 function batch<T>(items: T[], size: number): T[][] {
   const batches: T[][] = [];
@@ -118,7 +115,7 @@ export async function collectDipPages(
     scope.scopeToStoredProceedings = options.scopeToStoredProceedings;
 
   const previousRun = await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DIP_INTAKE_LOCK_ID})`;
     const previous = await findRun(tx, runId);
     if (previous) {
       if (previous.inputHash !== hash || previous.feedId !== endpoint)
@@ -293,7 +290,7 @@ export async function collectDipPages(
     throw error;
   }
   await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DIP_INTAKE_LOCK_ID})`;
     await tx.candidate.deleteMany({
       where: { runId, itemIndex: { gte: itemIndex } },
     });

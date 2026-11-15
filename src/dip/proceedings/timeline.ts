@@ -1,3 +1,4 @@
+import { DIP_API_BASE_URL } from "../constants";
 import {
   readProceedingTimeline,
   readProceedingTimelines,
@@ -32,7 +33,7 @@ function toTimeline(
           versionId: proceeding.versions[0]?.id ?? null,
           versionObservedAt:
             proceeding.versions[0]?.observedAt.toISOString() ?? null,
-          sourceUrl: `https://search.dip.bundestag.de/api/v1/vorgang/${apiId}`,
+          sourceUrl: `${DIP_API_BASE_URL}/vorgang/${apiId}`,
         }
       : null,
     steps: steps
@@ -57,7 +58,7 @@ function toTimeline(
         versionNo: step.latestVersionNo,
         versionId: step.versions[0]?.id ?? null,
         versionObservedAt: step.versions[0]?.observedAt.toISOString() ?? null,
-        sourceUrl: `https://search.dip.bundestag.de/api/v1/vorgangsposition/${step.apiId}`,
+        sourceUrl: `${DIP_API_BASE_URL}/vorgangsposition/${step.apiId}`,
         document: step.documentReference
           ? {
               referenceId: step.documentReference.referenceId,

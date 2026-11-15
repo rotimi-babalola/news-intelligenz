@@ -3,9 +3,10 @@ import type { PrismaClient } from "../../generated/prisma/client";
 import {
   EMBED_PROCEEDING,
   EMBED_STEP,
-  enqueueDocumentEmbeddings,
-  enqueueRecordReindex,
-} from "./queue";
+  REINDEX_DOCUMENT_PAGE_SIZE,
+  REINDEX_PAGE_SIZE,
+} from "../constants";
+import { enqueueDocumentEmbeddings, enqueueRecordReindex } from "./queue";
 import { ensureDocumentChunks } from "../documents/chunks";
 import { ensureDocumentSections } from "../documents/sections";
 
@@ -44,7 +45,7 @@ export async function enqueueDipReindex(
     const rows = await prisma.proceeding.findMany({
       select: { apiId: true, latestVersionNo: true },
       orderBy: { apiId: "asc" },
-      take: 500,
+      take: REINDEX_PAGE_SIZE,
       ...(cursor ? { cursor: { apiId: cursor }, skip: 1 } : {}),
     });
     if (!rows.length) break;
@@ -58,7 +59,7 @@ export async function enqueueDipReindex(
     });
     counts.proceedings += result.count;
     cursor = rows.at(-1)!.apiId;
-    if (rows.length < 500) break;
+    if (rows.length < REINDEX_PAGE_SIZE) break;
   } while (true);
   cursor = undefined;
   do {
@@ -66,7 +67,7 @@ export async function enqueueDipReindex(
       await prisma.proceedingStep.findMany({
         select: { apiId: true, latestVersionNo: true },
         orderBy: { apiId: "asc" },
-        take: 500,
+        take: REINDEX_PAGE_SIZE,
         ...(cursor ? { cursor: { apiId: cursor }, skip: 1 } : {}),
       });
     if (!rows.length) break;
@@ -81,7 +82,7 @@ export async function enqueueDipReindex(
     });
     counts.steps += result.count;
     cursor = rows.at(-1)!.apiId;
-    if (rows.length < 500) break;
+    if (rows.length < REINDEX_PAGE_SIZE) break;
   } while (true);
   cursor = undefined;
   do {
@@ -90,7 +91,7 @@ export async function enqueueDipReindex(
         where: { isLatest: true },
         select: { id: true, referenceId: true, variantNo: true },
         orderBy: { id: "asc" },
-        take: 100,
+        take: REINDEX_DOCUMENT_PAGE_SIZE,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       });
     if (!rows.length) break;
@@ -113,7 +114,7 @@ export async function enqueueDipReindex(
       });
     }
     cursor = rows.at(-1)!.id;
-    if (rows.length < 100) break;
+    if (rows.length < REINDEX_DOCUMENT_PAGE_SIZE) break;
   } while (true);
   return counts;
 }

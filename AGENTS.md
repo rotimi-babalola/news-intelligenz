@@ -23,6 +23,7 @@ Use the single-context layout at the repo root. See `docs/agents/domain.md`.
 - `jobs/` — DIP job operations, embedding worker, and reindex.
 - `db/` — every Prisma read and write, split by entity; import through `db/index`.
 - `explain/` — brief generation, provider calls, evidence collection, citation/claim validation, and answer assembly.
+- `constants.ts` — shared tunables, endpoints, job names, and limits; look here before adding a new literal.
 
 Each file owns one concern. Split a file when it grows a second responsibility instead of adding a shared `util`. A folder's `index.ts` is only its public entry point, never a place for new logic.
 

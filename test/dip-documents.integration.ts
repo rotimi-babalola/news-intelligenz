@@ -9,11 +9,8 @@ import {
 } from "../src/dip/documents/process.js";
 import { documentObjectKey } from "../src/dip/documents/object-store.js";
 import { processNextDipEmbedding } from "../src/dip/jobs/embedding.js";
-import {
-  EMBED_DOCUMENT,
-  enqueueDocumentEmbeddings,
-  ON_DEMAND_PRIORITY,
-} from "../src/dip/jobs/queue.js";
+import { EMBED_DOCUMENT, ON_DEMAND_PRIORITY } from "../src/dip/constants.js";
+import { enqueueDocumentEmbeddings } from "../src/dip/jobs/queue.js";
 import { collectSteps } from "../src/dip/collection/steps.js";
 import { claimNextJob, requeueStaleClaims } from "../src/jobs.js";
 import { isolatedDatabase } from "./dip-test-db.js";

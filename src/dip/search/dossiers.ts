@@ -1,4 +1,12 @@
 import type { PrismaClient } from "../../generated/prisma/client";
+import {
+  DOSSIER_CURRENT_ACTIVITY_DAYS,
+  DOSSIER_CURRENT_ACTIVITY_WEIGHT,
+  DOSSIER_DOCUMENT_LIMIT,
+  DOSSIER_RECENCY_WEIGHT,
+  DOSSIER_STEP_COUNT_CAP,
+  DOSSIER_STEP_WEIGHT,
+} from "../constants";
 import { embedText } from "./embedding";
 import {
   getProceedings,
@@ -11,10 +19,6 @@ type DocumentHit = Extract<DipHit, { entity: "dokument" }>;
 
 // Evidence dominates the score; these signals are tie-breakers that add at most
 // 0.10 combined, so they only reorder proceedings with near-equal evidence.
-const STEP_WEIGHT = 0.005; // per step, counting up to 10 steps
-const RECENCY_WEIGHT = 0.03; // halves every 30 days since last activity
-const CURRENT_ACTIVITY_WEIGHT = 0.02; // last activity within 30 days
-const CURRENT_ACTIVITY_DAYS = 30;
 
 // A document hit is only current when its step still links the same reference
 // and PDF; otherwise the citation would point at replaced bytes.
@@ -74,14 +78,17 @@ export function buildDossiers(
         : Infinity;
       const ranking = {
         strongestEvidence: Math.max(...evidence.map((hit) => hit.score)),
-        stepCount: Math.min(timeline.steps.length, 10) * STEP_WEIGHT,
+        stepCount:
+          Math.min(timeline.steps.length, DOSSIER_STEP_COUNT_CAP) *
+          DOSSIER_STEP_WEIGHT,
         recency:
           ageDays >= 0 && Number.isFinite(ageDays)
-            ? RECENCY_WEIGHT / (1 + ageDays / CURRENT_ACTIVITY_DAYS)
+            ? DOSSIER_RECENCY_WEIGHT /
+              (1 + ageDays / DOSSIER_CURRENT_ACTIVITY_DAYS)
             : 0,
         currentActivity:
-          ageDays >= 0 && ageDays <= CURRENT_ACTIVITY_DAYS
-            ? CURRENT_ACTIVITY_WEIGHT
+          ageDays >= 0 && ageDays <= DOSSIER_CURRENT_ACTIVITY_DAYS
+            ? DOSSIER_CURRENT_ACTIVITY_WEIGHT
             : 0,
       };
       return {
@@ -135,7 +142,7 @@ export function addDocumentEvidence(
       )
         continue;
       documents.push(hit);
-      if (documents.length === 3) break;
+      if (documents.length === DOSSIER_DOCUMENT_LIMIT) break;
     }
     return documents.length
       ? { ...dossier, evidence: [...dossier.evidence, ...documents] }

@@ -7,10 +7,12 @@ import {
   upsertParliamentaryDiscovery,
 } from "../db/index";
 import {
+  DIP_API_BASE_URL,
+  DIP_INTAKE_LOCK_ID,
   PAGE_WRITE_BATCH_SIZE,
-  TerminalPageError,
-  collectDipPages,
-} from "./pages";
+  VORGANG_ENDPOINT,
+} from "../constants";
+import { TerminalPageError, collectDipPages } from "./pages";
 import type {
   CollectVorgangOptions,
   CollectVorgangResult,
@@ -31,13 +33,6 @@ export type {
 // rerunning a run reuses its rows, and the checkpoint advances only after all
 // pages are durably stored. Embedding and PDF work (later slices) enqueue
 // independently and never hold the checkpoint open.
-
-export const VORGANG_ENDPOINT = "/vorgang";
-
-// Local environments cap unique proceedings at the first 1,000 encountered
-// through pagination and keep syncing those; other environments pass no cap.
-// The API defines no ordering, so the capped set is not newest-first.
-export const LOCAL_PROCEEDING_CAP = 1000;
 
 // Shared with step collection for missing-parent backfill: stores one page of
 // validated proceedings idempotently, honoring the local cap.
@@ -127,7 +122,7 @@ export async function collectVorgang(
       }
       for (let i = 0; i < invalidDocs.length; i += PAGE_WRITE_BATCH_SIZE) {
         await prisma.$transaction(async (tx) => {
-          await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DIP_INTAKE_LOCK_ID})`;
           for (const { index, error, id } of invalidDocs.slice(
             i,
             i + PAGE_WRITE_BATCH_SIZE,
@@ -146,7 +141,7 @@ export async function collectVorgang(
       for (let i = 0; i < storedDocs.length; i += PAGE_WRITE_BATCH_SIZE) {
         const batch = await prisma.$transaction(
           async (tx) => {
-            await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DIP_INTAKE_LOCK_ID})`;
             return storeProceedingPage(
               tx,
               runId,
@@ -193,10 +188,9 @@ export function liveVorgangFetcher(apiKey: string): FetchVorgangPage {
     if (aktualisiertStart) query.set("f.aktualisiert.start", aktualisiertStart);
     if (aktualisiertEnd) query.set("f.aktualisiert.end", aktualisiertEnd);
     if (cursor) query.set("cursor", cursor);
-    const response = await fetch(
-      `https://search.dip.bundestag.de/api/v1/vorgang?${query}`,
-      { headers: { Authorization: `ApiKey ${apiKey}` } },
-    );
+    const response = await fetch(`${DIP_API_BASE_URL}/vorgang?${query}`, {
+      headers: { Authorization: `ApiKey ${apiKey}` },
+    });
     if (response.status === 429)
       throw new RateLimitedError(
         "DIP /vorgang responded 429",

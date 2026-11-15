@@ -1,13 +1,10 @@
 import type { PrismaClient } from "../../generated/prisma/client";
+import { SYNC_OVERLAP_MS } from "../constants";
 import { findDipCheckpoint } from "../db/index";
 import { collectSteps } from "./steps";
 import type { FetchStepPage, FetchVorgang } from "./types";
 import { collectVorgang } from "./proceedings";
 import type { FetchVorgangPage } from "./proceedings";
-
-// Fixed six-hour overlap from successful progress. An overlap window does not
-// guarantee every delayed update is captured; it is a recovery policy.
-export const SYNC_OVERLAP_MS = 6 * 60 * 60 * 1000;
 
 export type SyncEndpoint = "/vorgang" | "/vorgangsposition";
 

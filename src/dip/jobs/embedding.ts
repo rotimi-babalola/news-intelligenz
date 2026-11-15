@@ -12,12 +12,8 @@ import {
   embedText,
   embeddingConfig,
 } from "../search/embedding";
-import {
-  EMBED_DOCUMENT,
-  EMBED_PROCEEDING,
-  EMBED_STEP,
-  enqueueDocumentEmbeddings,
-} from "./queue";
+import { EMBED_DOCUMENT, EMBED_PROCEEDING, EMBED_STEP } from "../constants";
+import { enqueueDocumentEmbeddings } from "./queue";
 
 type Embed = (text: string) => Promise<number[]>;
 

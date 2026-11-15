@@ -3,11 +3,11 @@ import { ensureDocumentChunks } from "./chunks";
 import { classifyDocumentReference } from "./excerpts";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { claimNextJob, completeJob, failJob } from "../../jobs";
+import { PROCESS_DOCUMENT } from "../constants";
 import {
   documentJobKey,
   enqueueDocumentEmbeddings,
   enqueueDocumentProcessing,
-  PROCESS_DOCUMENT,
   raiseDocumentJob,
 } from "../jobs/queue";
 import { documentObjectKey, putDocumentPdf } from "./object-store";

@@ -11,8 +11,8 @@ import {
   EMBED_PROCEEDING,
   EMBED_STEP,
   PROCESS_DOCUMENT,
-  raiseDocumentJob,
-} from "../src/dip/jobs/queue.js";
+} from "../src/dip/constants.js";
+import { raiseDocumentJob } from "../src/dip/jobs/queue.js";
 import { collectVorgang } from "../src/dip/collection/proceedings.js";
 import {
   collectSteps,

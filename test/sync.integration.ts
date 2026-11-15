@@ -4,11 +4,8 @@ import { TerminalPageError } from "../src/dip/collection/pages.js";
 import { collectAll } from "../src/import/service.js";
 import type { Feed } from "../src/sources.js";
 import { listDipGaps } from "../src/dip/db/index.js";
-import {
-  syncDipEndpoint,
-  syncDipTerms,
-  SYNC_OVERLAP_MS,
-} from "../src/dip/collection/sync.js";
+import { SYNC_OVERLAP_MS } from "../src/dip/constants.js";
+import { syncDipEndpoint, syncDipTerms } from "../src/dip/collection/sync.js";
 import type { FetchStepPage } from "../src/dip/collection/steps.js";
 import { collectSteps } from "../src/dip/collection/steps.js";
 import { collectVorgang } from "../src/dip/collection/proceedings.js";

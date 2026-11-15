@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import { parseRetryAfterMs, RateLimitedError } from "../../jobs";
-
-export const EMBEDDING_MODEL = "text-embedding-3-small";
-export const DOCUMENT_INSTRUCTION = "";
-export const QUERY_INSTRUCTION =
-  "Given a German or English query, retrieve relevant German parliamentary proceedings and steps";
+import {
+  DOCUMENT_INSTRUCTION,
+  EMBEDDING_DIMENSIONS,
+  EMBEDDING_MODEL,
+  EMBEDDING_TIMEOUT_MS,
+  QUERY_INSTRUCTION,
+} from "../constants";
 
 export function embeddingConfig() {
   const format = process.env.EMBEDDING_API_FORMAT?.trim() || "openai";
@@ -31,7 +33,7 @@ export function embeddingConfig() {
         format,
         baseUrl,
         model,
-        1024,
+        EMBEDDING_DIMENSIONS,
         documentInstruction,
         queryInstruction,
       ]),
@@ -86,13 +88,15 @@ export function embeddingCost() {
 export function assertEmbedding(embedding: number[]) {
   if (
     !Array.isArray(embedding) ||
-    embedding.length !== 1024 ||
+    embedding.length !== EMBEDDING_DIMENSIONS ||
     !embedding.every(
       (value) => typeof value === "number" && Number.isFinite(value),
     ) ||
     !embedding.some((value) => value !== 0)
   )
-    throw new Error("Provider returned an invalid 1024-dimensional embedding");
+    throw new Error(
+      `Provider returned an invalid ${EMBEDDING_DIMENSIONS}-dimensional embedding`,
+    );
 }
 
 export async function embedText(
@@ -131,10 +135,17 @@ export async function embedText(
       ...(config.format === "ollama"
         ? { truncate: false }
         : config.format === "voyage"
-          ? { input_type: kind, output_dimension: 1024, truncation: false }
-          : { dimensions: 1024, encoding_format: "float" }),
+          ? {
+              input_type: kind,
+              output_dimension: EMBEDDING_DIMENSIONS,
+              truncation: false,
+            }
+          : {
+              dimensions: EMBEDDING_DIMENSIONS,
+              encoding_format: "float",
+            }),
     }),
-    signal: AbortSignal.timeout(120_000),
+    signal: AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
   });
   if (!response.ok) {
     const message = `Embedding provider failed: HTTP ${response.status}`;

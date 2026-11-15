@@ -1,4 +1,5 @@
 import type { PrismaClient } from "../../generated/prisma/client";
+import { MAX_DOCUMENT_PAGE_TEXT } from "../constants";
 import { classifyDocumentReference } from "./excerpts";
 import {
   findDocumentReferenceById,
@@ -7,8 +8,6 @@ import {
   listDocumentSections,
 } from "../db/index";
 import { toSection } from "./sections";
-
-const MAX_PAGE_TEXT = 2000;
 
 export async function getDocumentPages(
   prisma: PrismaClient,
@@ -74,8 +73,8 @@ export async function getDocumentPages(
     variant: storedVariant,
     pages: pages.map(({ pageNo, text }) => ({
       page: pageNo,
-      text: text.slice(0, MAX_PAGE_TEXT),
-      truncated: text.length > MAX_PAGE_TEXT,
+      text: text.slice(0, MAX_DOCUMENT_PAGE_TEXT),
+      truncated: text.length > MAX_DOCUMENT_PAGE_TEXT,
     })),
     sections: outline,
     changes: "Text extracted from PDF and excerpted",

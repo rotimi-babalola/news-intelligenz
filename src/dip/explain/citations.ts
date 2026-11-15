@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MIN_CLAIM_QUOTE_LENGTH } from "../constants";
 import { verifyClaims, type Verify } from "./provider";
 import {
   sections,
@@ -11,7 +12,7 @@ import {
 const claimSchema = z.object({
   text: z.string().trim().min(1).max(1000),
   evidenceId: z.string(),
-  quote: z.string().trim().min(12),
+  quote: z.string().trim().min(MIN_CLAIM_QUOTE_LENGTH),
 });
 const answerSchema = z.object({
   matter: z.array(z.unknown()).catch([]),

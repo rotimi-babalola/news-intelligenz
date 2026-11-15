@@ -1,20 +1,19 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { dipSource, enqueueJob, retryExhausted } from "../../jobs";
+import {
+  EMBED_DOCUMENT,
+  EMBED_JOB_BATCH_SIZE,
+  EMBED_PROCEEDING,
+  EMBED_STEP,
+  ON_DEMAND_PRIORITY,
+  PROCESS_DOCUMENT,
+} from "../constants";
 
 // Downstream DIP work submits as durable jobs at collection time and runs
 // independently: model outages or PDF failures never hold a collection
 // checkpoint open, and replaying a run never enqueues twice (dedupeKey).
 // Collection only promises the jobs exist exactly once per new record version;
 // document processing remains a separate downstream path.
-
-export const EMBED_PROCEEDING = "embed_proceeding";
-export const EMBED_STEP = "embed_step";
-export const EMBED_DOCUMENT = "embed_document";
-export const PROCESS_DOCUMENT = "process_document";
-
-// Background document work waits for nothing; an on-demand request jumps the
-// queue by priority without pre-empting a claim already in flight.
-export const ON_DEMAND_PRIORITY = 10;
 
 function dipJobKey(
   runId: string,
@@ -191,9 +190,9 @@ export async function enqueueDocumentEmbeddings(
   },
 ) {
   let added = 0;
-  for (let i = 0; i < input.chunks.length; i += 500) {
+  for (let i = 0; i < input.chunks.length; i += EMBED_JOB_BATCH_SIZE) {
     const result = await db.processingJob.createMany({
-      data: input.chunks.slice(i, i + 500).map((chunk) => ({
+      data: input.chunks.slice(i, i + EMBED_JOB_BATCH_SIZE).map((chunk) => ({
         sourceKind: "dip_endpoint" as const,
         sourceKey: "/vorgangsposition",
         sourceScope:

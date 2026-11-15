@@ -3,13 +3,16 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { join } from "node:path";
 import { MAX_REDIRECTS, isBlockedDestination } from "../../extract";
+import {
+  MAX_PDF_BYTES,
+  PDF_FETCH_TIMEOUT_MS,
+  PDF_USER_AGENT,
+} from "../constants";
 
 // Fetched PDF bytes and their extracted page text. Fetching and extraction are
 // independent of DIP collection: this module never touches a checkpoint and
 // treats every failure as a retryable document-job failure rather than a
 // collection failure.
-
-export const MAX_PDF_BYTES = 25_000_000;
 
 export type FetchedPdf =
   { ok: true; bytes: Buffer; finalUrl: string } | { ok: false; reason: string };
@@ -77,9 +80,9 @@ export async function fetchDocumentPdf(
     let response: Awaited<ReturnType<PdfFetchFn>>;
     try {
       response = await fetchFn(current, {
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(PDF_FETCH_TIMEOUT_MS),
         headers: {
-          "user-agent": "NewsIntelligenz/0.1 (local operator verification)",
+          "user-agent": PDF_USER_AGENT,
           accept: "application/pdf",
         },
       });

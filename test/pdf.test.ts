@@ -3,8 +3,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { MAX_PDF_BYTES } from "../src/dip/constants.js";
 import {
-  MAX_PDF_BYTES,
   fetchDocumentPdf,
   pymupdfExtractor,
 } from "../src/dip/documents/pdf.js";

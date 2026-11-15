@@ -1,3 +1,4 @@
+import { EXPLAIN_TIMEOUT_MS } from "../constants";
 import type { BriefLanguage, Claim, Evidence, Section } from "./types";
 
 async function completeJson(system: string, input: unknown): Promise<unknown> {
@@ -32,7 +33,7 @@ async function completeJson(system: string, input: unknown): Promise<unknown> {
         { role: "user", content: JSON.stringify(input) },
       ],
     }),
-    signal: AbortSignal.timeout(120_000),
+    signal: AbortSignal.timeout(EXPLAIN_TIMEOUT_MS),
   });
   if (!response.ok)
     throw new Error(`Explainer provider failed: HTTP ${response.status}`);

@@ -8,12 +8,16 @@ import {
   upsertDocumentReference,
   upsertParliamentaryDiscovery,
 } from "../db/index";
-import { enqueueDocumentProcessing } from "../jobs/queue";
 import {
+  DIP_API_BASE_URL,
+  DIP_INTAKE_LOCK_ID,
+  HOT_DOCUMENT_MS,
   PAGE_WRITE_BATCH_SIZE,
-  TerminalPageError,
-  collectDipPages,
-} from "./pages";
+  STEPS_ENDPOINT,
+  VORGANG_ENDPOINT,
+} from "../constants";
+import { enqueueDocumentProcessing } from "../jobs/queue";
+import { TerminalPageError, collectDipPages } from "./pages";
 import type {
   CollectStepsOptions,
   CollectStepsResult,
@@ -21,14 +25,11 @@ import type {
   StoredStep,
 } from "./types";
 import { toStored, toStoredStep } from "./normalize";
-import { storeProceedingPage, VORGANG_ENDPOINT } from "./proceedings";
+import { storeProceedingPage } from "./proceedings";
 import { captureStepVersion } from "./versions";
 
-// PDF background set: references whose document date falls in the previous 14
-// days. Older references wait for an on-demand request; the document date is
-// never a sync filter, only this queue selection.
-const HOT_DOCUMENT_MS = 14 * 24 * 60 * 60 * 1000;
-
+// Older references wait for an on-demand request; the document date is never a
+// sync filter, only this queue selection.
 function isHotDocument(documentDate: Date, now: Date) {
   const ageMs = now.getTime() - documentDate.getTime();
   return ageMs >= 0 && ageMs <= HOT_DOCUMENT_MS;
@@ -48,8 +49,6 @@ export type {
 // optional single-item parent fetch backfills genuinely missing context, but
 // independently fetched endpoints are not an atomic snapshot and complete
 // lifecycle coverage is never claimed from term filters alone.
-
-export const STEPS_ENDPOINT = "/vorgangsposition";
 
 async function storeStepsPage(
   tx: Prisma.TransactionClient,
@@ -200,7 +199,7 @@ export async function collectSteps(
       }
       for (let i = 0; i < invalidDocs.length; i += PAGE_WRITE_BATCH_SIZE) {
         await prisma.$transaction(async (tx) => {
-          await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DIP_INTAKE_LOCK_ID})`;
           for (const { index, error, id } of invalidDocs.slice(
             i,
             i + PAGE_WRITE_BATCH_SIZE,
@@ -219,7 +218,7 @@ export async function collectSteps(
       for (let i = 0; i < kept.length; i += PAGE_WRITE_BATCH_SIZE) {
         const batch = await prisma.$transaction(
           async (tx) => {
-            await tx.$executeRaw`SELECT pg_advisory_xact_lock(8135421)`;
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DIP_INTAKE_LOCK_ID})`;
             return storeStepsPage(
               tx,
               runId,
@@ -278,7 +277,7 @@ export function liveStepsFetcher(apiKey: string): {
       if (aktualisiertEnd) query.set("f.aktualisiert.end", aktualisiertEnd);
       if (cursor) query.set("cursor", cursor);
       const response = await fetch(
-        `https://search.dip.bundestag.de/api/v1/vorgangsposition?${query}`,
+        `${DIP_API_BASE_URL}/vorgangsposition?${query}`,
         { headers },
       );
       if (response.status === 429)
@@ -307,7 +306,7 @@ export function liveStepsFetcher(apiKey: string): {
     },
     fetchVorgang: async (id: string) => {
       const response = await fetch(
-        `https://search.dip.bundestag.de/api/v1/vorgang/${id}?format=json`,
+        `${DIP_API_BASE_URL}/vorgang/${id}?format=json`,
         { headers },
       );
       if (response.status === 404) return null;

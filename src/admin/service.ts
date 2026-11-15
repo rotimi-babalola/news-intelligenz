@@ -10,7 +10,7 @@ import {
 import { processNextDocument } from "../dip/documents/process";
 import { embeddingConfig } from "../dip/search/embedding";
 import { processNextDipEmbedding } from "../dip/jobs/embedding";
-import { PROCESS_DOCUMENT } from "../dip/jobs/queue";
+import { PROCESS_DOCUMENT } from "../dip/constants";
 import { database } from "../db";
 import {
   dedupeKey,

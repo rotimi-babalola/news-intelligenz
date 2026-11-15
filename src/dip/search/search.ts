@@ -3,13 +3,15 @@ import {
   embeddingConfig,
   embeddingInput,
   embedText,
-  QUERY_INSTRUCTION,
 } from "./embedding";
+import { QUERY_INSTRUCTION } from "../constants";
 import { searchDipEmbeddings, type Client } from "../db/index";
 import { readDocumentExcerpt } from "../documents/excerpts";
 import { toSection } from "../documents/sections";
 
 export { QUERY_INSTRUCTION };
+
+import { DIP_API_BASE_URL } from "../constants";
 
 export async function searchDip(
   prisma: Client,
@@ -86,9 +88,7 @@ export async function searchDip(
         source: {
           endpoint,
           apiId: stepApiId,
-          url:
-            row.pdfUrl ??
-            `https://search.dip.bundestag.de/api/v1${endpoint}/${stepApiId}`,
+          url: row.pdfUrl ?? `${DIP_API_BASE_URL}${endpoint}/${stepApiId}`,
         },
       };
     }
@@ -103,7 +103,7 @@ export async function searchDip(
       source: {
         endpoint,
         apiId: row.apiId,
-        url: `https://search.dip.bundestag.de/api/v1${endpoint}/${row.apiId}`,
+        url: `${DIP_API_BASE_URL}${endpoint}/${row.apiId}`,
       },
     };
     return row.entity === "vorgang"

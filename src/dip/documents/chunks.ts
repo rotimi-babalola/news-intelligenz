@@ -1,10 +1,15 @@
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import type { PrismaClient, Prisma } from "../../generated/prisma/client";
+import {
+  DOCUMENT_CHUNK_BATCH_SIZE,
+  DOCUMENT_CHUNK_OVERLAP,
+  DOCUMENT_CHUNK_SIZE,
+} from "../constants";
 
 // shortcut: character bounds are not token bounds; use the model tokenizer if a provider rejects these passages.
 const splitter = new RecursiveCharacterTextSplitter({
-  chunkSize: 1200,
-  chunkOverlap: 200,
+  chunkSize: DOCUMENT_CHUNK_SIZE,
+  chunkOverlap: DOCUMENT_CHUNK_OVERLAP,
 });
 
 export const splitDocumentPage = (text: string) =>
@@ -36,7 +41,8 @@ export async function ensureDocumentChunks(
     const chunks = await splitDocumentPage(page.text);
     if (!chunks.length) continue;
     // shortcut: an unusually large single page can exceed the batch size; split it only if database limits require it.
-    if (pending.length + chunks.length > 500) await flush();
+    if (pending.length + chunks.length > DOCUMENT_CHUNK_BATCH_SIZE)
+      await flush();
     pending.push(
       ...chunks.map((text, index) => ({
         contentId,

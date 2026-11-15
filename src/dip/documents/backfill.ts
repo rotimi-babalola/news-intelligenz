@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "../../generated/prisma/client";
+import { DOCUMENT_BACKFILL_BATCH_SIZE } from "../constants";
 import { documentObjectKey, putDocumentPdf } from "./object-store";
 import { fetchDocumentPdf } from "./pdf";
 
@@ -22,7 +23,7 @@ export async function backfillDocumentObjects(
     fetchPdf?: typeof fetchDocumentPdf;
   } = {},
 ): Promise<BackfillResult> {
-  const batchSize = options.batchSize ?? 100;
+  const batchSize = options.batchSize ?? DOCUMENT_BACKFILL_BATCH_SIZE;
   const putPdf = options.putPdf ?? putDocumentPdf;
   const fetchPdf = options.fetchPdf ?? fetchDocumentPdf;
   const result: BackfillResult = { archived: 0, skipped: 0, failed: 0 };
