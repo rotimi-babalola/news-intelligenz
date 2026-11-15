@@ -551,6 +551,22 @@ test("English fallback uses a localized statement and retains the German source 
   );
 });
 
+test("the current stage falls back to the latest step when the model omits it", async () => {
+  const { prisma } = store();
+  const brief = await generateTestBrief(
+    prisma,
+    "Was ist der Stand?",
+    "de",
+    dossier,
+    async () => ({ stage: [] }),
+  );
+  assert.equal(
+    brief.claims.stage[0]?.text,
+    "10.10.2026 · Letzter dokumentierter Schritt: First reading",
+  );
+  assert.equal(brief.claims.stage[0]?.citation.stepId, "2");
+});
+
 test("verification drops and never caches an invented status paired with a valid quote", async () => {
   const { prisma, briefs } = store();
   let checks = 0;
@@ -585,7 +601,10 @@ test("verification drops and never caches an invented status paired with a valid
     },
   );
   assert.equal(checks, 1);
-  assert.deepEqual(brief.claims.stage, []);
+  assert.equal(
+    brief.claims.stage[0]?.text,
+    "10 Oct 2026 · Latest documented step: First reading",
+  );
   assert.equal(brief.claims.documents.length, 1);
   assert.equal(brief.answerConfidence, "partial");
   assert.doesNotMatch(JSON.stringify([...briefs.values()]), /has become law/);
@@ -704,7 +723,10 @@ test("the provider path verifies generated claims and reuses only the verified c
       "en",
       dossier,
     );
-    assert.deepEqual(brief.claims.stage, []);
+    assert.equal(
+      brief.claims.stage[0]?.text,
+      "10 Oct 2026 · Latest documented step: First reading",
+    );
     assert.equal(brief.claims.documents.length, 1);
     assert.deepEqual(
       await generateProceedingBrief(prisma, "Question", "en", dossier),

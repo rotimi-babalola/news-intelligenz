@@ -146,43 +146,40 @@ export async function searchProceedingDossiers(
   limit: number,
 ) {
   const embedding = await embedText(query, "query");
-  return prisma.$transaction(
-    async (tx) => {
-      const hits = await searchDip(tx, query, Math.max(100, limit * 5), {
-        embed: async () => embedding,
-      });
-      const ids = [
-        ...new Set(
-          hits
-            .map((hit) =>
-              hit.entity === "vorgang" ? hit.apiId : hit.proceedingApiId,
-            )
-            .filter((id): id is string => Boolean(id)),
-        ),
-      ];
-      const dossiers = buildDossiers(
-        hits,
-        await getProceedings(tx, ids),
-        limit,
-      );
-      const missing = dossiers
-        .filter(
-          (dossier) =>
-            !dossier.evidence.some(
-              (hit) =>
-                hit.entity === "dokument" &&
-                hit.excerpt.status === "excerpt-eligible",
-            ),
+  // Read-only: no transaction, so a slow vector scan never hits an interactive
+  // transaction timeout. `isCurrent` already drops hits that changed meanwhile.
+  const hits = await searchDip(prisma, query, Math.max(100, limit * 5), {
+    embed: async () => embedding,
+  });
+  const ids = [
+    ...new Set(
+      hits
+        .map((hit) =>
+          hit.entity === "vorgang" ? hit.apiId : hit.proceedingApiId,
         )
-        .map((dossier) => dossier.apiId);
-      if (!missing.length) return dossiers;
-      // Step hits can fill the global window before a relevant PDF page appears.
-      const documents = await searchDip(tx, query, missing.length * 5, {
-        embed: async () => embedding,
-        documentProceedingIds: missing,
-      });
-      return addDocumentEvidence(dossiers, documents);
-    },
-    { isolationLevel: "RepeatableRead", timeout: 30_000 },
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const dossiers = buildDossiers(
+    hits,
+    await getProceedings(prisma, ids),
+    limit,
   );
+  const missing = dossiers
+    .filter(
+      (dossier) =>
+        !dossier.evidence.some(
+          (hit) =>
+            hit.entity === "dokument" &&
+            hit.excerpt.status === "excerpt-eligible",
+        ),
+    )
+    .map((dossier) => dossier.apiId);
+  if (!missing.length) return dossiers;
+  // Step hits can fill the global window before a relevant PDF page appears.
+  const documents = await searchDip(prisma, query, missing.length * 5, {
+    embed: async () => embedding,
+    documentProceedingIds: missing,
+  });
+  return addDocumentEvidence(dossiers, documents);
 }
