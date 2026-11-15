@@ -3,7 +3,8 @@ import { test } from "node:test";
 import {
   addDocumentEvidence,
   buildDossiers,
-} from "../src/dip/search/dossiers.js";
+  hasCitablePageEvidence,
+} from "../src/dip/search/dossier-builders.js";
 import type { ProceedingTimeline } from "../src/dip/proceedings/timeline.js";
 import type { DipHit } from "../src/dip/search/search.js";
 
@@ -158,7 +159,28 @@ test("dossiers retain orphan timelines and omit unavailable or changed evidence"
   );
 });
 
-test("a selected proceeding gains distinct eligible PDF pages when step hits fill its search slots", () => {
+test("only an excerpt-eligible document counts as citable page evidence", () => {
+  assert.equal(hasCitablePageEvidence([]), false);
+  assert.equal(
+    hasCitablePageEvidence([hit("vorgangsposition", "10", "1", 0.8)]),
+    false,
+  );
+  assert.equal(
+    hasCitablePageEvidence([
+      {
+        ...hit("dokument", "doc-10", "1", 0.7),
+        excerpt: { status: "metadata-only", reason: "Unconfirmed issuer" },
+      } as Hit,
+    ]),
+    false,
+  );
+  assert.equal(
+    hasCitablePageEvidence([hit("dokument", "doc-10", "1", 0.7)]),
+    true,
+  );
+});
+
+test("enrichment adds distinct eligible pages up to the dossier document limit", () => {
   const [dossier] = buildDossiers(
     [hit("vorgangsposition", "10", "1", 0.8)],
     new Map([["1", timeline("1", [step("10", 10), step("11", 11)])]]),
