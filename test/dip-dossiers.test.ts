@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildDossiers } from "../src/dip/dossiers.js";
+import { addDocumentEvidence, buildDossiers } from "../src/dip/dossiers.js";
 import type { ProceedingTimeline } from "../src/dip/proceeding.js";
 import type { DipHit } from "../src/dip/search.js";
 
@@ -68,8 +68,9 @@ const hit = (
   proceedingApiId: string,
   score: number,
   page = 1,
-): Hit =>
-  ({
+): Hit => {
+  const stepId = entity === "dokument" ? apiId.replace("doc-", "") : apiId;
+  return {
     entity,
     apiId,
     proceedingApiId,
@@ -85,16 +86,17 @@ const hit = (
       referenceId: apiId,
       number: "1",
       page,
-      pdfUrl: "https://example.org/10.pdf",
+      pdfUrl: `https://example.org/${stepId}.pdf`,
     },
     excerpt: {
       status: "excerpt-eligible",
       text: "Matching passage",
       page,
-      originalUrl: "https://example.org/10.pdf",
+      originalUrl: `https://example.org/${stepId}.pdf`,
     },
-    source: source(entity === "dokument" ? "10" : apiId),
-  }) as Hit;
+    source: source(stepId),
+  } as Hit;
+};
 
 test("dossiers group current hits by proceeding and expose ranking contributions", () => {
   const hits = [
@@ -150,6 +152,41 @@ test("dossiers retain orphan timelines and omit unavailable or changed evidence"
   assert.deepEqual(
     dossiers[0]?.evidence.map((e) => e.entity),
     ["vorgangsposition"],
+  );
+});
+
+test("a selected proceeding gains distinct eligible PDF pages when step hits fill its search slots", () => {
+  const [dossier] = buildDossiers(
+    [hit("vorgangsposition", "10", "1", 0.8)],
+    new Map([["1", timeline("1", [step("10", 10), step("11", 11)])]]),
+    1,
+  );
+  const [enriched] = addDocumentEvidence(
+    [dossier!],
+    [
+      hit("dokument", "doc-99", "1", 0.7),
+      {
+        ...hit("dokument", "doc-10", "1", 0.6),
+        excerpt: { status: "metadata-only", reason: "Unconfirmed issuer" },
+      } as Hit,
+      hit("dokument", "doc-10", "1", 0.4, 5),
+      hit("dokument", "doc-10", "1", 0.39, 1),
+      hit("dokument", "doc-11", "1", 0.38),
+    ],
+  );
+  assert.equal(enriched?.score, dossier?.score);
+  assert.deepEqual(
+    enriched?.evidence.map((e) => [e.entity, e.apiId, e.page]),
+    [
+      ["vorgangsposition", "10", undefined],
+      ["dokument", "doc-10", 5],
+      ["dokument", "doc-11", 1],
+    ],
+  );
+  assert.equal(
+    addDocumentEvidence([enriched!], [hit("dokument", "doc-10", "1", 0.3)])[0]
+      ?.evidence.length,
+    3,
   );
 });
 

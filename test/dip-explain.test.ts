@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PrismaClient } from "../src/generated/prisma/client.js";
-import { buildDossiers } from "../src/dip/dossiers.js";
+import { addDocumentEvidence, buildDossiers } from "../src/dip/dossiers.js";
 import { generateProceedingBrief, validateAnswer } from "../src/dip/explain.js";
 import type { ProceedingTimeline } from "../src/dip/proceeding.js";
 import type { DipHit } from "../src/dip/search.js";
@@ -225,6 +225,26 @@ test("English and German briefs cite the same stored step and document page", as
     });
     assert.equal(brief.retrievalRelevance, 0.8);
   }
+});
+
+test("a broad question can cite a linked PDF added after proceeding selection", async () => {
+  const { prisma } = store();
+  const withoutPage = {
+    ...dossier,
+    evidence: dossier.evidence.filter((item) => item.entity !== "dokument"),
+  };
+  const enriched = addDocumentEvidence([withoutPage], [hit])[0]!;
+  const brief = await generateProceedingBrief(
+    prisma,
+    "What happened to housing?",
+    "en",
+    enriched,
+    async ({ evidence }) => {
+      assert.ok(evidence.some((item) => item.id === "page:3:2"));
+      return answer("en");
+    },
+  );
+  assert.equal(brief.claims.documents[0]?.citation.referenceId, "3");
 });
 
 test("unsupported citations and missing evidence produce a qualified answer or abstention", async () => {

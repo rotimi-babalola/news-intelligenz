@@ -185,6 +185,7 @@ export function searchDipEmbeddings(
     documentInstruction: string;
     queryInstruction: string;
     limit: number;
+    documentProceedingIds?: string[];
   },
 ) {
   return client.$queryRawUnsafe<DipSearchRow[]>(
@@ -266,6 +267,11 @@ export function searchDipEmbeddings(
        LIMIT 1
      ) sec ON true
      WHERE e.model = $2 AND e.document_instruction = $3 AND e.query_instruction = $4
+       AND ($6::text[] IS NULL OR (e.source_entity = 'dokument' AND EXISTS (
+         SELECT 1 FROM ${qualifiedTable("document_references")} scoped
+         WHERE scoped.reference_id = e.source_api_id
+           AND scoped.proceeding_id = ANY($6::text[])
+       )))
        AND (p.api_id IS NOT NULL OR s.api_id IS NOT NULL OR dc.content_id IS NOT NULL)
      ) ranked
      WHERE "pageRank" = 1
@@ -282,6 +288,7 @@ export function searchDipEmbeddings(
     input.documentInstruction,
     input.queryInstruction,
     input.limit,
+    input.documentProceedingIds ?? null,
   );
 }
 

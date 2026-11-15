@@ -105,6 +105,41 @@ export function buildDossiers(
     .slice(0, limit);
 }
 
+export function addDocumentEvidence(
+  dossiers: ReturnType<typeof buildDossiers>,
+  hits: DipHit[],
+) {
+  return dossiers.map((dossier) => {
+    if (
+      dossier.evidence.some(
+        (hit) =>
+          hit.entity === "dokument" &&
+          hit.excerpt.status === "excerpt-eligible",
+      )
+    )
+      return dossier;
+    const documents: DocumentHit[] = [];
+    for (const hit of hits) {
+      if (
+        hit.entity !== "dokument" ||
+        hit.proceedingApiId !== dossier.apiId ||
+        hit.excerpt.status !== "excerpt-eligible" ||
+        !dossier.steps.some((step) => sameDocument(step, hit)) ||
+        documents.some(
+          (document) =>
+            document.document.referenceId === hit.document.referenceId,
+        )
+      )
+        continue;
+      documents.push(hit);
+      if (documents.length === 3) break;
+    }
+    return documents.length
+      ? { ...dossier, evidence: [...dossier.evidence, ...documents] }
+      : dossier;
+  });
+}
+
 export async function searchProceedingDossiers(
   prisma: PrismaClient,
   query: string,
@@ -125,7 +160,28 @@ export async function searchProceedingDossiers(
             .filter((id): id is string => Boolean(id)),
         ),
       ];
-      return buildDossiers(hits, await getProceedings(tx, ids), limit);
+      const dossiers = buildDossiers(
+        hits,
+        await getProceedings(tx, ids),
+        limit,
+      );
+      const missing = dossiers
+        .filter(
+          (dossier) =>
+            !dossier.evidence.some(
+              (hit) =>
+                hit.entity === "dokument" &&
+                hit.excerpt.status === "excerpt-eligible",
+            ),
+        )
+        .map((dossier) => dossier.apiId);
+      if (!missing.length) return dossiers;
+      // Step hits can fill the global window before a relevant PDF page appears.
+      const documents = await searchDip(tx, query, missing.length * 5, {
+        embed: async () => embedding,
+        documentProceedingIds: missing,
+      });
+      return addDocumentEvidence(dossiers, documents);
     },
     { isolationLevel: "RepeatableRead", timeout: 30_000 },
   );
