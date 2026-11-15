@@ -2,7 +2,7 @@ import { z } from "zod";
 import { database } from "../../../src/db";
 import { searchProceedingDossiers } from "../../../src/dip/search/dossiers";
 import { getDocumentPages } from "../../../src/dip/documents/pages";
-import { generateProceedingBrief } from "../../../src/dip/explain";
+import { generateProceedingBrief } from "../../../src/dip/explain/index";
 
 const bodySchema = z.object({
   question: z.string().trim().min(1).max(1000),
