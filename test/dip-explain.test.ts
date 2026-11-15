@@ -274,6 +274,28 @@ test("unsupported citations and missing evidence produce a qualified answer or a
   assert.match(brief.qualification!, /does not establish/);
 });
 
+test("extra model claims retain all cited steps without rejecting the answer", () => {
+  const claims = Array.from({ length: 12 }, (_, index) => ({
+    text: `Recorded step ${index}`,
+    evidenceId: "step:2",
+    quote: index === 0 ? "Unsupported quote" : "First reading",
+  }));
+  const result = validateAnswer({ ...answer("en"), steps: claims }, [
+    {
+      id: "step:2",
+      text: "First reading | Housing bill introduced",
+      citation: {
+        kind: "step",
+        stepId: "2",
+        url: "https://example.org/step/2",
+      },
+    },
+  ]);
+  assert.equal(result.steps.length, 11);
+  assert.equal(result.steps[0]?.text, "Recorded step 1");
+  assert.equal(result.steps[10]?.text, "Recorded step 11");
+});
+
 test("ineligible document passages cannot support document claims", async () => {
   const { prisma } = store();
   const ineligible = buildDossiers(

@@ -37,11 +37,11 @@ const claimSchema = z.object({
   quote: z.string().trim().min(12),
 });
 const answerSchema = z.object({
-  matter: z.array(claimSchema).max(3),
-  stage: z.array(claimSchema).max(3),
-  steps: z.array(claimSchema).max(10),
-  documents: z.array(claimSchema).max(5),
-  unresolved: z.array(claimSchema).max(3),
+  matter: z.array(claimSchema),
+  stage: z.array(claimSchema),
+  steps: z.array(claimSchema),
+  documents: z.array(claimSchema),
+  unresolved: z.array(claimSchema),
 });
 type Generate = (input: {
   question: string;
@@ -203,7 +203,7 @@ export async function generateProceedingBrief(
   const key = createHash("sha256")
     .update(
       JSON.stringify([
-        1,
+        2,
         question.trim(),
         language,
         model,

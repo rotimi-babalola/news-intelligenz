@@ -16,6 +16,14 @@ export function findProceeding(client: Client, apiId: string) {
   return client.proceeding.findUnique({ where: { apiId } });
 }
 
+export function listRecentProceedings(client: Client) {
+  return client.proceeding.findMany({
+    orderBy: { lastObservedAt: "desc" },
+    take: 6,
+    select: { apiId: true, title: true },
+  });
+}
+
 const proceedingInclude = {
   versions: { orderBy: { versionNo: "desc" }, take: 1 },
 } satisfies Prisma.ProceedingInclude;
