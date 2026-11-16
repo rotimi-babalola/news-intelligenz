@@ -256,12 +256,8 @@
         "facts": [
           {
             "text": "Die ESR legt national verbindliche Zielpfade für die THG-Emissionsentwicklung außerhalb des EU-Emissionshandels für 2021 bis 2030 fest.",
-            "terms": [
-              "Zielpfade"
-            ],
-            "evidenceIds": [
-              "page:290322:3"
-            ],
+            "terms": ["Zielpfade"],
+            "evidenceIds": ["page:290322:3"],
             "quote": "national verbindliche Zielpfade für die THG-Emissionsentwicklung außerhalb des EU-Emissionshandels (ETS 1)",
             "covered": true,
             "cited": true,
@@ -269,14 +265,8 @@
           },
           {
             "text": "Der Durchführungsbeschluss 2026/895 legt die ESR-Zuweisungsmengen für 2021 bis 2030 fest.",
-            "terms": [
-              "2026/895",
-              "Zuweisungsmengen"
-            ],
-            "evidenceIds": [
-              "page:290322:3",
-              "page:290340:5"
-            ],
+            "terms": ["2026/895", "Zuweisungsmengen"],
+            "evidenceIds": ["page:290322:3", "page:290340:5"],
             "quote": "Damit wurden die ESR-Zuweisungsmengen (AEA) für jeden Mitgliedstaat für die Jahre 2021 bis 2030 festgelegt.",
             "covered": false,
             "cited": false,
@@ -464,12 +454,8 @@
         "facts": [
           {
             "text": "The ESR sets binding national greenhouse-gas pathways outside the EU emissions trading system for 2021 to 2030.",
-            "terms": [
-              "pathways"
-            ],
-            "evidenceIds": [
-              "page:290322:3"
-            ],
+            "terms": ["pathways"],
+            "evidenceIds": ["page:290322:3"],
             "quote": "national verbindliche Zielpfade für die THG-Emissionsentwicklung außerhalb des EU-Emissionshandels (ETS 1)",
             "covered": false,
             "cited": false,
@@ -477,15 +463,8 @@
           },
           {
             "text": "Implementing decision 2026/895 sets the ESR allocation quantities for 2021 to 2030.",
-            "terms": [
-              "allocations",
-              "2021",
-              "2030"
-            ],
-            "evidenceIds": [
-              "page:290322:3",
-              "page:290340:3"
-            ],
+            "terms": ["allocations", "2021", "2030"],
+            "evidenceIds": ["page:290322:3", "page:290340:3"],
             "quote": "Damit wurden die ESR-Zuweisungsmengen (AEA) für jeden Mitgliedstaat für die Jahre 2021 bis 2030 festgelegt.",
             "covered": true,
             "cited": true,
@@ -612,12 +591,8 @@
         "facts": [
           {
             "text": "Etwa die Hälfte der deutschen Hochschulen waren im Wintersemester 2024/2025 Hochschulen für angewandte Wissenschaften.",
-            "terms": [
-              "50 Prozent"
-            ],
-            "evidenceIds": [
-              "page:291815:1"
-            ],
+            "terms": ["50 Prozent"],
+            "evidenceIds": ["page:291815:1"],
             "quote": "Etwa 50 Prozent aller Hochschulen in Deutschland waren im Wintersemester 2024/2025 Hochschulen für angewandte Wissenschaften (HAW)",
             "covered": false,
             "cited": false,
@@ -625,12 +600,8 @@
           },
           {
             "text": "HAW bilden rund 38 Prozent aller Studenten aus.",
-            "terms": [
-              "38 Prozent"
-            ],
-            "evidenceIds": [
-              "page:291815:1"
-            ],
+            "terms": ["38 Prozent"],
+            "evidenceIds": ["page:291815:1"],
             "quote": "Sie bilden mit rund 38 Prozent aller Studenten",
             "covered": false,
             "cited": false,
@@ -638,13 +609,8 @@
           },
           {
             "text": "Der Bund stellte von 2019 bis 2023 jährlich mindestens 60 Millionen Euro für angewandte Forschung an HAW bereit.",
-            "terms": [
-              "60 Millionen Euro",
-              "2019"
-            ],
-            "evidenceIds": [
-              "page:291815:1"
-            ],
+            "terms": ["60 Millionen Euro", "2019"],
+            "evidenceIds": ["page:291815:1"],
             "quote": "im Zeitraum 2019 bis 2023 jährlich ein Fördervolumen von mindestens 60 Mio. Euro",
             "covered": false,
             "cited": false,
@@ -762,12 +728,8 @@
         "facts": [
           {
             "text": "About half of German higher education institutions were universities of applied sciences in winter semester 2024/2025.",
-            "terms": [
-              "50 percent"
-            ],
-            "evidenceIds": [
-              "page:291815:1"
-            ],
+            "terms": ["50 percent"],
+            "evidenceIds": ["page:291815:1"],
             "quote": "Etwa 50 Prozent aller Hochschulen in Deutschland waren im Wintersemester 2024/2025 Hochschulen für angewandte Wissenschaften (HAW)",
             "covered": false,
             "cited": false,
@@ -775,12 +737,8 @@
           },
           {
             "text": "Universities of applied sciences teach about 38 percent of all students.",
-            "terms": [
-              "38 percent"
-            ],
-            "evidenceIds": [
-              "page:291815:1"
-            ],
+            "terms": ["38 percent"],
+            "evidenceIds": ["page:291815:1"],
             "quote": "Sie bilden mit rund 38 Prozent aller Studenten",
             "covered": false,
             "cited": false,
@@ -788,13 +746,8 @@
           },
           {
             "text": "The federal government provided at least 60 million euros annually for applied research at these institutions from 2019 to 2023.",
-            "terms": [
-              "60 million euros",
-              "2019"
-            ],
-            "evidenceIds": [
-              "page:291815:1"
-            ],
+            "terms": ["60 million euros", "2019"],
+            "evidenceIds": ["page:291815:1"],
             "quote": "im Zeitraum 2019 bis 2023 jährlich ein Fördervolumen von mindestens 60 Mio. Euro",
             "covered": true,
             "cited": true,
@@ -961,13 +914,8 @@
         "facts": [
           {
             "text": "Die Finanzierung soll künftig über ein Drei-Säulen-Modell aus Haushaltsmitteln, Nutzerfinanzierung und privatem Kapital erfolgen.",
-            "terms": [
-              "Drei-Säulen-Modell",
-              "Nutzerfinanzierung"
-            ],
-            "evidenceIds": [
-              "page:292037:1"
-            ],
+            "terms": ["Drei-Säulen-Modell", "Nutzerfinanzierung"],
+            "evidenceIds": ["page:292037:1"],
             "quote": "in einem Drei-Säulen-Modell aus Haushaltsmitteln, Nutzerfinanzierung und privatem Kapital erfolgen",
             "covered": true,
             "cited": true,
@@ -975,12 +923,8 @@
           },
           {
             "text": "Die Autobahn GmbH ist eine Gesellschaft privaten Rechts.",
-            "terms": [
-              "Gesellschaft privaten Rechts"
-            ],
-            "evidenceIds": [
-              "page:292037:1"
-            ],
+            "terms": ["Gesellschaft privaten Rechts"],
+            "evidenceIds": ["page:292037:1"],
             "quote": "einer Gesellschaft privaten Rechts, der „Die Autobahn GmbH des Bundes“",
             "covered": true,
             "cited": false,
@@ -1156,14 +1100,8 @@
         "facts": [
           {
             "text": "Financing should follow a three-pillar model of budget funds, user financing and private capital.",
-            "terms": [
-              "public funds",
-              "user fees",
-              "private capital"
-            ],
-            "evidenceIds": [
-              "page:292037:1"
-            ],
+            "terms": ["public funds", "user fees", "private capital"],
+            "evidenceIds": ["page:292037:1"],
             "quote": "in einem Drei-Säulen-Modell aus Haushaltsmitteln, Nutzerfinanzierung und privatem Kapital erfolgen",
             "covered": false,
             "cited": false,
@@ -1171,12 +1109,8 @@
           },
           {
             "text": "The Autobahn GmbH is a private-law company.",
-            "terms": [
-              "private law company"
-            ],
-            "evidenceIds": [
-              "page:292037:1"
-            ],
+            "terms": ["private law company"],
+            "evidenceIds": ["page:292037:1"],
             "quote": "einer Gesellschaft privaten Rechts, der „Die Autobahn GmbH des Bundes“",
             "covered": true,
             "cited": true,
@@ -1294,12 +1228,8 @@
         "facts": [
           {
             "text": "Die Bundesnetzagentur will die Systematik der Stromnetzentgelte ab dem 1. Januar 2029 grundlegend neu ordnen.",
-            "terms": [
-              "2029"
-            ],
-            "evidenceIds": [
-              "page:291709:1"
-            ],
+            "terms": ["2029"],
+            "evidenceIds": ["page:291709:1"],
             "quote": "mit dem die Systematik der Stromnetzentgelte ab dem 1. Januar 2029 grundlegend neu geordnet werden soll",
             "covered": true,
             "cited": true,
@@ -1307,12 +1237,8 @@
           },
           {
             "text": "Die 18 größten deutschen Verteilnetzbetreiber erzielten 2024 eine marktanteilsgewichtete Eigenkapitalrendite von 30,1 Prozent.",
-            "terms": [
-              "30,1 Prozent"
-            ],
-            "evidenceIds": [
-              "page:291709:1"
-            ],
+            "terms": ["30,1 Prozent"],
+            "evidenceIds": ["page:291709:1"],
             "quote": "die 18 größten deutschen Verteilnetzbetreiber im Jahr 2024 eine marktanteilsgewichtete handelsrechtliche Eigenkapitalrendite von 30,1 Prozent erzielt hätten",
             "covered": false,
             "cited": false,
@@ -1430,12 +1356,8 @@
         "facts": [
           {
             "text": "The Federal Network Agency plans to fundamentally reorganise the electricity grid-charge system from 1 January 2029.",
-            "terms": [
-              "2029"
-            ],
-            "evidenceIds": [
-              "page:291709:1"
-            ],
+            "terms": ["2029"],
+            "evidenceIds": ["page:291709:1"],
             "quote": "mit dem die Systematik der Stromnetzentgelte ab dem 1. Januar 2029 grundlegend neu geordnet werden soll",
             "covered": true,
             "cited": true,
@@ -1443,12 +1365,8 @@
           },
           {
             "text": "The 18 largest German distribution network operators achieved a weighted equity return of 30.1 percent in 2024.",
-            "terms": [
-              "30.1 percent"
-            ],
-            "evidenceIds": [
-              "page:291709:1"
-            ],
+            "terms": ["30.1 percent"],
+            "evidenceIds": ["page:291709:1"],
             "quote": "die 18 größten deutschen Verteilnetzbetreiber im Jahr 2024 eine marktanteilsgewichtete handelsrechtliche Eigenkapitalrendite von 30,1 Prozent erzielt hätten",
             "covered": false,
             "cited": false,
@@ -1537,12 +1455,8 @@
         "facts": [
           {
             "text": "Die Bundesregierung hat keine belastbare Prognose zur Entwicklung der Stromnetzentgelte bis zum Jahr 2045.",
-            "terms": [
-              "2045"
-            ],
-            "evidenceIds": [
-              "page:291288:48"
-            ],
+            "terms": ["2045"],
+            "evidenceIds": ["page:291288:48"],
             "quote": "Eine belastbare Prognose der Bundesregierung zur Entwicklung der Stromnetzentgelte bis zum Jahr 2045 liegt nicht vor.",
             "covered": true,
             "cited": true,
@@ -1631,12 +1545,8 @@
         "facts": [
           {
             "text": "The federal government has no reliable forecast for the development of electricity grid charges through 2045.",
-            "terms": [
-              "2045"
-            ],
-            "evidenceIds": [
-              "page:291288:48"
-            ],
+            "terms": ["2045"],
+            "evidenceIds": ["page:291288:48"],
             "quote": "Eine belastbare Prognose der Bundesregierung zur Entwicklung der Stromnetzentgelte bis zum Jahr 2045 liegt nicht vor.",
             "covered": true,
             "cited": true,
@@ -1720,13 +1630,8 @@
         "facts": [
           {
             "text": "Eine mündliche Frage befasst sich mit der Senkung der Baukosten im Wohnungsbau.",
-            "terms": [
-              "mündliche Frage",
-              "Baukosten"
-            ],
-            "evidenceIds": [
-              "step:700983"
-            ],
+            "terms": ["mündliche Frage", "Baukosten"],
+            "evidenceIds": ["step:700983"],
             "quote": "Senkung der Baukosten im Wohnungsbau",
             "covered": true,
             "cited": true,
@@ -1734,12 +1639,8 @@
           },
           {
             "text": "Auf die mündliche Frage folgte eine schriftliche Antwort.",
-            "terms": [
-              "schriftliche Antwort"
-            ],
-            "evidenceIds": [
-              "step:701230"
-            ],
+            "terms": ["schriftliche Antwort"],
+            "evidenceIds": ["step:701230"],
             "quote": "Mündliche Frage/Schriftliche Antwort",
             "covered": true,
             "cited": true,
@@ -1823,13 +1724,8 @@
         "facts": [
           {
             "text": "An oral question addresses lowering housing construction costs.",
-            "terms": [
-              "oral question",
-              "housing construction costs"
-            ],
-            "evidenceIds": [
-              "step:700983"
-            ],
+            "terms": ["oral question", "housing construction costs"],
+            "evidenceIds": ["step:700983"],
             "quote": "Senkung der Baukosten im Wohnungsbau",
             "covered": true,
             "cited": true,
@@ -1837,12 +1733,8 @@
           },
           {
             "text": "A written answer followed the oral question.",
-            "terms": [
-              "written answer"
-            ],
-            "evidenceIds": [
-              "step:701230"
-            ],
+            "terms": ["written answer"],
+            "evidenceIds": ["step:701230"],
             "quote": "Mündliche Frage/Schriftliche Antwort",
             "covered": false,
             "cited": false,
@@ -1860,9 +1752,7 @@
       "question": "Wie hoch waren die Einnahmen der Autobahn GmbH aus der Lkw-Maut im Jahr 2025?",
       "language": "de",
       "expectAbstain": false,
-      "expectMissing": [
-        "2025"
-      ],
+      "expectMissing": ["2025"],
       "proceeding": "340174",
       "parentMissing": false,
       "corpus": {
@@ -2029,9 +1919,7 @@
       "question": "How much did the Autobahn GmbH receive from the truck toll in 2025?",
       "language": "en",
       "expectAbstain": false,
-      "expectMissing": [
-        "2025"
-      ],
+      "expectMissing": ["2025"],
       "proceeding": "340174",
       "parentMissing": false,
       "corpus": {
@@ -2442,10 +2330,7 @@
       },
       "expected": {
         "text": "Der Durchführungsbeschluss 2026/895 legt die ESR-Zuweisungsmengen für 2021 bis 2030 fest.",
-        "evidenceIds": [
-          "page:290322:3",
-          "page:290340:5"
-        ],
+        "evidenceIds": ["page:290322:3", "page:290340:5"],
         "quote": "Damit wurden die ESR-Zuweisungsmengen (AEA) für jeden Mitgliedstaat für die Jahre 2021 bis 2030 festgelegt."
       }
     },
@@ -2575,9 +2460,7 @@
       },
       "expected": {
         "text": "The ESR sets binding national greenhouse-gas pathways outside the EU emissions trading system for 2021 to 2030.",
-        "evidenceIds": [
-          "page:290322:3"
-        ],
+        "evidenceIds": ["page:290322:3"],
         "quote": "national verbindliche Zielpfade für die THG-Emissionsentwicklung außerhalb des EU-Emissionshandels (ETS 1)"
       }
     },
@@ -2664,9 +2547,7 @@
       },
       "expected": {
         "text": "Etwa die Hälfte der deutschen Hochschulen waren im Wintersemester 2024/2025 Hochschulen für angewandte Wissenschaften.",
-        "evidenceIds": [
-          "page:291815:1"
-        ],
+        "evidenceIds": ["page:291815:1"],
         "quote": "Etwa 50 Prozent aller Hochschulen in Deutschland waren im Wintersemester 2024/2025 Hochschulen für angewandte Wissenschaften (HAW)"
       }
     },
@@ -2753,9 +2634,7 @@
       },
       "expected": {
         "text": "HAW bilden rund 38 Prozent aller Studenten aus.",
-        "evidenceIds": [
-          "page:291815:1"
-        ],
+        "evidenceIds": ["page:291815:1"],
         "quote": "Sie bilden mit rund 38 Prozent aller Studenten"
       }
     },
@@ -2842,9 +2721,7 @@
       },
       "expected": {
         "text": "Der Bund stellte von 2019 bis 2023 jährlich mindestens 60 Millionen Euro für angewandte Forschung an HAW bereit.",
-        "evidenceIds": [
-          "page:291815:1"
-        ],
+        "evidenceIds": ["page:291815:1"],
         "quote": "im Zeitraum 2019 bis 2023 jährlich ein Fördervolumen von mindestens 60 Mio. Euro"
       }
     },
@@ -2922,9 +2799,7 @@
       },
       "expected": {
         "text": "About half of German higher education institutions were universities of applied sciences in winter semester 2024/2025.",
-        "evidenceIds": [
-          "page:291815:1"
-        ],
+        "evidenceIds": ["page:291815:1"],
         "quote": "Etwa 50 Prozent aller Hochschulen in Deutschland waren im Wintersemester 2024/2025 Hochschulen für angewandte Wissenschaften (HAW)"
       }
     },
@@ -3002,9 +2877,7 @@
       },
       "expected": {
         "text": "Universities of applied sciences teach about 38 percent of all students.",
-        "evidenceIds": [
-          "page:291815:1"
-        ],
+        "evidenceIds": ["page:291815:1"],
         "quote": "Sie bilden mit rund 38 Prozent aller Studenten"
       }
     },
@@ -3123,9 +2996,7 @@
       },
       "expected": {
         "text": "Die Autobahn GmbH ist eine Gesellschaft privaten Rechts.",
-        "evidenceIds": [
-          "page:292037:1"
-        ],
+        "evidenceIds": ["page:292037:1"],
         "quote": "einer Gesellschaft privaten Rechts, der „Die Autobahn GmbH des Bundes“"
       }
     },
@@ -3243,9 +3114,7 @@
       },
       "expected": {
         "text": "Financing should follow a three-pillar model of budget funds, user financing and private capital.",
-        "evidenceIds": [
-          "page:292037:1"
-        ],
+        "evidenceIds": ["page:292037:1"],
         "quote": "in einem Drei-Säulen-Modell aus Haushaltsmitteln, Nutzerfinanzierung und privatem Kapital erfolgen"
       }
     },
@@ -3323,9 +3192,7 @@
       },
       "expected": {
         "text": "Die 18 größten deutschen Verteilnetzbetreiber erzielten 2024 eine marktanteilsgewichtete Eigenkapitalrendite von 30,1 Prozent.",
-        "evidenceIds": [
-          "page:291709:1"
-        ],
+        "evidenceIds": ["page:291709:1"],
         "quote": "die 18 größten deutschen Verteilnetzbetreiber im Jahr 2024 eine marktanteilsgewichtete handelsrechtliche Eigenkapitalrendite von 30,1 Prozent erzielt hätten"
       }
     },
@@ -3403,9 +3270,7 @@
       },
       "expected": {
         "text": "The 18 largest German distribution network operators achieved a weighted equity return of 30.1 percent in 2024.",
-        "evidenceIds": [
-          "page:291709:1"
-        ],
+        "evidenceIds": ["page:291709:1"],
         "quote": "die 18 größten deutschen Verteilnetzbetreiber im Jahr 2024 eine marktanteilsgewichtete handelsrechtliche Eigenkapitalrendite von 30,1 Prozent erzielt hätten"
       }
     },
@@ -3460,9 +3325,7 @@
       },
       "expected": {
         "text": "A written answer followed the oral question.",
-        "evidenceIds": [
-          "step:701230"
-        ],
+        "evidenceIds": ["step:701230"],
         "quote": "Mündliche Frage/Schriftliche Antwort"
       }
     }
