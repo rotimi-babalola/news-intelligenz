@@ -14,6 +14,7 @@ import {
   chatCompletionsProvider,
   type Generate,
   type Translate,
+  type TranslateTerms,
   type Verify,
 } from "../src/dip/explain/provider.js";
 import { alignDocumentClaims } from "../src/dip/explain/claims.js";
@@ -28,8 +29,15 @@ function fixtureProvider(
   generate: Generate,
   translate: Translate = async () => ({ claims: [] }),
   identity = "fixture",
+  translateTerms: TranslateTerms = async ({ terms }) => ({ terms }),
 ): ExplainerProvider {
-  return { generate, verify: approveFixtureClaims, translate, identity };
+  return {
+    generate,
+    verify: approveFixtureClaims,
+    translate,
+    translateTerms,
+    identity,
+  };
 }
 
 const date = new Date("2026-10-10T00:00:00.000Z");
@@ -101,7 +109,11 @@ const hit = {
 } as DipHit;
 const dossier = buildDossiers([hit], new Map([["1", timeline]]), 1)[0]!;
 
-function store(noSteps = false, stepLabel = "First reading") {
+function store(
+  noSteps = false,
+  stepLabel = "First reading",
+  stepTitle = "Housing bill introduced",
+) {
   let proceedingVersion = 1;
   let variantNo = 1;
   let byteHash = "hash-one";
@@ -132,7 +144,7 @@ function store(noSteps = false, stepLabel = "First reading") {
                 apiId: "2",
                 institution: "BT",
                 stepLabel,
-                title: "Housing bill introduced",
+                title: stepTitle,
                 documentType: "Drucksache",
                 documentDate: date,
                 sourceUpdatedAt: date,
@@ -772,6 +784,49 @@ test("the matter falls back to the earliest titled step when the model omits it"
   }
 });
 
+test("English fallbacks translate the German title and label, not copy them", async () => {
+  const { prisma } = store(
+    false,
+    "Schriftliche Frage/Schriftliche Antwort",
+    "Ausgaben für das Museum",
+  );
+  const translations: Record<string, string> = {
+    "Ausgaben für das Museum": "Museum spending",
+    "Schriftliche Frage/Schriftliche Antwort":
+      "Written question/Written answer",
+  };
+  const brief = await generateProceedingBrief(
+    prisma,
+    { question: "What happened?", language: "en", dossier: dossier },
+    fixtureProvider(
+      async () => ({}),
+      async () => ({ claims: [] }),
+      "fixture",
+      async ({ terms }) => ({
+        terms: terms.map(({ id, text }) => ({
+          id,
+          text: translations[text] ?? text,
+        })),
+      }),
+    ),
+  );
+  assert.equal(
+    brief.claims.matter[0]?.text,
+    "The proceeding concerns Museum spending.",
+  );
+  assert.equal(
+    brief.claims.stage[0]?.text,
+    "10 Oct 2026 · Latest documented step: Written question/Written answer",
+  );
+  assert.doesNotMatch(brief.claims.matter[0]?.text ?? "", /Ausgaben/u);
+  assert.doesNotMatch(brief.claims.stage[0]?.text ?? "", /Schriftliche Frage/u);
+  // The quote stays German: it is the auditable source passage.
+  assert.match(
+    brief.claims.stage[0]?.quote ?? "",
+    /Schriftliche Frage\/Schriftliche Antwort/u,
+  );
+});
+
 test("one page keeps every verified claim and only unclaimed pages are translated", async () => {
   const citation = (referenceId: string, page: number) => ({
     kind: "page" as const,
@@ -851,6 +906,7 @@ test("an unsupported second claim from a cited page is dropped, not translated b
         translations++;
         return { claims: [] };
       },
+      translateTerms: async ({ terms }) => ({ terms }),
       identity: "fixture",
     },
   );
@@ -997,6 +1053,7 @@ test("verification drops and never caches an invented status paired with a valid
         };
       },
       translate: async () => ({ claims: [] }),
+      translateTerms: async ({ terms }) => ({ terms }),
       identity: "fixture",
     },
   );
@@ -1026,6 +1083,7 @@ test("verification failures and malformed verdicts cannot cache an unverified br
           generate: async () => answer("en"),
           verify: async () => verdict,
           translate: async () => ({ claims: [] }),
+          translateTerms: async ({ terms }) => ({ terms }),
           identity: "fixture",
         },
       ),
@@ -1043,6 +1101,7 @@ test("verification failures and malformed verdicts cannot cache an unverified br
           throw new Error("Verifier unavailable");
         },
         translate: async () => ({ claims: [] }),
+        translateTerms: async ({ terms }) => ({ terms }),
         identity: "fixture",
       },
     ),
@@ -1101,8 +1160,7 @@ test("the provider path verifies generated claims and reuses only the verified c
             },
           ],
         };
-      } else {
-        assert.equal(requests, 2);
+      } else if (requests === 2) {
         assert.match(
           request.messages[0].content,
           /An exact quote alone does not establish/,
@@ -1113,6 +1171,20 @@ test("the provider path verifies generated claims and reuses only the verified c
           input.evidence.some((item: { id: string }) => item.id === "step:2"),
         );
         content = { supportedClaimIds: [0, 2, 3] };
+      } else {
+        assert.equal(requests, 3);
+        assert.match(
+          request.messages[0].content,
+          /German parliamentary title or step label/,
+        );
+        content = {
+          terms: input.terms.map(
+            ({ id, text }: { id: string; text: string }) => ({
+              id,
+              text,
+            }),
+          ),
+        };
       }
       return Response.json({
         choices: [{ message: { content: JSON.stringify(content) } }],
@@ -1149,12 +1221,13 @@ test("the provider path verifies generated claims and reuses only the verified c
           },
           verify: approveFixtureClaims,
           translate: async () => ({ claims: [] }),
+          translateTerms: async ({ terms }) => ({ terms }),
           identity: chatCompletionsProvider().identity,
         },
       ),
       brief,
     );
-    assert.equal(requests, 2);
+    assert.equal(requests, 3);
   } finally {
     if (previousModel === undefined) delete process.env.EXPLAIN_MODEL;
     else process.env.EXPLAIN_MODEL = previousModel;

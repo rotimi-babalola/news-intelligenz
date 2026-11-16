@@ -133,9 +133,11 @@ pnpm evaluate:explain -- fixtures/dip/explain-eval.reviewed.json
 
 The command writes JSON to stdout, including per-case answers and failures.
 Cached briefs are reused when the question, language, corpus versions, document
-bytes and provider identity are unchanged, so re-scoring a reviewed label file
-does not call the provider again. A changed model, prompt or source version
-produces a new answer and a new cache key.
+bytes, provider identity and answer assembly version are unchanged, so
+re-scoring a reviewed label file does not call the provider again. A changed
+model or prompt is part of provider identity and needs no separate cache bump; a
+change to answer assembly alone bumps `BRIEF_ASSEMBLY_VERSION`. Either way a
+changed input produces a new answer and a new cache key.
 
 Treat the result as a diagnostic on this small topic-selected set, not as an
 estimate of production answer quality. Do not compare coverage across different

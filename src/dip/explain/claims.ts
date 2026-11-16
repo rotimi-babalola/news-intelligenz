@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Translate } from "./provider";
+import type { Translate, TranslateTerms } from "./provider";
 import { stepDate, stepSource, pageEvidenceId } from "./evidence";
 import type {
   BriefLanguage,
@@ -12,6 +12,19 @@ import type {
 const translationSchema = z.object({
   claims: z.array(z.object({ id: z.string(), text: z.string().trim().min(1) })),
 });
+
+const termsSchema = z.object({
+  terms: z.array(z.object({ id: z.string(), text: z.string().trim().min(1) })),
+});
+
+// Fallback claims are built from raw DIP text, so English needs a translated
+// title or step label; the German source is the quote, never the claim text.
+async function englishTerm(text: string, translateTerms: TranslateTerms) {
+  const translated = termsSchema.parse(
+    await translateTerms({ language: "en", terms: [{ id: "term", text }] }),
+  );
+  return translated.terms[0]?.text.replace(/[.;]+$/u, "").trim() ?? null;
+}
 
 export function emptyClaims(): Claims {
   return {
@@ -59,20 +72,26 @@ export function orderedStepClaims(
 
 // The provider omits `matter` unevenly across languages; the earliest titled
 // step establishes the subject the proceeding is about.
-export function matterClaim(
+export async function matterClaim(
   steps: TimelineStep[],
   claims: Claim[],
   language: BriefLanguage,
+  translateTerms: TranslateTerms,
 ) {
   if (claims.length) return claims;
   const step = steps.find((item) => item.title.trim());
   if (!step) return claims;
+  const title =
+    language === "en"
+      ? await englishTerm(step.title, translateTerms)
+      : step.title;
+  if (!title) return [];
   return [
     {
       text:
         language === "en"
-          ? `The proceeding concerns ${step.title}.`
-          : `Das Verfahren betrifft ${step.title}.`,
+          ? `The proceeding concerns ${title}.`
+          : `Das Verfahren betrifft ${title}.`,
       quote: stepSource(step),
       citation: {
         kind: "step" as const,
@@ -85,22 +104,26 @@ export function matterClaim(
 
 // The provider omits `stage` unevenly across languages; the latest step is a
 // strictly supported statement of where the matter stands.
-export function latestStageClaim(
+export async function latestStageClaim(
   steps: TimelineStep[],
   claims: Claim[],
   language: BriefLanguage,
+  translateTerms: TranslateTerms,
 ) {
   if (claims.length) return claims;
   const step = steps.at(-1);
   const label = step?.label || step?.title;
   if (!step || !label) return claims;
+  const term =
+    language === "en" ? await englishTerm(label, translateTerms) : label;
+  if (!term) return [];
   return [
     {
       text: [
         stepDate(step, language),
         language === "en"
-          ? `Latest documented step: ${label}`
-          : `Letzter dokumentierter Schritt: ${label}`,
+          ? `Latest documented step: ${term}`
+          : `Letzter dokumentierter Schritt: ${term}`,
       ]
         .filter(Boolean)
         .join(" · "),

@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { retryJob } from "../src/admin/service.js";
-import { backfillDocumentObjects } from "../src/dip/documents/backfill.js";
+import {
+  backfillDocumentObjects,
+  queueUnprocessedDocuments,
+  type QueueUnprocessedDocumentsProgress,
+} from "../src/dip/documents/backfill.js";
 import {
   processNextDocument,
   requestDocument,
@@ -884,6 +888,100 @@ test("backfill archives retained bytes and skips unrecoverable rows", async () =
       ).objectKey,
       null,
     );
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("backfill queues cold eligible documents until a current variant exists", async () => {
+  const prisma = await isolatedDatabase();
+  try {
+    // Cold: collection leaves a reference outside the 14-day hot window alone.
+    await collect(
+      prisma,
+      "doc-backfill-cold",
+      step("701420"),
+      new Date("2027-01-01T00:00:00Z"),
+    );
+    assert.equal(
+      await prisma.processingJob.count({
+        where: { operation: "process_document" },
+      }),
+      0,
+    );
+    await prisma.documentReference.update({
+      where: { stepApiId: "701420" },
+      data: { metadata: { herausgeber: "BT", dokumentart: "Drucksache" } },
+    });
+
+    const progress: QueueUnprocessedDocumentsProgress[] = [];
+    assert.deepEqual(
+      await queueUnprocessedDocuments(prisma, {
+        dryRun: true,
+        onProgress: (item) => progress.push(item),
+      }),
+      { queued: 1, current: 0, existing: 0, skipped: 0 },
+    );
+    assert.deepEqual(progress, [
+      {
+        queued: 1,
+        current: 0,
+        existing: 0,
+        skipped: 0,
+        scanned: 1,
+        total: 1,
+        cursor: "29701499",
+      },
+    ]);
+    assert.equal(
+      await prisma.processingJob.count({
+        where: { operation: "process_document" },
+      }),
+      0,
+    );
+
+    assert.deepEqual(await queueUnprocessedDocuments(prisma), {
+      queued: 1,
+      current: 0,
+      existing: 0,
+      skipped: 0,
+    });
+    // A queued job is left alone, so a rerun neither duplicates nor reports it.
+    assert.deepEqual(await queueUnprocessedDocuments(prisma), {
+      queued: 0,
+      current: 0,
+      existing: 1,
+      skipped: 0,
+    });
+    const job = await prisma.processingJob.findFirstOrThrow({
+      where: { operation: "process_document" },
+    });
+    assert.equal(job.priority, 0);
+    assert.equal(job.status, "pending");
+    assert.equal(
+      (job.payload as { referenceId: string }).referenceId,
+      "29701499",
+    );
+
+    assert.equal(
+      (
+        await processDoc(prisma, "worker", {
+          fetchPdf: async () => ({
+            ok: true,
+            bytes: Buffer.from("%PDF backfill"),
+            finalUrl: PDF_URL,
+          }),
+          extract: async () => pages,
+        })
+      ).status,
+      "succeeded",
+    );
+    assert.deepEqual(await queueUnprocessedDocuments(prisma), {
+      queued: 0,
+      current: 1,
+      existing: 0,
+      skipped: 0,
+    });
   } finally {
     await prisma.$disconnect();
   }

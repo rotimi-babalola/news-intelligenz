@@ -120,7 +120,12 @@ python3 -m pip install pymupdf
 
 PDF fetching is independent of DIP collection: only references dated within the
 previous 14 days are queued automatically, and `POST /api/drain-documents`
-processes one queued document per call. Fetched PDF bytes are archived in
+processes one queued document per call. To queue every older eligible reference
+that has no current processed variant, run `pnpm backfill:document-jobs`
+(`DRY_RUN=1` reports counts without queueing). It prints per-batch progress and
+accepts `RESUME_FROM=<referenceId>` after a dropped connection. It only queues
+work; the 15-minute drain cron or `pnpm drain:dip` then fetches and embeds each
+document. Fetched PDF bytes are archived in
 Cloudflare R2; extracted page text, overlapping LangChain passages, and derived
 section outlines stay in PostgreSQL. A new variant derives its outline when its
 PDF is processed; variants stored before outlines existed derive theirs with

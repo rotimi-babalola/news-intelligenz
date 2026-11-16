@@ -92,6 +92,33 @@ export function enqueueDocumentProcessing(
   return enqueueJob(tx, documentProcessingIdentity(input));
 }
 
+// Bulk backfills create thousands of jobs; one insert per batch keeps the
+// backfill short enough to survive a pooled connection's lifetime.
+export function enqueueDocumentProcessingBatch(
+  db: PrismaClient,
+  inputs: {
+    runId: string;
+    stepApiId: string;
+    referenceId: string;
+    pdfUrl: string | null;
+    documentDate: Date | null;
+  }[],
+) {
+  if (!inputs.length) return Promise.resolve({ count: 0 });
+  return db.processingJob.createMany({
+    data: inputs.map((input) =>
+      jobRow(
+        documentProcessingIdentity({
+          ...input,
+          itemIndex: null,
+          electoralTerm: null,
+        }),
+      ),
+    ),
+    skipDuplicates: true,
+  });
+}
+
 export async function enqueueDocumentEmbeddings(
   db: PrismaClient | Prisma.TransactionClient,
   input: {

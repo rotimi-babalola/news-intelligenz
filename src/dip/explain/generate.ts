@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "../../generated/prisma/client";
-import { BRIEF_CACHE_VERSION, MAX_BRIEF_QUESTION_LENGTH } from "../constants";
+import {
+  BRIEF_ASSEMBLY_VERSION,
+  MAX_BRIEF_QUESTION_LENGTH,
+} from "../constants";
 import {
   findProceedingBrief,
   latestDocumentContent,
@@ -58,7 +61,7 @@ export async function generateProceedingBrief(
   const key = createHash("sha256")
     .update(
       JSON.stringify([
-        BRIEF_CACHE_VERSION,
+        BRIEF_ASSEMBLY_VERSION,
         question.trim(),
         language,
         provider.identity,
@@ -92,8 +95,18 @@ export async function generateProceedingBrief(
     ? await validateAnswer(generated, evidence, language, provider.verify)
     : emptyClaims();
   const missing = generated ? missingFacts(generated) : [];
-  claims.matter = matterClaim(current.steps, claims.matter, language);
-  claims.stage = latestStageClaim(current.steps, claims.stage, language);
+  claims.matter = await matterClaim(
+    current.steps,
+    claims.matter,
+    language,
+    provider.translateTerms,
+  );
+  claims.stage = await latestStageClaim(
+    current.steps,
+    claims.stage,
+    language,
+    provider.translateTerms,
+  );
   claims.steps = orderedStepClaims(current.steps, claims.steps, language);
   claims.documents = await alignDocumentClaims(
     evidence,

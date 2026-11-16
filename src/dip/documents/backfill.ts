@@ -1,6 +1,16 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { DOCUMENT_BACKFILL_BATCH_SIZE } from "../constants";
+import {
+  countDocumentReferences,
+  documentJobsByKey,
+  latestDocumentContents,
+  latestStepDiscoveries,
+  listLatestDocumentReferences,
+} from "../db/index";
+import { documentJobKey } from "../jobs/identity";
+import { enqueueDocumentProcessingBatch } from "../jobs/queue";
+import { classifyDocumentReference } from "./excerpts";
 import { documentObjectKey, putDocumentPdf } from "./object-store";
 import { fetchDocumentPdf } from "./pdf";
 
@@ -84,4 +94,143 @@ async function fetchBytes(
   const fetched = await fetchPdf(url);
   if (!fetched.ok) throw new Error(`source fetch failed: ${fetched.reason}`);
   return fetched.bytes;
+}
+
+export type QueueUnprocessedDocumentsResult = {
+  queued: number;
+  current: number;
+  existing: number;
+  skipped: number;
+};
+
+export type QueueUnprocessedDocumentsProgress =
+  QueueUnprocessedDocumentsResult & {
+    scanned: number;
+    total: number;
+    cursor: string;
+  };
+
+// Background processing queues only references dated in the previous 14 days.
+// This pass queues every older eligible reference that has no current processed
+// variant; the drain worker, not this script, still does the fetching.
+export async function queueUnprocessedDocuments(
+  prisma: PrismaClient,
+  options: {
+    batchSize?: number;
+    dryRun?: boolean;
+    afterReferenceId?: string;
+    onProgress?: (progress: QueueUnprocessedDocumentsProgress) => void;
+  } = {},
+): Promise<QueueUnprocessedDocumentsResult> {
+  const batchSize = options.batchSize ?? DOCUMENT_BACKFILL_BATCH_SIZE;
+  const total = await countDocumentReferences(prisma);
+  let scanned = options.afterReferenceId
+    ? await countDocumentReferences(prisma, {
+        throughReferenceId: options.afterReferenceId,
+      })
+    : 0;
+  const result: QueueUnprocessedDocumentsResult = {
+    queued: 0,
+    current: 0,
+    existing: 0,
+    skipped: 0,
+  };
+  let cursor = options.afterReferenceId;
+  for (;;) {
+    const references = await listLatestDocumentReferences(prisma, {
+      afterReferenceId: cursor,
+      take: batchSize,
+    });
+    if (!references.length) break;
+    cursor = references.at(-1)!.referenceId;
+    const requestedUrls = new Map(
+      (
+        await latestDocumentContents(
+          prisma,
+          references.map(({ referenceId }) => referenceId),
+        )
+      ).map((content) => [content.referenceId, content.requestedUrl]),
+    );
+    const jobKeys = new Set(
+      (
+        await documentJobsByKey(
+          prisma,
+          references.map((reference) =>
+            documentJobKey({
+              referenceId: reference.referenceId,
+              pdfUrl: reference.pdfUrl,
+              documentDate: reference.documentDate,
+            }),
+          ),
+        )
+      ).map((job) => job.dedupeKey),
+    );
+    const runIds = await latestStepDiscoveries(
+      prisma,
+      references.map(({ stepApiId }) => stepApiId),
+    );
+    const pending: {
+      runId: string;
+      stepApiId: string;
+      referenceId: string;
+      pdfUrl: string | null;
+      documentDate: Date | null;
+    }[] = [];
+    for (const reference of references) {
+      if (
+        requestedUrls.get(reference.referenceId) === reference.pdfUrl &&
+        reference.pdfUrl !== null
+      ) {
+        result.current += 1;
+        continue;
+      }
+      const identity = {
+        referenceId: reference.referenceId,
+        pdfUrl: reference.pdfUrl,
+        documentDate: reference.documentDate,
+      };
+      if (jobKeys.has(documentJobKey(identity))) {
+        result.existing += 1;
+        continue;
+      }
+      if (
+        classifyDocumentReference({
+          institution: reference.step.institution,
+          documentType: reference.step.documentType,
+          documentNumber: reference.documentNumber,
+          pdfUrl: reference.pdfUrl,
+          metadata: reference.metadata,
+        }).status !== "excerpt-eligible"
+      ) {
+        result.skipped += 1;
+        continue;
+      }
+      const runId = runIds.get(reference.stepApiId);
+      if (!runId) {
+        result.skipped += 1;
+        continue;
+      }
+      pending.push({
+        runId,
+        stepApiId: reference.stepApiId,
+        ...identity,
+      });
+    }
+    if (options.dryRun) {
+      result.queued += pending.length;
+    } else if (pending.length) {
+      result.queued += (
+        await enqueueDocumentProcessingBatch(prisma, pending)
+      ).count;
+    }
+    scanned += references.length;
+    options.onProgress?.({
+      ...result,
+      scanned,
+      total,
+      cursor,
+    });
+    if (references.length < batchSize) break;
+  }
+  return result;
 }
