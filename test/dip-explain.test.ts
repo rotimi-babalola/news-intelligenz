@@ -257,6 +257,33 @@ test("English and German briefs cite the same stored step and document page", as
   }
 });
 
+test("an orphan dossier abstains without calling the provider", async () => {
+  const { prisma } = store();
+  const orphan = buildDossiers(
+    [{ ...hit, proceedingApiId: "9" }],
+    new Map([
+      ["9", { ...timeline, apiId: "9", parentMissing: true, proceeding: null }],
+    ]),
+    1,
+  )[0]!;
+  let calls = 0;
+  for (const language of ["en", "de"] as const) {
+    const brief = await generateProceedingBrief(
+      prisma,
+      { question: "What rules apply?", language, dossier: orphan },
+      fixtureProvider(async () => {
+        calls += 1;
+        return answer(language);
+      }),
+    );
+    assert.equal(brief.answerConfidence, "abstain");
+    assert.deepEqual(Object.values(brief.claims).flat(), []);
+    assert.match(brief.qualification ?? "", /missing|fehlt/u);
+    assert.equal(brief.proceedingApiId, "9");
+  }
+  assert.equal(calls, 0);
+});
+
 test("a broad question can cite a linked PDF added after proceeding selection", async () => {
   const { prisma } = store();
   const withoutPage = {
