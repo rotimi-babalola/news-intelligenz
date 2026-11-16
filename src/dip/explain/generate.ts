@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "../../generated/prisma/client";
-import { BRIEF_CACHE_VERSION, MAX_BRIEF_QUESTION_LENGTH } from "../constants";
+import {
+  BRIEF_ASSEMBLY_VERSION,
+  MAX_BRIEF_QUESTION_LENGTH,
+} from "../constants";
 import {
   findProceedingBrief,
   latestDocumentContent,
@@ -58,7 +61,7 @@ export async function generateProceedingBrief(
   const key = createHash("sha256")
     .update(
       JSON.stringify([
-        BRIEF_CACHE_VERSION,
+        BRIEF_ASSEMBLY_VERSION,
         question.trim(),
         language,
         provider.identity,
