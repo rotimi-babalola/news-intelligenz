@@ -16,10 +16,15 @@ import { MAX_PDF_BYTES, PDF_FETCH_TIMEOUT_MS } from "../constants";
 export type FetchedPdf =
   { ok: true; bytes: Buffer; finalUrl: string } | { ok: false; reason: string };
 
-// 404/410 means the source never published the file at that link. Retrying
-// cannot make it appear, so the document job is exhausted on the first attempt.
+// 404/410 means the source never published the file at that link, and a
+// declared size over the bound never gets smaller. Retrying cannot change
+// either, so the document job is exhausted on the first attempt.
 export function isPermanentFetchFailure(reason: string) {
-  return reason === "HTTP 404" || reason === "HTTP 410";
+  return (
+    reason === "HTTP 404" ||
+    reason === "HTTP 410" ||
+    reason === "Document exceeds size bound"
+  );
 }
 
 type PdfFetchFn = (
