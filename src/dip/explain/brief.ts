@@ -11,6 +11,7 @@ export function buildBrief(
   language: BriefLanguage,
   question: string,
   claims: Claims,
+  missing: string[],
 ) {
   const answered = sections.filter(
     (section) => claims[section].length > 0,
@@ -18,9 +19,15 @@ export function buildBrief(
   const answerConfidence: AnswerConfidence =
     answered === 0
       ? "abstain"
-      : answered === sections.length
+      : answered === sections.length && missing.length === 0
         ? "supported"
         : "partial";
+  const missingStatement =
+    missing.length > 0
+      ? language === "en"
+        ? `The stored evidence does not contain the requested facts: ${missing.join("; ")}.`
+        : `Die gespeicherten Belege enthalten die gefragten Angaben nicht: ${missing.join("; ")}.`
+      : null;
   return {
     proceedingApiId: dossier.apiId,
     question,
@@ -29,10 +36,11 @@ export function buildBrief(
     retrievalRelevance: dossier.ranking.strongestEvidence,
     claims,
     qualification:
-      answered === sections.length
+      missingStatement ??
+      (answerConfidence === "supported"
         ? null
         : language === "en"
           ? "The stored evidence does not establish every part of the answer."
-          : "Die gespeicherten Belege klären nicht alle Teile der Antwort.",
+          : "Die gespeicherten Belege klären nicht alle Teile der Antwort."),
   };
 }

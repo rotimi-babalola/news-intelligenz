@@ -15,7 +15,7 @@ import {
   latestStageClaim,
   orderedStepClaims,
 } from "./claims";
-import { validateAnswer } from "./citations";
+import { missingFacts, validateAnswer } from "./citations";
 import { collectEvidence, matchesDossier } from "./evidence";
 import { chatCompletionsProvider, type ExplainerProvider } from "./provider";
 import type { BriefLanguage, Dossier } from "./types";
@@ -70,18 +70,17 @@ export async function generateProceedingBrief(
       ...(cached.answer as ReturnType<typeof buildBrief>),
       retrievalRelevance: dossier.ranking.strongestEvidence,
     };
-  const claims = evidence.length
-    ? await validateAnswer(
-        await provider.generate({
-          question: question.trim(),
-          language,
-          evidence,
-        }),
-        evidence,
+  const generated = evidence.length
+    ? await provider.generate({
+        question: question.trim(),
         language,
-        provider.verify,
-      )
+        evidence,
+      })
+    : null;
+  const claims = generated
+    ? await validateAnswer(generated, evidence, language, provider.verify)
     : emptyClaims();
+  const missing = generated ? missingFacts(generated) : [];
   claims.stage = latestStageClaim(current.steps, claims.stage, language);
   claims.steps = orderedStepClaims(current.steps, claims.steps, language);
   claims.documents = await alignDocumentClaims(
@@ -102,7 +101,13 @@ export async function generateProceedingBrief(
     )
       throw new Error("Document changed during generation; search again");
   }
-  const answer = buildBrief(dossier, language, question.trim(), claims);
+  const answer = buildBrief(
+    dossier,
+    language,
+    question.trim(),
+    claims,
+    missing,
+  );
   await saveProceedingBrief(prisma, key, dossier.apiId, language, answer);
   return answer;
 }

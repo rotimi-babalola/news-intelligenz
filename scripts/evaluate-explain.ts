@@ -43,18 +43,28 @@ const labels = z.object({
           language: z.enum(["en", "de"]),
           proceeding: z.string().min(1).optional(),
           expectAbstain: z.boolean().default(false),
+          expectMissing: z.array(z.string().trim().min(1)).default([]),
           facts: z.array(fact).default([]),
         })
         .superRefine((value, ctx) => {
-          if (value.expectAbstain && value.facts.length)
+          if (
+            value.expectAbstain &&
+            (value.facts.length || value.expectMissing.length)
+          )
             ctx.addIssue({
               code: "custom",
-              message: "Abstention cases cannot carry expected facts",
+              message:
+                "Abstention cases cannot carry expected facts or missing facts",
             });
-          if (!value.expectAbstain && !value.facts.length)
+          if (
+            !value.expectAbstain &&
+            !value.facts.length &&
+            !value.expectMissing.length
+          )
             ctx.addIssue({
               code: "custom",
-              message: "Answerable cases need at least one expected fact",
+              message:
+                "Answerable cases need expected facts or expected missing facts",
             });
           if (!value.expectAbstain && !value.proceeding)
             ctx.addIssue({
@@ -122,6 +132,7 @@ type CaseResult = {
   question: string;
   language: AnswerLabel["language"];
   expectAbstain: boolean;
+  expectMissing: string[];
   proceeding: string | null;
   parentMissing: boolean | null;
   corpus: ReturnType<typeof corpusOf> | null;
@@ -148,6 +159,7 @@ function unscored(
     question: label.question,
     language: label.language,
     expectAbstain: label.expectAbstain,
+    expectMissing: label.expectMissing ?? [],
     proceeding,
     parentMissing: null,
     corpus: null,
@@ -164,6 +176,7 @@ function unscored(
       citationSupport: label.facts.length ? 0 : null,
       abstained,
       correctAbstention,
+      qualified: false,
     },
   };
 }
@@ -171,7 +184,12 @@ function unscored(
 function summarize(results: CaseResult[]) {
   const facts = results.flatMap((result) => result.scores?.facts ?? []);
   const abstentionCases = results.filter((result) => result.expectAbstain);
-  const answerableCases = results.filter((result) => !result.expectAbstain);
+  const qualificationCases = results.filter(
+    (result) => result.expectMissing.length > 0,
+  );
+  const answerableCases = results.filter(
+    (result) => !result.expectAbstain && !result.expectMissing.length,
+  );
   return {
     cases: results.length,
     facts: facts.length,
@@ -188,6 +206,11 @@ function summarize(results: CaseResult[]) {
         result.scores ? (result.scores.correctAbstention ? 1 : 0) : null,
       ),
     ),
+    qualificationAccuracy: meanScore(
+      qualificationCases.map((result) =>
+        result.scores ? (result.scores.qualified ? 1 : 0) : null,
+      ),
+    ),
     answerRate: meanScore(
       answerableCases.map((result) =>
         result.scores
@@ -202,10 +225,15 @@ function summarize(results: CaseResult[]) {
       question: result.question,
       correct: result.scores?.correctAbstention ?? null,
     })),
+    qualificationCases: qualificationCases.map((result) => ({
+      language: result.language,
+      question: result.question,
+      correct: result.scores?.qualified ?? null,
+    })),
   };
 }
 
-function abstentionCause(result: CaseResult): FailureCause {
+function insufficientAnswerCause(result: CaseResult): FailureCause {
   if (
     result.notice === "proceeding not retrieved" ||
     result.notice === "no dossier retrieved"
@@ -260,6 +288,7 @@ try {
       question: label.question,
       language: label.language,
       expectAbstain: label.expectAbstain,
+      expectMissing: label.expectMissing ?? [],
       proceeding: dossier.apiId,
       parentMissing: dossier.parentMissing,
       corpus: corpusOf(current, evidence),
@@ -292,7 +321,7 @@ try {
       : [
           {
             kind: "abstention",
-            cause: abstentionCause(result),
+            cause: insufficientAnswerCause(result),
             language: result.language,
             question: result.question,
             answer: result.answer,
@@ -300,7 +329,21 @@ try {
             notice: result.notice,
           },
         ];
-    return [...factFailures, ...abstentionFailure];
+    const qualificationFailure =
+      result.expectMissing.length && !result.scores?.qualified
+        ? [
+            {
+              kind: "qualification",
+              cause: insufficientAnswerCause(result),
+              language: result.language,
+              question: result.question,
+              answer: result.answer,
+              expected: result.expectMissing,
+              notice: result.notice,
+            },
+          ]
+        : [];
+    return [...factFailures, ...abstentionFailure, ...qualificationFailure];
   });
 
   console.log(
