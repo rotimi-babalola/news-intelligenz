@@ -18,7 +18,10 @@ export function database() {
     { connectionString },
     schema ? { schema } : undefined,
   );
-  return new PrismaClient({ adapter });
+  // Neon suspends an idle compute; the job that wakes it waits seconds for a
+  // connection, past Prisma's 2s maxWait default, and the first transaction
+  // fails with P2028 instead of paying the cold start.
+  return new PrismaClient({ adapter, transactionOptions: { maxWait: 15_000 } });
 }
 
 // Raw SQL needs the same schema selected for Prisma's typed queries.
