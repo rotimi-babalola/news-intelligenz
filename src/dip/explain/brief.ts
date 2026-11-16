@@ -1,5 +1,6 @@
 import {
   sections,
+  type AnswerConfidence,
   type BriefLanguage,
   type Claims,
   type Dossier,
@@ -14,16 +15,17 @@ export function buildBrief(
   const answered = sections.filter(
     (section) => claims[section].length > 0,
   ).length;
+  const answerConfidence: AnswerConfidence =
+    answered === 0
+      ? "abstain"
+      : answered === sections.length
+        ? "supported"
+        : "partial";
   return {
     proceedingApiId: dossier.apiId,
     question,
     language,
-    answerConfidence:
-      answered === 0
-        ? "abstain"
-        : answered === sections.length
-          ? "supported"
-          : "partial",
+    answerConfidence,
     retrievalRelevance: dossier.ranking.strongestEvidence,
     claims,
     qualification:

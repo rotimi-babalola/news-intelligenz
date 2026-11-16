@@ -100,6 +100,10 @@ To compare hosted embedding models before choosing one for production, see
 reindexes existing records under separate model identities, evaluates labeled
 German and English queries, and uses a batch drain for backfill.
 
+To measure answer coverage, citation support and abstention separately from
+retrieval, see [DIP answer evaluation](docs/dip-answer-evaluation.md). Run the
+reviewed label set with `pnpm evaluate:explain`.
+
 To replay a missed or failed period, set `DIP_BACKFILL_FROM` (and optionally
 `DIP_BACKFILL_TO`, default now) and run `pnpm collect:dip`. An explicit window
 bypasses the hour guard and is used verbatim for every scope; the checkpoint
@@ -354,6 +358,8 @@ RSS/search sample and contribution metrics are superseded.
 - [Domain glossary](CONTEXT.md) — parliamentary terms.
 - [ADR 0006](docs/adr/0006-proceeding-centric-explainers.md) — future grounded
   English explanations.
+- [DIP answer evaluation](docs/dip-answer-evaluation.md) — reviewed English and
+  German labels, answer coverage, citation support and abstention.
 - [Original design interview](docs/phase-1-design-notes.md), [feed catalog](docs/phase-1-feed-catalog.md),
   and [feed verification](docs/launch-feed-verification.md) — historical news
   design and implementation evidence.

@@ -7,6 +7,8 @@ export type Dossier = Awaited<
 
 export type BriefLanguage = "en" | "de";
 
+export type AnswerConfidence = "abstain" | "partial" | "supported";
+
 export type Evidence = {
   id: string;
   text: string;
