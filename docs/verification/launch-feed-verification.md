@@ -1,6 +1,6 @@
 # Launch feeds: nine public-news RSS feeds
 
-Historical verification of the earlier news implementation. [ADR 0007](adr/0007-dip-only-parliamentary-collection.md) removes these feeds from the target architecture; current runtime cleanup is tracked separately.
+Historical verification of the earlier news implementation. [ADR 0007](../adr/0007-dip-only-parliamentary-collection.md) removes these feeds from the target architecture; current runtime cleanup is tracked separately.
 
 Checked on 22 September 2026 with `cli verify-all`. All nine configured
 endpoints returned XML over HTTPS (HTTP 200) and every entry parsed as valid,
@@ -47,7 +47,7 @@ republish that text. The current behavior is:
   news-feed hosts when extraction succeeds. Redirects to other hosts and
   unsupported formats retain metadata and the original link only.
 - All Bundestag RSS endpoints remain **disabled** (see the
-  [feed catalog](phase-1-feed-catalog.md)); the synthetic Bundestag fixture
+  [feed catalog](../research/phase-1-feed-catalog.md)); the synthetic Bundestag fixture
   stays a deterministic parser and persistence test, as does the synthetic
   tagesschau RDF fixture (`fixtures/tagesschau-rdf.xml`).
 

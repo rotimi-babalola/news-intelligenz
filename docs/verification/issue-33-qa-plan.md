@@ -5,8 +5,8 @@ document references and queues PDF work without fetching bytes, a durable
 document job downloads/extracts/caches a variant and hands embedding to its
 own job, an on-demand request returns metadata immediately and jumps the
 queue, and retrieval returns page-level `dokument` hits from the latest
-variant. See the [table reference](database-tables.md) and [processing
-jobs](processing-jobs.md) for the record and job semantics.
+variant. See the [table reference](../reference/database-tables.md) and [processing
+jobs](../reference/processing-jobs.md) for the record and job semantics.
 
 Starting point: `scripts/reset-db.sh` has already been run, so the database
 is migrated from scratch and holds only the seeded news fixture run (`seed`).

@@ -1,6 +1,6 @@
 # DIP page deduplication evaluation, 7 November 2026
 
-Re-ran the same 16 [reviewed German and English queries](../fixtures/dip/embedding-eval.reviewed.json)
+Re-ran the same 16 [reviewed German and English queries](../../fixtures/dip/embedding-eval.reviewed.json)
 with `pnpm evaluate:dip -- fixtures/dip/embedding-eval.reviewed.json` after
 ranking only the highest-scoring passage per document reference and page. The
 [complete results](dip-embedding-dedup-eval-2026-11-07.json) include the 160

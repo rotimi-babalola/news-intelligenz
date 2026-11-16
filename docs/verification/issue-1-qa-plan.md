@@ -2,7 +2,7 @@
 
 Goal: prove the end-to-end loop for this ticket — take an RSS feed URL, import
 it, confirm the records in PostgreSQL, and review them on the local admin page.
-See the [table reference](database-tables.md) for what each record means and
+See the [table reference](../reference/database-tables.md) for what each record means and
 [issue-1-verification](issue-1-verification.md) for the automated evidence.
 
 ## Prerequisites

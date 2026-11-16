@@ -22,7 +22,7 @@ post-processing snapshot at **18:33:25 UTC** had **415**, **5,213**, **16,366**,
 and **16,366**, respectively. These are live-branch observations, not an
 immutable database snapshot.
 
-The [reviewed labels](../fixtures/dip/embedding-eval.reviewed.json) now include
+The [reviewed labels](../../fixtures/dip/embedding-eval.reviewed.json) now include
 21/8312 PDF page 48: it contains the question about electricity grid charges
 through 2045 and the government's answer that it has no reliable forecast.
 For the climate queries, 21/7680 PDF pages 1–3 and 484/26 PDF pages 3–5

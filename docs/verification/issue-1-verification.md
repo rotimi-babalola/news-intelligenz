@@ -3,7 +3,7 @@
 ## Acceptance evidence
 
 - Runtime/database choice: Node.js 24 LTS, TypeScript, Prisma ORM and
-  PostgreSQL 17; [ADR 0003](adr/0003-local-runtime-and-database-access.md).
+  PostgreSQL 17; [ADR 0003](../adr/0003-local-runtime-and-database-access.md).
 - Launch feed: Deutschlandfunk Nachrichten endpoint and RSS 2.0 format verified;
   metadata retention enabled, full-text retention unresolved. The synthetic
   Bundestag fixture remains the deterministic parser and persistence input.

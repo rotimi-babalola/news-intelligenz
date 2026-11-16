@@ -59,7 +59,7 @@ either expected facts or an abstention expectation:
   languages.
 
 The reviewed set at
-[`fixtures/dip/explain-eval.reviewed.json`](../fixtures/dip/explain-eval.reviewed.json)
+[`fixtures/dip/explain-eval.reviewed.json`](../../fixtures/dip/explain-eval.reviewed.json)
 covers climate allocations, university funding, motorway financing, grid
 charges, the 2045 grid-charge forecast, housing costs, the truck-toll 2025
 questions in English and German as fact-absent cases, and two

@@ -1,6 +1,6 @@
 # DIP collection design interview
 
-Status: DIP collection, multilingual retrieval, and lazy PDF processing decisions confirmed and implemented. [ADR 0007](adr/0007-dip-only-parliamentary-collection.md) later made DIP the sole target source; news references below describe the earlier phase.
+Status: DIP collection, multilingual retrieval, and lazy PDF processing decisions confirmed and implemented. [ADR 0007](../adr/0007-dip-only-parliamentary-collection.md) later made DIP the sole target source; news references below describe the earlier phase.
 
 ## Settled decisions
 

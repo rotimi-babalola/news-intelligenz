@@ -64,7 +64,7 @@ from the stored records before comparing models. The script reports recall@5,
 recall@10, MRR@10, query latency, and the top results for inspection. Labels
 must be real IDs from the evaluation branch; the example above is only a format
 example.
-The [draft query set](../fixtures/dip/embedding-eval.draft.json) contains 16
+The [draft query set](../../fixtures/dip/embedding-eval.draft.json) contains 16
 German and English questions grounded in public DIP titles from the configured
 Neon database. Review each positive label, add other relevant proceedings,
 steps, and document pages, then set `reviewed` to `true` in a copy. The

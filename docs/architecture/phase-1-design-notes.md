@@ -1,6 +1,6 @@
 # Phase 1 design interview
 
-These notes preserve the original news-and-RSS design interview as historical context. The later [DIP-only decision](adr/0007-dip-only-parliamentary-collection.md) supersedes public-news RSS, news search, article extraction, publication workflows, and their acceptance criteria below. The active target and acceptance scope are in the [Phase 1 architecture](phase-1-architecture.md); DIP details remain in the [DIP design notes](dip-design-notes.md).
+These notes preserve the original news-and-RSS design interview as historical context. The later [DIP-only decision](../adr/0007-dip-only-parliamentary-collection.md) supersedes public-news RSS, news search, article extraction, publication workflows, and their acceptance criteria below. The active target and acceptance scope are in the [Phase 1 architecture](phase-1-architecture.md); DIP details remain in the [DIP design notes](dip-design-notes.md).
 
 ## Original agreed direction (superseded)
 
@@ -34,7 +34,7 @@ Phase 1 deliverable: a fault-tolerant collection system combining targeted searc
 - Accept German and English source material, preserving original text and language without translation during collection.
 - Persistent storage is explicitly part of Phase 1: publications, text versions, discovery history, run results, and review decisions must survive restarts.
 - The internal admin tool has one operator. Start locally and deploy it alongside always-on operation, protected by Basic Auth; registration and multi-user roles are deferred.
-- Launch RSS sources: the user-provided [34-feed catalog](phase-1-feed-catalog.md), comprising Tagesschau all updates, eight Deutschlandfunk feeds, and 25 Bundestag feeds. This explicitly supersedes the earlier five-feed selection. Defer DW and parliamentary document feeds.
+- Launch RSS sources: the user-provided [34-feed catalog](../research/phase-1-feed-catalog.md), comprising Tagesschau all updates, eight Deutschlandfunk feeds, and 25 Bundestag feeds. This explicitly supersedes the earlier five-feed selection. Defer DW and parliamentary document feeds.
 - Use PostgreSQL for publications, versions, discoveries, processing jobs, and review decisions. Begin with database-backed durable jobs rather than a separate queue service.
 - Start with one configurable German search query per day for each of six subjects: politics/legislation, employment/economy, housing, healthcare, education, and immigration.
 - Check applicable retention and reuse permissions per source before enabling retained full-text versions. Where unresolved, retain only permitted metadata and links; do not assume all metadata retention is permitted by default.
@@ -60,7 +60,7 @@ These criteria describe the superseded news plan and are no longer Phase 1 accep
 
 ## Design review status and implementation prerequisites
 
-- The original news decisions are superseded by [ADR 0007](adr/0007-dip-only-parliamentary-collection.md). DIP retrieval and PDF-processing decisions remain in [DIP design notes](dip-design-notes.md). Existing news runtime paths and some GitHub tickets still reflect the old plan and require cleanup.
+- The original news decisions are superseded by [ADR 0007](../adr/0007-dip-only-parliamentary-collection.md). DIP retrieval and PDF-processing decisions remain in [DIP design notes](dip-design-notes.md). Existing news runtime paths and some GitHub tickets still reflect the old plan and require cleanup.
 - The source-specific news permission checks and feed validation below are historical prerequisites for the old plan. DIP source obligations are described in the current architecture.
 
 ## Source research (16 September 2026)
