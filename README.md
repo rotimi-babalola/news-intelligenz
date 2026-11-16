@@ -1,12 +1,18 @@
 # News Intelligenz
 
-News Intelligenz aims to help immigrants living in Germany understand parliamentary activity through English explanations grounded in official records. Its source scope is DIP proceedings, steps, and linked parliamentary documents across the institutions returned for selected electoral terms.
+News Intelligenz helps immigrants living in Germany understand parliamentary activity through English explanations grounded in official records.
+
+**Stack:** Next.js · TypeScript · PostgreSQL with pgvector · Prisma · Neon · Cloudflare R2 · DIP API · OpenAI-compatible embeddings
+
+## What works today
+
+DIP collection, local retrieval, and lazy linked-PDF processing. There is no user-facing site yet. The surfaces that exist are the `curl` and `pnpm` workflows below, the operator admin pages under `/admin`, and a read-only MCP server that lets a local LLM client search cited DIP evidence. Dated evaluation reports under [`docs/evaluation`](docs/evaluation) record the retrieval, citation and abstention measurements behind each decision.
+
+The [current architecture](docs/architecture/phase-1-architecture.md) describes the target, and the [documentation](#documentation) list is the shortest route into the design decisions.
 
 ## Project status
 
-The accepted [DIP-only decision](docs/adr/0007-dip-only-parliamentary-collection.md) removes editorial news feeds, news search, and article extraction from the target architecture. DIP collection, local retrieval, and lazy linked-PDF processing are implemented. The local runtime still exposes the earlier news collection and inspection paths; this documentation change does not disable them. Already collected news data stays available for internal inspection until a later cleanup exports or backs it up and removes news-only code and tables.
-
-The [current architecture](docs/architecture/phase-1-architecture.md) describes the target. Older feed research, Phase 1 news criteria, and GitHub tickets that assume news collection are historical and need backlog review.
+The accepted [DIP-only decision](docs/adr/0007-dip-only-parliamentary-collection.md) removes editorial news feeds, news search, and article extraction from the target architecture. The local runtime still exposes the earlier news collection and inspection paths; this documentation change does not disable them. Already collected news data stays available for internal inspection until a later cleanup exports or backs it up and removes news-only code and tables. Older feed research, Phase 1 news criteria, and GitHub tickets that assume news collection are historical and need backlog review.
 
 ## Run locally
 
@@ -373,3 +379,9 @@ The older GitHub Phase 1 tickets still include RSS/search assumptions. Review
 them against ADR 0007 before scheduling or deploying the next increment.
 [Issue #42](https://github.com/rotimi-babalola/news-intelligenz/issues/42)
 tracks removal of legacy news code and the later backed-up data and schema cleanup.
+
+## License
+
+This repository is public so the work can be read and evaluated. It is **not open source**: all rights are reserved, and no permission is granted to reuse, redistribute or deploy the code without written permission.
+
+Collected DIP material remains subject to the [official DIP terms](https://dip.bundestag.de/documents/nutzungsbedingungen_dip.pdf), including source attribution, document reproduction rules, and possible third-party rights.
