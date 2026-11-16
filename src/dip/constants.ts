@@ -19,7 +19,10 @@ export const HOT_DOCUMENT_MS = 14 * 24 * 60 * 60 * 1000;
 export const SYNC_OVERLAP_MS = 6 * 60 * 60 * 1000;
 
 // Documents
-export const MAX_PDF_BYTES = 25_000_000;
+// Measured on Drucksache 21/7300 (275,730,215 bytes, 3,561 pages): the extract
+// shape peaks at 2.5x the source size, so this bound tracks the 2 GB cron plan
+// rather than a guess. Re-measure before raising it with the plan.
+export const MAX_PDF_BYTES = 600_000_000;
 export const PDF_FETCH_TIMEOUT_MS = 30_000;
 export const DOCUMENT_BACKFILL_BATCH_SIZE = 100;
 export const DOCUMENT_CHUNK_SIZE = 1200;
