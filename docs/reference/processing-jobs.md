@@ -91,7 +91,7 @@ cron jobs have no disk for the file path to use.
 
 | Variable                     | Value | Effect                                                   |
 | ---------------------------- | ----- | -------------------------------------------------------- |
-| `DIP_DOCUMENT_DRAIN_CAP`     | 100   | document jobs per run                                    |
+| `DIP_DOCUMENT_DRAIN_CAP`     | 200   | document jobs per run (~3 minutes of work)               |
 | `DIP_EMBEDDING_DRAIN_CAP`    | 2000  | embedding jobs per run (about 7 minutes, 8,000 per hour) |
 | `DIP_EMBEDDING_REINDEX_ONLY` | unset | set to `1` to drain only reindex work                    |
 
