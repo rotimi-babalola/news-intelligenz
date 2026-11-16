@@ -1,0 +1,255 @@
+{
+  "reviewed": true,
+  "cases": [
+    {
+      "question": "Wie werden Deutschlands Emissionszuweisungen für die Jahre 2021 bis 2030 bilanziert?",
+      "language": "de",
+      "proceeding": "338509",
+      "facts": [
+        {
+          "text": "Die ESR legt national verbindliche Zielpfade für die THG-Emissionsentwicklung außerhalb des EU-Emissionshandels für 2021 bis 2030 fest.",
+          "terms": ["Zielpfade"],
+          "evidenceIds": ["page:290322:3"],
+          "quote": "national verbindliche Zielpfade für die THG-Emissionsentwicklung außerhalb des EU-Emissionshandels (ETS 1)"
+        },
+        {
+          "text": "Der Durchführungsbeschluss 2026/895 legt die ESR-Zuweisungsmengen für 2021 bis 2030 fest.",
+          "terms": ["2026/895", "Zuweisungsmengen"],
+          "evidenceIds": ["page:290322:3", "page:290340:5"],
+          "quote": "Damit wurden die ESR-Zuweisungsmengen (AEA) für jeden Mitgliedstaat für die Jahre 2021 bis 2030 festgelegt."
+        }
+      ]
+    },
+    {
+      "question": "How are Germany's emissions allocations for 2021 to 2030 accounted for?",
+      "language": "en",
+      "proceeding": "338509",
+      "facts": [
+        {
+          "text": "The ESR sets binding national greenhouse-gas pathways outside the EU emissions trading system for 2021 to 2030.",
+          "terms": ["pathways"],
+          "evidenceIds": ["page:290322:3"],
+          "quote": "national verbindliche Zielpfade für die THG-Emissionsentwicklung außerhalb des EU-Emissionshandels (ETS 1)"
+        },
+        {
+          "text": "Implementing decision 2026/895 sets the ESR allocation quantities for 2021 to 2030.",
+          "terms": ["allocations", "2021", "2030"],
+          "evidenceIds": ["page:290322:3", "page:290340:3"],
+          "quote": "Damit wurden die ESR-Zuweisungsmengen (AEA) für jeden Mitgliedstaat für die Jahre 2021 bis 2030 festgelegt."
+        }
+      ]
+    },
+    {
+      "question": "Welche Bundesmittel erhalten Hochschulen für angewandte Wissenschaften?",
+      "language": "de",
+      "proceeding": "340641",
+      "facts": [
+        {
+          "text": "Etwa die Hälfte der deutschen Hochschulen waren im Wintersemester 2024/2025 Hochschulen für angewandte Wissenschaften.",
+          "terms": ["50 Prozent"],
+          "evidenceIds": ["page:291815:1"],
+          "quote": "Etwa 50 Prozent aller Hochschulen in Deutschland waren im Wintersemester 2024/2025 Hochschulen für angewandte Wissenschaften (HAW)"
+        },
+        {
+          "text": "HAW bilden rund 38 Prozent aller Studenten aus.",
+          "terms": ["38 Prozent"],
+          "evidenceIds": ["page:291815:1"],
+          "quote": "Sie bilden mit rund 38 Prozent aller Studenten"
+        },
+        {
+          "text": "Der Bund stellte von 2019 bis 2023 jährlich mindestens 60 Millionen Euro für angewandte Forschung an HAW bereit.",
+          "terms": ["60 Millionen Euro", "2019"],
+          "evidenceIds": ["page:291815:1"],
+          "quote": "im Zeitraum 2019 bis 2023 jährlich ein Fördervolumen von mindestens 60 Mio. Euro"
+        }
+      ]
+    },
+    {
+      "question": "What federal funding do universities of applied sciences receive?",
+      "language": "en",
+      "proceeding": "340641",
+      "facts": [
+        {
+          "text": "About half of German higher education institutions were universities of applied sciences in winter semester 2024/2025.",
+          "terms": ["50 percent"],
+          "evidenceIds": ["page:291815:1"],
+          "quote": "Etwa 50 Prozent aller Hochschulen in Deutschland waren im Wintersemester 2024/2025 Hochschulen für angewandte Wissenschaften (HAW)"
+        },
+        {
+          "text": "Universities of applied sciences teach about 38 percent of all students.",
+          "terms": ["38 percent"],
+          "evidenceIds": ["page:291815:1"],
+          "quote": "Sie bilden mit rund 38 Prozent aller Studenten"
+        },
+        {
+          "text": "The federal government provided at least 60 million euros annually for applied research at these institutions from 2019 to 2023.",
+          "terms": ["60 million euros", "2019"],
+          "evidenceIds": ["page:291815:1"],
+          "quote": "im Zeitraum 2019 bis 2023 jährlich ein Fördervolumen von mindestens 60 Mio. Euro"
+        }
+      ]
+    },
+    {
+      "question": "Wie soll die Finanzierung der Autobahn GmbH geändert werden?",
+      "language": "de",
+      "proceeding": "340174",
+      "facts": [
+        {
+          "text": "Die Finanzierung soll künftig über ein Drei-Säulen-Modell aus Haushaltsmitteln, Nutzerfinanzierung und privatem Kapital erfolgen.",
+          "terms": ["Drei-Säulen-Modell", "Nutzerfinanzierung"],
+          "evidenceIds": ["page:292037:1"],
+          "quote": "in einem Drei-Säulen-Modell aus Haushaltsmitteln, Nutzerfinanzierung und privatem Kapital erfolgen"
+        },
+        {
+          "text": "Die Autobahn GmbH ist eine Gesellschaft privaten Rechts.",
+          "terms": ["Gesellschaft privaten Rechts"],
+          "evidenceIds": ["page:292037:1"],
+          "quote": "einer Gesellschaft privaten Rechts, der „Die Autobahn GmbH des Bundes“"
+        }
+      ]
+    },
+    {
+      "question": "How should the financing of the Autobahn GmbH be changed?",
+      "language": "en",
+      "proceeding": "340174",
+      "facts": [
+        {
+          "text": "Financing should follow a three-pillar model of budget funds, user financing and private capital.",
+          "terms": ["public funds", "user fees", "private capital"],
+          "evidenceIds": ["page:292037:1"],
+          "quote": "in einem Drei-Säulen-Modell aus Haushaltsmitteln, Nutzerfinanzierung und privatem Kapital erfolgen"
+        },
+        {
+          "text": "The Autobahn GmbH is a private-law company.",
+          "terms": ["private law company"],
+          "evidenceIds": ["page:292037:1"],
+          "quote": "einer Gesellschaft privaten Rechts, der „Die Autobahn GmbH des Bundes“"
+        }
+      ]
+    },
+    {
+      "question": "Wie sollen die Stromnetzentgelte ab 2029 neu geordnet werden?",
+      "language": "de",
+      "proceeding": "339848",
+      "facts": [
+        {
+          "text": "Die Bundesnetzagentur will die Systematik der Stromnetzentgelte ab dem 1. Januar 2029 grundlegend neu ordnen.",
+          "terms": ["2029"],
+          "evidenceIds": ["page:291709:1"],
+          "quote": "mit dem die Systematik der Stromnetzentgelte ab dem 1. Januar 2029 grundlegend neu geordnet werden soll"
+        },
+        {
+          "text": "Die 18 größten deutschen Verteilnetzbetreiber erzielten 2024 eine marktanteilsgewichtete Eigenkapitalrendite von 30,1 Prozent.",
+          "terms": ["30,1 Prozent"],
+          "evidenceIds": ["page:291709:1"],
+          "quote": "die 18 größten deutschen Verteilnetzbetreiber im Jahr 2024 eine marktanteilsgewichtete handelsrechtliche Eigenkapitalrendite von 30,1 Prozent erzielt hätten"
+        }
+      ]
+    },
+    {
+      "question": "How should electricity grid charges be reorganised from 2029?",
+      "language": "en",
+      "proceeding": "339848",
+      "facts": [
+        {
+          "text": "The Federal Network Agency plans to fundamentally reorganise the electricity grid-charge system from 1 January 2029.",
+          "terms": ["2029"],
+          "evidenceIds": ["page:291709:1"],
+          "quote": "mit dem die Systematik der Stromnetzentgelte ab dem 1. Januar 2029 grundlegend neu geordnet werden soll"
+        },
+        {
+          "text": "The 18 largest German distribution network operators achieved a weighted equity return of 30.1 percent in 2024.",
+          "terms": ["30.1 percent"],
+          "evidenceIds": ["page:291709:1"],
+          "quote": "die 18 größten deutschen Verteilnetzbetreiber im Jahr 2024 eine marktanteilsgewichtete handelsrechtliche Eigenkapitalrendite von 30,1 Prozent erzielt hätten"
+        }
+      ]
+    },
+    {
+      "question": "Wie sollen sich die Netzentgelte für Strom bis zum Jahr 2045 entwickeln?",
+      "language": "de",
+      "proceeding": "340178",
+      "facts": [
+        {
+          "text": "Die Bundesregierung hat keine belastbare Prognose zur Entwicklung der Stromnetzentgelte bis zum Jahr 2045.",
+          "terms": ["2045"],
+          "evidenceIds": ["page:291288:48"],
+          "quote": "Eine belastbare Prognose der Bundesregierung zur Entwicklung der Stromnetzentgelte bis zum Jahr 2045 liegt nicht vor."
+        }
+      ]
+    },
+    {
+      "question": "What is the expected development of electricity grid charges through 2045?",
+      "language": "en",
+      "proceeding": "340178",
+      "facts": [
+        {
+          "text": "The federal government has no reliable forecast for the development of electricity grid charges through 2045.",
+          "terms": ["2045"],
+          "evidenceIds": ["page:291288:48"],
+          "quote": "Eine belastbare Prognose der Bundesregierung zur Entwicklung der Stromnetzentgelte bis zum Jahr 2045 liegt nicht vor."
+        }
+      ]
+    },
+    {
+      "question": "Was ist zu den Baukosten im Wohnungsbau dokumentiert?",
+      "language": "de",
+      "proceeding": "339930",
+      "facts": [
+        {
+          "text": "Eine mündliche Frage befasst sich mit der Senkung der Baukosten im Wohnungsbau.",
+          "terms": ["mündliche Frage", "Baukosten"],
+          "evidenceIds": ["step:700983"],
+          "quote": "Senkung der Baukosten im Wohnungsbau"
+        },
+        {
+          "text": "Auf die mündliche Frage folgte eine schriftliche Antwort.",
+          "terms": ["schriftliche Antwort"],
+          "evidenceIds": ["step:701230"],
+          "quote": "Mündliche Frage/Schriftliche Antwort"
+        }
+      ]
+    },
+    {
+      "question": "What is documented about housing construction costs?",
+      "language": "en",
+      "proceeding": "339930",
+      "facts": [
+        {
+          "text": "An oral question addresses lowering housing construction costs.",
+          "terms": ["oral question", "housing construction costs"],
+          "evidenceIds": ["step:700983"],
+          "quote": "Senkung der Baukosten im Wohnungsbau"
+        },
+        {
+          "text": "A written answer followed the oral question.",
+          "terms": ["written answer"],
+          "evidenceIds": ["step:701230"],
+          "quote": "Mündliche Frage/Schriftliche Antwort"
+        }
+      ]
+    },
+    {
+      "question": "Wie hoch waren die Einnahmen der Autobahn GmbH aus der Lkw-Maut im Jahr 2025?",
+      "language": "de",
+      "proceeding": "340174",
+      "expectAbstain": true
+    },
+    {
+      "question": "How much did the Autobahn GmbH receive from the truck toll in 2025?",
+      "language": "en",
+      "proceeding": "340174",
+      "expectAbstain": true
+    },
+    {
+      "question": "Welche Vorgaben macht das Gesetz zur Besteuerung von Mondmineralien für den Abbau im Weltraum?",
+      "language": "de",
+      "expectAbstain": true
+    },
+    {
+      "question": "What rules does the law on taxing lunar minerals set for space mining?",
+      "language": "en",
+      "expectAbstain": true
+    }
+  ]
+}

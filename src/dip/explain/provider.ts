@@ -95,9 +95,8 @@ function prompt(template: string, language: BriefLanguage) {
   );
 }
 
-function chatCompletionsProvider(): ExplainerProvider {
-  const settings = explainSettings();
-  const identity = createHash("sha256")
+function providerIdentity(settings: ReturnType<typeof explainSettings>) {
+  return createHash("sha256")
     .update(
       JSON.stringify([
         settings.baseUrl,
@@ -108,8 +107,12 @@ function chatCompletionsProvider(): ExplainerProvider {
       ]),
     )
     .digest("hex");
+}
+
+function chatCompletionsProvider(): ExplainerProvider {
+  const settings = explainSettings();
   return {
-    identity,
+    identity: providerIdentity(settings),
     generate: (input) =>
       completeJson(settings, prompt(ANSWER_PROMPT, input.language), input),
     verify: (input) => completeJson(settings, VERIFY_PROMPT, input),
@@ -118,5 +121,10 @@ function chatCompletionsProvider(): ExplainerProvider {
   };
 }
 
+function explainConfiguration() {
+  const settings = explainSettings();
+  return { ...settings, identity: providerIdentity(settings) };
+}
+
 export type { ExplainerProvider, Generate, Translate, Verify };
-export { chatCompletionsProvider };
+export { chatCompletionsProvider, explainConfiguration };
