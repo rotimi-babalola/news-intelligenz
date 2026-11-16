@@ -9,7 +9,13 @@ from the pending jobs; replaying a settled run returns the stored row.
 
 ## Retry budget
 
-- At most 5 attempts per job (`max_attempts`, reset to 0 on deliberate retry).
+- At most 5 attempts per job (`max_attempts`).
+- A failure the source cannot stop producing exhausts on the first attempt
+  instead of spending the budget: `PermanentJobError` marks it, and
+  `isExhausting` in `src/jobs/policy.ts` decides. `process_document` raises it
+  for `HTTP 404`/`HTTP 410` and for a PDF declared over the size bound, since
+  neither can improve by retrying. Everything else — 5xx, timeouts, blocked
+  destinations, unreadable PDFs — keeps the full budget.
 - Failed attempts back off exponentially from 30s, capped at one hour.
 - A claimed job holds a 5-minute lease. A worker that dies mid-processing
   leaves a stale lease; any worker can reclaim it (safe claiming via
@@ -17,6 +23,10 @@ from the pending jobs; replaying a settled run returns the stored row.
   before claiming, so recovery is the same whichever entry point runs.
 - Attempt history is durable in `job_attempts`; the job row keeps the last
   error for inspection.
+- `attempts` is append-only. A deliberate retry raises `max_attempts` by its
+  current value (`retryExhausted`) and never resets the counter, because each
+  claim inserts `job_attempts` at `attempts + 1`; resetting the counter
+  collides with existing attempt rows.
 
 ## Rate limits
 
@@ -39,9 +49,9 @@ same row.
 
 A document job fetches the bytes, archives them in R2 under a key derived from
 the reference ID and SHA-256 byte hash, extracts page text with PyMuPDF and
-enqueues one `embed_document` job per non-empty page. Identical bytes are reused
-without extraction; changed bytes become a new retained variant, and only the
-latest variant is searchable. A model outage therefore retries the embedding
+enqueues one `embed_document` job per extracted passage. Identical bytes are
+reused without extraction; changed bytes become a new retained variant, and only
+the latest variant is searchable. A model outage therefore retries the embedding
 job, not the download.
 `POST /api/drain-documents` processes one document job per call; `POST
 /api/drain-dip` processes one proceeding, step or extracted-page embedding.
@@ -50,6 +60,36 @@ Priority (`processing_jobs.priority`, higher first) lets `GET
 /api/documents/:referenceId` raise unprocessed work ahead of older background
 jobs. Stale claims requeue with an epoch `next_attempt_at`, so restart recovery
 does not depend on the app and PostgreSQL clocks agreeing.
+
+### Size bound and memory
+
+`MAX_PDF_BYTES` is 600 MB in `src/dip/constants.ts`. It is not a content
+judgement: the extract shape peaks at about 2.5x the source size, so the bound
+tracks the memory of the cron plan it runs on (2 GB at the time of writing,
+measured on Drucksache 21/7300 — 275,730,215 bytes, 3,561 pages, 705 MB peak).
+Raising the bound without raising the plan turns an oversized document into an
+out-of-memory crash instead of a rejected job. Re-measure before changing
+either.
+
+Streaming is not an alternative on this platform: `pdftotext` buffers stdin
+(819 MB peak on the same file, against 232 MB reading from a file), and Render
+cron jobs have no disk for the file path to use.
+
+## Drain schedule
+
+`news-intelligenz-pdf-emb-cron` runs `pnpm drain:dip` every 15 minutes on a
+`1c-2g` cron. Its behaviour comes from environment variables, not the repo:
+
+| Variable                     | Value | Effect                                                   |
+| ---------------------------- | ----- | -------------------------------------------------------- |
+| `DIP_DOCUMENT_DRAIN_CAP`     | 100   | document jobs per run                                    |
+| `DIP_EMBEDDING_DRAIN_CAP`    | 2000  | embedding jobs per run (about 7 minutes, 8,000 per hour) |
+| `DIP_EMBEDDING_REINDEX_ONLY` | unset | set to `1` to drain only reindex work                    |
+
+The script exits non-zero when a job is retrying, or when a job exhausted for a
+reason other than a permanent source failure. Permanent exhaustion is counted
+separately (`permanent`) so a dead upstream link, which no retry can fix, does
+not fail the run and page an operator.
 
 ## Sources
 
