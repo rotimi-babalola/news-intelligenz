@@ -17,24 +17,19 @@ import {
 } from "./claims";
 import { validateAnswer } from "./citations";
 import { collectEvidence, matchesDossier } from "./evidence";
-import {
-  generateAnswer,
-  translatePages,
-  verifyClaims,
-  type Generate,
-  type Translate,
-  type Verify,
-} from "./provider";
+import { chatCompletionsProvider, type ExplainerProvider } from "./provider";
 import type { BriefLanguage, Dossier } from "./types";
+
+type BriefRequest = {
+  question: string;
+  language: BriefLanguage;
+  dossier: Dossier;
+};
 
 export async function generateProceedingBrief(
   prisma: PrismaClient,
-  question: string,
-  language: BriefLanguage,
-  dossier: Dossier,
-  generate: Generate = generateAnswer,
-  verify: Verify = verifyClaims,
-  translate: Translate = translatePages,
+  { question, language, dossier }: BriefRequest,
+  provider: ExplainerProvider = chatCompletionsProvider(),
 ) {
   if (!question.trim() || question.length > MAX_BRIEF_QUESTION_LENGTH)
     throw new Error("Question must contain 1–1000 characters");
@@ -49,17 +44,13 @@ export async function generateProceedingBrief(
     current,
     dossier,
   );
-  const model =
-    generate === generateAnswer
-      ? `${process.env.EXPLAIN_BASE_URL || "https://api.openai.com/v1"}:${process.env.EXPLAIN_MODEL || ""}`
-      : "injected";
   const key = createHash("sha256")
     .update(
       JSON.stringify([
         BRIEF_CACHE_VERSION,
         question.trim(),
         language,
-        model,
+        provider.identity,
         dossier.apiId,
         current.proceeding?.versionNo,
         current.steps.map((step) => [
@@ -81,10 +72,14 @@ export async function generateProceedingBrief(
     };
   const claims = evidence.length
     ? await validateAnswer(
-        await generate({ question: question.trim(), language, evidence }),
+        await provider.generate({
+          question: question.trim(),
+          language,
+          evidence,
+        }),
         evidence,
         language,
-        verify,
+        provider.verify,
       )
     : emptyClaims();
   claims.stage = latestStageClaim(current.steps, claims.stage, language);
@@ -93,7 +88,7 @@ export async function generateProceedingBrief(
     evidence,
     claims.documents,
     language,
-    translate,
+    provider.translate,
   );
   const latest = await getProceeding(prisma, dossier.apiId);
   if (!latest || !matchesDossier(latest, dossier))

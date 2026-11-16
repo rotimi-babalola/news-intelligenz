@@ -59,8 +59,16 @@ export async function POST(request: Request) {
       );
 
     const [en, de] = await Promise.all([
-      generateProceedingBrief(prisma, parsed.data.question, "en", dossier),
-      generateProceedingBrief(prisma, parsed.data.question, "de", dossier),
+      generateProceedingBrief(prisma, {
+        question: parsed.data.question,
+        language: "en",
+        dossier,
+      }),
+      generateProceedingBrief(prisma, {
+        question: parsed.data.question,
+        language: "de",
+        dossier,
+      }),
     ]);
     const documents = await Promise.all(
       dossier.steps.flatMap((step) => {
