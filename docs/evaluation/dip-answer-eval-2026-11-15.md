@@ -4,7 +4,7 @@
 
 Run `pnpm evaluate:explain -- fixtures/dip/explain-eval.reviewed.json` against
 the same fixed branch and explainer configuration. The
-[reviewed labels](../fixtures/dip/explain-eval.reviewed.json) cover six topics
+[reviewed labels](../../fixtures/dip/explain-eval.reviewed.json) cover six topics
 with English and German questions plus two insufficient-evidence questions per
 language.
 The [full evaluator output](dip-answer-eval-2026-11-15.json) retains every

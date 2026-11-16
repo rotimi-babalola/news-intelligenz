@@ -4,7 +4,7 @@
 
 Run `pnpm evaluate:dip -- fixtures/dip/embedding-eval.reviewed.json` with the
 configured production Neon branch and the same embedding settings. The
-[reviewed labels](../fixtures/dip/embedding-eval.reviewed.json) cover eight topics
+[reviewed labels](../../fixtures/dip/embedding-eval.reviewed.json) cover eight topics
 with German and English queries. The [full evaluator output](dip-embedding-eval-2026-11-07.json)
 retains all 160 ranked results, scores, and per-query latencies. No collection,
 reindexing, or retrieval tuning was performed for this evaluation.

@@ -12,6 +12,18 @@ Use the five default triage labels. See `docs/agents/triage-labels.md`.
 
 Use the single-context layout at the repo root. See `docs/agents/domain.md`.
 
+### `docs` layout
+
+`docs` is organised by purpose. Do not add markdown files at its root; put a file in the folder that owns the subject, and keep relative links working when a file moves.
+
+- `adr/` — numbered architecture decisions, one file per decision.
+- `agents/` — agent instructions referenced from `AGENTS.md`.
+- `architecture/` — current target architecture and the design interviews behind it.
+- `reference/` — database tables, processing jobs, and state machines.
+- `evaluation/` — retrieval and answer evaluation guides, their dated runs and label JSON, and investigation reports.
+- `verification/` — issue QA plans and verification reports.
+- `research/` — historical source research that does not define current scope.
+
 ### `src/dip` module layout
 
 `src/dip` is organised by concern. Do not add new flat files at its root; put a file in the existing folder that owns the behaviour.

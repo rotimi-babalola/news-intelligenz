@@ -1,13 +1,13 @@
 # Phase 1 feed catalog
 
-Historical source research. [ADR 0007](adr/0007-dip-only-parliamentary-collection.md) supersedes this RSS launch selection; the target collects DIP parliamentary activity only. These feed URLs do not define current collection scope.
+Historical source research. [ADR 0007](../adr/0007-dip-only-parliamentary-collection.md) supersedes this RSS launch selection; the target collects DIP parliamentary activity only. These feed URLs do not define current collection scope.
 
-Launch RSS selection under the [DIP amendment](dip-design-notes.md): nine public-news feeds. DIP `/vorgang` and `/vorgangsposition` replace the 25 previously selected Bundestag feeds. Endpoints and formats require live validation during implementation; listing does not claim they have been verified. Retain each feed's discovery provenance even when items overlap. All valid configured feed items are eligible without relevance filtering, including sport, culture and international coverage.
+Launch RSS selection under the [DIP amendment](../architecture/dip-design-notes.md): nine public-news feeds. DIP `/vorgang` and `/vorgangsposition` replace the 25 previously selected Bundestag feeds. Endpoints and formats require live validation during implementation; listing does not claim they have been verified. Retain each feed's discovery provenance even when items overlap. All valid configured feed items are eligible without relevance filtering, including sport, culture and international coverage.
 
 The local implementation retains metadata for all nine feeds and, for this private,
 non-commercial project, fetched article text from their configured hosts. The Bundestag
 Aktuelle Themen endpoint remains disabled, and the synthetic Bundestag fixture is
-the deterministic parser and persistence test; see the [verification report](launch-feed-verification.md). Feed tags such as
+the deterministic parser and persistence test; see the [verification report](../verification/launch-feed-verification.md). Feed tags such as
 `de-DE` normalize to their primary language subtag.
 
 ## Public-news feeds

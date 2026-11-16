@@ -1,6 +1,6 @@
 # Phase 1 parliamentary collection architecture
 
-Status: accepted target after the [DIP-only pivot](adr/0007-dip-only-parliamentary-collection.md). This describes the intended architecture. The current runtime still exposes news collection and inspection paths; their removal and data cleanup are follow-up work.
+Status: accepted target after the [DIP-only pivot](../adr/0007-dip-only-parliamentary-collection.md). This describes the intended architecture. The current runtime still exposes news collection and inspection paths; their removal and data cleanup are follow-up work.
 
 ## Deliverable
 
@@ -55,4 +55,4 @@ Existing news records remain for internal inspection during the transition. [Iss
 
 Use the [DIP verification criteria](dip-design-notes.md#verification-criteria): selected-term import, multi-page recovery, independent step updates, version and provenance retention, term transitions, latest-version multilingual retrieval, lazy PDF processing, and inspection of failures. Demonstrate seven consecutive scheduled DIP runs once scheduling exists; verify persisted recovery and a manually reviewed sample of proceedings, steps, and linked documents. Historical RSS/search metrics, article review, and news extraction are excluded.
 
-The record/version boundary is in [ADR 0004](adr/0004-parliamentary-records-and-versions.md), multilingual retrieval in [ADR 0005](adr/0005-local-multilingual-dip-retrieval.md), and future proceeding dossiers in [ADR 0006](adr/0006-proceeding-centric-explainers.md).
+The record/version boundary is in [ADR 0004](../adr/0004-parliamentary-records-and-versions.md), multilingual retrieval in [ADR 0005](../adr/0005-local-multilingual-dip-retrieval.md), and future proceeding dossiers in [ADR 0006](../adr/0006-proceeding-centric-explainers.md).

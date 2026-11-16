@@ -3,9 +3,9 @@
 Goal: prove the end-to-end loop for this ticket — collect fixed search
 results with query/provider/rank provenance, confirm the agent relevance
 gate and operator review in PostgreSQL, and verify an exhausted provider
-pauses while RSS continues. See the [table reference](database-tables.md)
+pauses while RSS continues. See the [table reference](../reference/database-tables.md)
 for what each record means and the [provider
-research](issue-6-search-provider-research.md) for the free-allowance
+research](../research/issue-6-search-provider-research.md) for the free-allowance
 background and terms cautions.
 
 No HTTP trigger for search collection exists yet (scheduling is issue #8),

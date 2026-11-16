@@ -6,7 +6,7 @@ News Intelligenz aims to help immigrants living in Germany understand parliament
 
 The accepted [DIP-only decision](docs/adr/0007-dip-only-parliamentary-collection.md) removes editorial news feeds, news search, and article extraction from the target architecture. DIP collection, local retrieval, and lazy linked-PDF processing are implemented. The local runtime still exposes the earlier news collection and inspection paths; this documentation change does not disable them. Already collected news data stays available for internal inspection until a later cleanup exports or backs it up and removes news-only code and tables.
 
-The [current architecture](docs/phase-1-architecture.md) describes the target. Older feed research, Phase 1 news criteria, and GitHub tickets that assume news collection are historical and need backlog review.
+The [current architecture](docs/architecture/phase-1-architecture.md) describes the target. Older feed research, Phase 1 news criteria, and GitHub tickets that assume news collection are historical and need backlog review.
 
 ## Run locally
 
@@ -52,7 +52,7 @@ The DIP embedding worker defaults to OpenAI `text-embedding-3-small`, requesting
 or the provider-neutral `EMBEDDING_API_KEY` in a private environment file.
 The provider protocol, endpoint, model, and instructions are configurable;
 changing them creates a separate index identity automatically. See
-[DIP embedding configuration](docs/dip-embedding-evaluation.md) before
+[DIP embedding configuration](docs/evaluation/dip-embedding-evaluation.md) before
 switching models so the new index can be backfilled.
 
 To use optional local Ollama instead, set `EMBEDDING_API_FORMAT=ollama` and
@@ -96,12 +96,12 @@ so daylight saving needs no schedule edit. The script collects only — PDF
 fetching and embedding remain separate drains.
 
 To compare hosted embedding models before choosing one for production, see
-[DIP embedding comparison](docs/dip-embedding-evaluation.md). The comparison
+[DIP embedding comparison](docs/evaluation/dip-embedding-evaluation.md). The comparison
 reindexes existing records under separate model identities, evaluates labeled
 German and English queries, and uses a batch drain for backfill.
 
 To measure answer coverage, citation support and abstention separately from
-retrieval, see [DIP answer evaluation](docs/dip-answer-evaluation.md). Run the
+retrieval, see [DIP answer evaluation](docs/evaluation/dip-answer-evaluation.md). Run the
 reviewed label set with `pnpm evaluate:explain`.
 
 To replay a missed or failed period, set `DIP_BACKFILL_FROM` (and optionally
@@ -340,15 +340,15 @@ independently for recent document dates or on demand. Future English explainers
 will use proceeding dossiers with claims cited to steps or document pages;
 generated answers and the reader interface are outside this phase.
 
-Phase 1 acceptance is the [DIP verification criteria](docs/dip-design-notes.md#verification-criteria)
+Phase 1 acceptance is the [DIP verification criteria](docs/architecture/dip-design-notes.md#verification-criteria)
 plus seven consecutive scheduled DIP runs once scheduling exists. The original
 RSS/search sample and contribution metrics are superseded.
 
 ## Documentation
 
-- [Current architecture](docs/phase-1-architecture.md) — DIP collection,
+- [Current architecture](docs/architecture/phase-1-architecture.md) — DIP collection,
   processing, reliability, and acceptance.
-- [DIP design notes](docs/dip-design-notes.md) — source scope and verification.
+- [DIP design notes](docs/architecture/dip-design-notes.md) — source scope and verification.
 - [ADR 0007](docs/adr/0007-dip-only-parliamentary-collection.md) — why the
   project stopped targeting editorial news.
 - [ADR 0008](docs/adr/0008-shared-read-only-mcp-access.md) — invited agent access
@@ -358,10 +358,10 @@ RSS/search sample and contribution metrics are superseded.
 - [Domain glossary](CONTEXT.md) — parliamentary terms.
 - [ADR 0006](docs/adr/0006-proceeding-centric-explainers.md) — future grounded
   English explanations.
-- [DIP answer evaluation](docs/dip-answer-evaluation.md) — reviewed English and
+- [DIP answer evaluation](docs/evaluation/dip-answer-evaluation.md) — reviewed English and
   German labels, answer coverage, citation support and abstention.
-- [Original design interview](docs/phase-1-design-notes.md), [feed catalog](docs/phase-1-feed-catalog.md),
-  and [feed verification](docs/launch-feed-verification.md) — historical news
+- [Original design interview](docs/architecture/phase-1-design-notes.md), [feed catalog](docs/research/phase-1-feed-catalog.md),
+  and [feed verification](docs/verification/launch-feed-verification.md) — historical news
   design and implementation evidence.
 
 The older GitHub Phase 1 tickets still include RSS/search assumptions. Review
