@@ -6,6 +6,7 @@ import { test } from "node:test";
 import { MAX_PDF_BYTES } from "../src/dip/constants.js";
 import {
   fetchDocumentPdf,
+  isPermanentFetchFailure,
   pymupdfExtractor,
 } from "../src/dip/documents/pdf.js";
 
@@ -107,6 +108,14 @@ test("document fetch rejects non-PDF formats and oversized bodies", async () => 
     ),
     { ok: false, reason: "HTTP 404" },
   );
+});
+
+test("only failures that cannot improve count as permanent", () => {
+  assert.equal(isPermanentFetchFailure("HTTP 404"), true);
+  assert.equal(isPermanentFetchFailure("HTTP 410"), true);
+  assert.equal(isPermanentFetchFailure("Document exceeds size bound"), true);
+  assert.equal(isPermanentFetchFailure("HTTP 500"), false);
+  assert.equal(isPermanentFetchFailure("Fetch failed"), false);
 });
 
 test("document fetch rejects an oversized declared length before reading", async () => {

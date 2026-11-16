@@ -42,7 +42,7 @@ import {
 // endpoint checkpoint open.
 //
 // shortcut: permanent-looking failures (missing url, unreadable PDF) use the
-// full bounded retry budget. A 404/410 is the exception and exhausts at once.
+// full bounded retry budget. A 404/410 or an oversized PDF exhausts at once.
 
 export type ProcessDocumentOptions = {
   fetchPdf?: typeof fetchDocumentPdf;
