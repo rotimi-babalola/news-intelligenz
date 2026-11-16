@@ -23,16 +23,17 @@ The DIP checkpoint is _unseen_ (`updatedThrough = null`) or _through T_. A succe
 
 `ProcessingJob.status` is `pending | claimed | retrying | succeeded | exhausted`. A unique dedupe key prevents duplicate handoff; `attempts` counts claims, and `maxAttempts` is the claim budget (`src/jobs/`). A `JobAttempt` row belongs to each committed claim. `claimedBy` plus `attempts` identifies the current owner.
 
-| From                                 | Event                                        | To                  | Invariant                                                                    |
-| ------------------------------------ | -------------------------------------------- | ------------------- | ---------------------------------------------------------------------------- |
-| absent                               | Enqueue                                      | pending             | Unique dedupe key; the owning run exists.                                    |
-| pending or ready retrying            | Atomic claim                                 | claimed             | Claim increments `attempts` and creates its attempt row in one transaction.  |
-| claimed, lease expired, budget left  | Reclaim or restart requeue                   | claimed or retrying | Previous unfinished attempt becomes `abandoned` when the next claim is made. |
-| claimed, lease expired, budget spent | Claim scan or restart recovery               | exhausted           | Final attempt is closed as exhausted; no extra claim is issued.              |
-| claimed, current owner               | Complete                                     | succeeded           | Only matching worker and attempt can finish it.                              |
-| claimed, current owner               | Fail before budget                           | retrying            | Error and next attempt time are stored with the attempt outcome.             |
-| claimed, current owner               | Fail at budget                               | exhausted           | Error and final outcome are stored.                                          |
-| exhausted                            | Operator retry or on-demand document request | pending             | Retry increases the total budget and clears claim fields.                    |
+| From                                 | Event                                        | To                  | Invariant                                                                     |
+| ------------------------------------ | -------------------------------------------- | ------------------- | ----------------------------------------------------------------------------- |
+| absent                               | Enqueue                                      | pending             | Unique dedupe key; the owning run exists.                                     |
+| pending or ready retrying            | Atomic claim                                 | claimed             | Claim increments `attempts` and creates its attempt row in one transaction.   |
+| claimed, lease expired, budget left  | Reclaim or restart requeue                   | claimed or retrying | Previous unfinished attempt becomes `abandoned` when the next claim is made.  |
+| claimed, lease expired, budget spent | Claim scan or restart recovery               | exhausted           | Final attempt is closed as exhausted; no extra claim is issued.               |
+| claimed, current owner               | Complete                                     | succeeded           | Only matching worker and attempt can finish it.                               |
+| claimed, current owner               | Fail before budget                           | retrying            | Error and next attempt time are stored with the attempt outcome.              |
+| claimed, current owner               | Fail at budget                               | exhausted           | Error and final outcome are stored.                                           |
+| claimed, current owner               | Fail permanently                             | exhausted           | A `PermanentJobError` exhausts on the first attempt; the budget is not spent. |
+| exhausted                            | Operator retry or on-demand document request | pending             | Retry increases the total budget and clears claim fields.                     |
 
 Completion or failure from an old owner is a no-op. Workers report `stale` (or omit a news drain count) and do not apply the old attempt's failure fallback. External fetches, uploads, and embedding calls can still have happened before a lease handoff; their stored results use idempotent keys or document-reference locks (`src/import/publication.ts`, `src/dip/documents.ts`, `src/dip/repository.ts`).
 
