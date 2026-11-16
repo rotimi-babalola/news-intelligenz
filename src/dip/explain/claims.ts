@@ -123,7 +123,8 @@ function copiedText(text: string, source: string) {
 
 // Both briefs cite the pages the search retrieved, whatever each language's
 // generator and verifier happened to keep: a page without a verified claim gets
-// a translated one.
+// a translated one. A page that states several relevant facts keeps them all,
+// each with its own quote and the same page citation.
 export async function alignDocumentClaims(
   evidence: Evidence[],
   claims: Claim[],
@@ -134,14 +135,14 @@ export async function alignDocumentClaims(
   for (const item of evidence)
     if (item.citation.kind === "page" && !pages.has(item.id))
       pages.set(item.id, item);
-  const kept = new Map<string, Claim>();
+  const kept = new Map<string, Claim[]>();
   for (const claim of claims) {
     if (claim.citation.kind !== "page") continue;
     const id = `page:${claim.citation.referenceId}:${claim.citation.page}`;
     const page = pages.get(id);
     if (!page) continue;
     if (language === "en" && copiedText(claim.text, page.text)) continue;
-    kept.set(id, claim);
+    kept.set(id, [...(kept.get(id) ?? []), claim]);
   }
   const missing = [...pages.values()].filter((page) => !kept.has(page.id));
   if (missing.length) {
@@ -154,15 +155,14 @@ export async function alignDocumentClaims(
     for (const item of translated.claims) {
       const page = pages.get(item.id);
       if (!page || kept.has(item.id)) continue;
-      kept.set(item.id, {
-        text: item.text,
-        quote: page.text,
-        citation: page.citation,
-      });
+      kept.set(item.id, [
+        {
+          text: item.text,
+          quote: page.text,
+          citation: page.citation,
+        },
+      ]);
     }
   }
-  return [...pages.values()].flatMap((page) => {
-    const claim = kept.get(page.id);
-    return claim ? [claim] : [];
-  });
+  return [...pages.values()].flatMap((page) => kept.get(page.id) ?? []);
 }

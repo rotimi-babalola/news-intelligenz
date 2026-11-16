@@ -1,5 +1,9 @@
 import type { PrismaClient } from "../../generated/prisma/client";
-import { findDocumentChunk, latestDocumentContent } from "../db/index";
+import {
+  findDocumentChunk,
+  findDocumentPage,
+  latestDocumentContent,
+} from "../db/index";
 import { isCitedDocumentVariant } from "../documents/citation";
 import { getProceeding } from "../proceedings/timeline";
 import type { BriefLanguage, Dossier, Evidence, TimelineStep } from "./types";
@@ -90,6 +94,10 @@ export async function collectEvidence(
       hit.chunk,
     );
     if (storedChunk?.text !== hit.passage) continue;
+    // The citation is the whole page, so the generator sees every chunk of it:
+    // one retrieved passage must not hide the page's other relevant facts.
+    const page = await findDocumentPage(prisma, variant.id, hit.page);
+    if (!page) continue;
     documentVersions.push([
       hit.document.referenceId,
       variant.byteHash,
@@ -97,7 +105,7 @@ export async function collectEvidence(
     ]);
     evidence.push({
       id: `page:${hit.document.referenceId}:${hit.page}`,
-      text: hit.passage,
+      text: page.text,
       citation: {
         kind: "page",
         stepId: step.apiId,

@@ -16,6 +16,7 @@ import {
   type Translate,
   type Verify,
 } from "../src/dip/explain/provider.js";
+import { alignDocumentClaims } from "../src/dip/explain/claims.js";
 import type { ProceedingTimeline } from "../src/dip/proceedings/timeline.js";
 import type { DipHit } from "../src/dip/search/search.js";
 
@@ -162,6 +163,11 @@ function store(noSteps = false, stepLabel = "First reading") {
     documentChunk: {
       findUnique: async () => ({
         text: "The bill would provide housing grants.",
+      }),
+    },
+    documentPage: {
+      findUnique: async () => ({
+        text: "The bill would provide housing grants. It also funds demolition.",
       }),
     },
     proceedingBrief: {
@@ -764,6 +770,121 @@ test("the matter falls back to the earliest titled step when the model omits it"
     );
     assert.equal(brief.claims.matter[0]?.citation.stepId, "2");
   }
+});
+
+test("one page keeps every verified claim and only unclaimed pages are translated", async () => {
+  const citation = (referenceId: string, page: number) => ({
+    kind: "page" as const,
+    stepId: "2",
+    referenceId,
+    page,
+    url: pdfUrl,
+  });
+  const translated: string[] = [];
+  const claims = await alignDocumentClaims(
+    [
+      {
+        id: "page:3:2",
+        text: "First fact. Second fact.",
+        citation: citation("3", 2),
+      },
+      { id: "page:4:1", text: "Third fact.", citation: citation("4", 1) },
+    ],
+    [
+      {
+        text: "The first fact holds.",
+        quote: "First fact.",
+        citation: citation("3", 2),
+      },
+      {
+        text: "The second fact also holds.",
+        quote: "Second fact.",
+        citation: citation("3", 2),
+      },
+    ],
+    "en",
+    async ({ pages }) => {
+      translated.push(...pages.map((page) => page.id));
+      return { claims: [{ id: "page:4:1", text: "The third fact holds." }] };
+    },
+  );
+  assert.deepEqual(translated, ["page:4:1"]);
+  assert.deepEqual(
+    claims.map((claim) => claim.text),
+    [
+      "The first fact holds.",
+      "The second fact also holds.",
+      "The third fact holds.",
+    ],
+  );
+  assert.deepEqual(claims[1]?.citation, citation("3", 2));
+});
+
+test("an unsupported second claim from a cited page is dropped, not translated back", async () => {
+  const { prisma } = store();
+  let translations = 0;
+  const brief = await generateProceedingBrief(
+    prisma,
+    { question: "What does it say?", language: "en", dossier: dossier },
+    {
+      generate: async () => ({
+        ...answer("en"),
+        documents: [
+          {
+            text: "The document proposes housing grants.",
+            evidenceId: "page:3:2",
+            quote: "The bill would provide housing grants.",
+          },
+          {
+            text: "The bill also funds demolition.",
+            evidenceId: "page:3:2",
+            quote: "housing grants",
+          },
+        ],
+      }),
+      verify: async ({ claims }) => ({
+        supportedClaimIds: claims
+          .filter((claim) => !claim.text.includes("demolition"))
+          .map(({ id }) => id),
+      }),
+      translate: async () => {
+        translations++;
+        return { claims: [] };
+      },
+      identity: "fixture",
+    },
+  );
+  assert.equal(translations, 0);
+  assert.deepEqual(
+    brief.claims.documents.map((claim) => claim.text),
+    ["The document proposes housing grants."],
+  );
+});
+
+test("a cited page exposes every passage on it, not only the retrieved chunk", async () => {
+  const { prisma } = store();
+  const brief = await generateProceedingBrief(
+    prisma,
+    { question: "What does it cover?", language: "en", dossier: dossier },
+    fixtureProvider(async ({ evidence }) => {
+      const page = evidence.find((item) => item.id === "page:3:2");
+      assert.match(page?.text ?? "", /also funds demolition/u);
+      return {
+        ...answer("en"),
+        documents: [
+          {
+            text: "The bill also funds demolition.",
+            evidenceId: "page:3:2",
+            quote: "It also funds demolition.",
+          },
+        ],
+      };
+    }),
+  );
+  assert.equal(
+    brief.claims.documents[0]?.text,
+    "The bill also funds demolition.",
+  );
 });
 
 test("both briefs cite the same retrieved page when the model omits it", async () => {
