@@ -24,7 +24,7 @@ The run finished on 2026-11-16. The branch held 3,914 proceedings, 34,045
 steps, 1,871 current fetched documents, 40,063 extracted pages and 112,871
 embeddings; the latest proceeding and step observations were 14 November
 06:02Z. The branch is live, so the per-case corpus record in
-[the JSON](dip-multilingual-spike-2026-11-16.json) is the authoritative version
+[the JSON](run.json) is the authoritative version
 and document-byte record.
 
 Five cases were selected from the reviewed English/German set:
@@ -45,20 +45,22 @@ result. Retrieval was measured separately with each translated question.
 
 ## Model and prompt settings
 
-| Setting               | Value                                                                            |
-| --------------------- | -------------------------------------------------------------------------------- |
-| Answer model          | OpenAI `gpt-4o` at `https://api.openai.com/v1`; API reported `gpt-4o-2024-08-06` |
-| Audit model           | OpenAI `gpt-4o-mini`; API reported `gpt-4o-mini-2024-07-18`                      |
-| Embedding model       | `text-embedding-3-small`, 1024 dimensions; no tuning or reindexing               |
-| Sampling              | Prototype/audit: `temperature: 0`; en/de: product default; JSON format, 120 s    |
-| Answer/verify prompts | `ANSWER_PROMPT`, `VERIFY_PROMPT` from `src/dip/explain/provider.ts`              |
-| Translation prompts   | `TRANSLATE_PROMPT`, `TERMS_PROMPT` from the same file, language substituted      |
-| Audit prompt          | Spike-only claim audit, shown in `scripts/spike-explain-languages.ts`            |
-| English/German        | Product `generateProceedingBrief`                                                |
-| French/Polish/Turkish | Prototype assembly, otherwise the same evidence, citation and quote rules        |
+| Setting               | Value                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| Answer model          | OpenAI `gpt-4o` at `https://api.openai.com/v1`; API reported `gpt-4o-2024-08-06`     |
+| Audit model           | OpenAI `gpt-4o-mini`; API reported `gpt-4o-mini-2024-07-18`                          |
+| Embedding model       | `text-embedding-3-small`, 1024 dimensions; no tuning or reindexing                   |
+| Sampling              | Prototype/audit: `temperature: 0`; en/de: product default; JSON format, 120 s        |
+| Answer/verify prompts | `ANSWER_PROMPT`, `VERIFY_PROMPT`, copied verbatim from `src/dip/explain/provider.ts` |
+| Translation prompts   | `TRANSLATE_PROMPT`, `TERMS_PROMPT`, copied verbatim, language substituted            |
+| Audit prompt          | Spike-only claim audit, shown in `scripts/spike-explain-languages.ts`                |
+| English/German        | Product `generateProceedingBrief`                                                    |
+| French/Polish/Turkish | Prototype assembly, otherwise the same evidence, citation and quote rules            |
 
-The JSON records the requested model aliases and a full SHA-256 hash of each
-prompt under `configuration.promptIdentity`. The resolved snapshots above were
+The spike copies the four product prompts verbatim into
+`scripts/spike-explain-languages.ts` so no product file changes. The JSON
+records the requested model aliases and a full SHA-256 hash of each prompt under
+`configuration.promptIdentity`. The resolved snapshots above were
 observed in the API response and are not stored per answer.
 
 Every claim was checked twice. The deterministic pass requires an exact quote
@@ -342,10 +344,10 @@ that the existing citation code already requires before auto-publishing.
 
 ## Recommendation
 
-No production language option is added by this spike. The only product-file
-change is exporting the four existing prompt strings from
-`src/dip/explain/provider.ts` for reuse; it changes no runtime behaviour.
-Production work is tracked in
+No production language option or product code change is made by this spike. The
+four prompts are copied verbatim into the spike script so it can reuse the
+production wording without touching `src/dip/explain/provider.ts`; full hashes
+are in the JSON. Production work is tracked in
 [#124](https://github.com/rotimi-babalola/news-intelligenz/issues/124).
 
 | Language | Pilot decision       | Why                                                                                                                                                                                                                                                          |
@@ -398,7 +400,8 @@ Quality checks required before adding a language:
 pnpm spike:explain-languages
 ```
 
-The command writes `docs/evaluation/dip-multilingual-spike-2026-11-16.json`.
+The command writes
+`docs/evaluation/multilingual-spike-2026-11-16/run.json`.
 Re-running makes new model calls, so it produces another sample and overwrites
 this artifact; use `--out <path>` to keep a separate run. Labels are in
 `fixtures/dip/explain-multilingual-spike.json`; the prototype is
