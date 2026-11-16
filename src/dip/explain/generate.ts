@@ -13,6 +13,7 @@ import {
   alignDocumentClaims,
   emptyClaims,
   latestStageClaim,
+  matterClaim,
   orderedStepClaims,
 } from "./claims";
 import { missingFacts, validateAnswer } from "./citations";
@@ -91,6 +92,7 @@ export async function generateProceedingBrief(
     ? await validateAnswer(generated, evidence, language, provider.verify)
     : emptyClaims();
   const missing = generated ? missingFacts(generated) : [];
+  claims.matter = matterClaim(current.steps, claims.matter, language);
   claims.stage = latestStageClaim(current.steps, claims.stage, language);
   claims.steps = orderedStepClaims(current.steps, claims.steps, language);
   claims.documents = await alignDocumentClaims(

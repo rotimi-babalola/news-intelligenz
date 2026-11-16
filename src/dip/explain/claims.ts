@@ -57,6 +57,32 @@ export function orderedStepClaims(
   });
 }
 
+// The provider omits `matter` unevenly across languages; the earliest titled
+// step establishes the subject the proceeding is about.
+export function matterClaim(
+  steps: TimelineStep[],
+  claims: Claim[],
+  language: BriefLanguage,
+) {
+  if (claims.length) return claims;
+  const step = steps.find((item) => item.title.trim());
+  if (!step) return claims;
+  return [
+    {
+      text:
+        language === "en"
+          ? `The proceeding concerns ${step.title}.`
+          : `Das Verfahren betrifft ${step.title}.`,
+      quote: stepSource(step),
+      citation: {
+        kind: "step" as const,
+        stepId: step.apiId,
+        url: step.sourceUrl,
+      },
+    },
+  ];
+}
+
 // The provider omits `stage` unevenly across languages; the latest step is a
 // strictly supported statement of where the matter stands.
 export function latestStageClaim(
