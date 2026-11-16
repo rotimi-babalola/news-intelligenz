@@ -365,6 +365,34 @@ test("a proceeding with no step or page evidence abstains", async () => {
   assert.deepEqual(brief.claims.steps, []);
 });
 
+test("a relevant dossier that lacks the requested fact qualifies and names it", async () => {
+  const { prisma } = store();
+  for (const language of ["en", "de"] as const) {
+    const brief = await generateProceedingBrief(
+      prisma,
+      {
+        question:
+          language === "en"
+            ? "How much did the Autobahn GmbH receive from the truck toll in 2025?"
+            : "Wie hoch waren die Einnahmen der Autobahn GmbH aus der Lkw-Maut im Jahr 2025?",
+        language,
+        dossier,
+      },
+      fixtureProvider(async () => ({
+        ...answer(language),
+        missing: [
+          language === "en"
+            ? "the 2025 truck-toll revenue"
+            : "die Lkw-Mauteinnahmen im Jahr 2025",
+        ],
+      })),
+    );
+    assert.equal(brief.answerConfidence, "partial");
+    assert.match(brief.qualification!, /2025/u);
+    assert.equal(brief.claims.documents.length, 1);
+  }
+});
+
 test("PDF line wrapping does not discard an otherwise exact cited quote", async () => {
   const original =
     "Der Gesetzentwurf ist besonders eilbedürftig, um eine\n  gemeinsame Beratung im parlamentarischen Verfahren zu ermöglichen.";

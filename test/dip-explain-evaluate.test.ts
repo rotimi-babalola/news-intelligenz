@@ -234,6 +234,41 @@ test("abstention is scored separately from factual coverage", () => {
   assert.equal(answered.correctAbstention, false);
 });
 
+test("a qualification case requires the answer to name the missing fact", () => {
+  const missing: AnswerLabel = {
+    question: "How much did the truck toll raise in 2025?",
+    language: "en",
+    expectAbstain: false,
+    expectMissing: ["2025"],
+    facts: [],
+  };
+  const availability = { retrieved: [], collected: [] };
+  assert.equal(
+    scoreAnswer(
+      missing,
+      {
+        answerConfidence: "partial",
+        qualification: "The stored evidence does not contain the 2025 figure.",
+        claims: claims(),
+      },
+      availability,
+    ).qualified,
+    true,
+  );
+  assert.equal(
+    scoreAnswer(
+      missing,
+      {
+        answerConfidence: "partial",
+        qualification: "The stored evidence does not establish every part.",
+        claims: claims(),
+      },
+      availability,
+    ).qualified,
+    false,
+  );
+});
+
 test("the mean ignores cases without expected facts", () => {
   assert.equal(meanScore([1, null, 0]), 0.5);
   assert.equal(meanScore([null]), null);

@@ -233,13 +233,13 @@
       "question": "Wie hoch waren die Einnahmen der Autobahn GmbH aus der Lkw-Maut im Jahr 2025?",
       "language": "de",
       "proceeding": "340174",
-      "expectAbstain": true
+      "expectMissing": ["2025"]
     },
     {
       "question": "How much did the Autobahn GmbH receive from the truck toll in 2025?",
       "language": "en",
       "proceeding": "340174",
-      "expectAbstain": true
+      "expectMissing": ["2025"]
     },
     {
       "question": "Welche Vorgaben macht das Gesetz zur Besteuerung von Mondmineralien für den Abbau im Weltraum?",

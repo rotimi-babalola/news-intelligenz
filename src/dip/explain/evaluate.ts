@@ -18,6 +18,7 @@ export type AnswerLabel = {
   language: BriefLanguage;
   proceeding?: string;
   expectAbstain: boolean;
+  expectMissing?: string[];
   facts: ExpectedFact[];
 };
 
@@ -31,6 +32,7 @@ export type FactScore = ExpectedFact & {
 
 export type Answer = {
   answerConfidence: AnswerConfidence;
+  qualification?: string | null;
   claims: Claims;
 };
 
@@ -96,6 +98,12 @@ export function scoreAnswer(
     };
   });
   const abstained = answer.answerConfidence === "abstain";
+  const expectedMissing = label.expectMissing ?? [];
+  const qualified =
+    expectedMissing.length > 0 &&
+    expectedMissing.every((term) =>
+      normalized(answer.qualification ?? "").includes(normalized(term)),
+    );
   return {
     facts,
     factualCoverage: facts.length
@@ -106,6 +114,7 @@ export function scoreAnswer(
       : null,
     abstained,
     correctAbstention: abstained === label.expectAbstain,
+    qualified,
   };
 }
 

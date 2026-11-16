@@ -50,6 +50,10 @@ either expected facts or an abstention expectation:
   evaluator uses that dossier, so the case measures insufficient evidence for a
   real record. If it omits `proceeding`, the evaluator uses the top retrieved
   dossier, the answer a reader would see.
+- A fact-absent case uses `expectMissing` instead of `facts` and has no
+  `expectAbstain`. The listed terms must occur in the answer's `qualification`,
+  which is where the explainer names the requested fact the stored evidence
+  lacks.
 - Set `reviewed` to `true` only after checking every ID, page and quote against
   the evaluated branch. Use real records from the same corpus snapshot for both
   languages.
@@ -57,9 +61,29 @@ either expected facts or an abstention expectation:
 The reviewed set at
 [`fixtures/dip/explain-eval.reviewed.json`](../fixtures/dip/explain-eval.reviewed.json)
 covers climate allocations, university funding, motorway financing, grid
-charges, the 2045 grid-charge forecast, housing costs and two
-insufficient-evidence
-questions in English and German.
+charges, the 2045 grid-charge forecast, housing costs, the truck-toll 2025
+questions in English and German as fact-absent cases, and two
+insufficient-evidence questions in each language.
+
+## Missing requested fact
+
+A relevant dossier can still lack the fact the question asks for. The
+explainer calls that an **explicit qualification**, not an abstention: the
+answer keeps the supported timeline and adjacent figures, sets
+`answerConfidence` to `partial`, and the `qualification` names each requested
+value or period the stored evidence does not contain. The answer prompt also
+requires any adjacent figure to say which period it covers so a 2028–2030
+figure is never presented as the requested 2025 value.
+
+Abstention is reserved for a dossier with no answerable claims. A complete
+section-by-section answer that lacks one asked value is `partial`, because the
+reader still needs the timeline and the adjacent evidence; suppressing it would
+hide usable material. The truck-toll cases in the label file therefore carry
+`expectMissing: ["2025"]` and are scored by `qualificationAccuracy`.
+
+The generator reports the missing fact; absence itself is not separately
+verified, so the qualification is a statement about the supplied evidence, not
+a corpus-wide guarantee.
 
 ## Metrics
 
@@ -75,26 +99,28 @@ first line of citation defence; this report measures the surviving claims.
 
 Per language, the evaluator reports:
 
-| Metric               | Meaning                                                               |
-| -------------------- | --------------------------------------------------------------------- |
-| `factualCoverage`    | Mean share of expected facts stated, across cases with expected facts |
-| `citationSupport`    | Mean share of expected facts stated with a reviewed citation          |
-| `abstentionAccuracy` | Share of abstention cases whose `answerConfidence` is `abstain`       |
-| `answerRate`         | Share of answerable cases that produced a non-abstaining answer       |
-| `coveredFacts`       | Raw covered count out of raw expected facts, for small samples        |
+| Metric                  | Meaning                                                               |
+| ----------------------- | --------------------------------------------------------------------- |
+| `factualCoverage`       | Mean share of expected facts stated, across cases with expected facts |
+| `citationSupport`       | Mean share of expected facts stated with a reviewed citation          |
+| `abstentionAccuracy`    | Share of abstention cases whose `answerConfidence` is `abstain`       |
+| `qualificationAccuracy` | Share of fact-absent cases whose qualification names the missing fact |
+| `answerRate`            | Share of answerable cases that produced a non-abstaining answer       |
+| `coveredFacts`          | Raw covered count out of raw expected facts, for small samples        |
 
 Each case also records the answer and the corpus snapshot: proceeding and step
 version numbers plus document byte hashes. The report header records the
 explainer base URL, model and prompt/adapter identity hash.
 
-Failures carry the language, question, answer, expected fact or abstention and
-one cause:
+Failures carry the language, question, answer, expected fact, abstention or
+missing fact and one cause:
 
 - `retrieval` — none of the expected evidence reached the dossier.
 - `dossier` — the evidence was retrieved but did not reach the explainer, or
   the selected dossier has no parent proceeding.
-- `synthesis` — the evidence reached the model but the answer omitted the fact
-  or attributed it to another source.
+- `synthesis` — the evidence reached the model but the answer omitted the fact,
+  attributed it to another source, or failed to name the requested fact that
+  is absent.
 
 ## Run
 

@@ -20,6 +20,15 @@ const answerSchema = z.object({
   documents: z.array(z.unknown()).catch([]),
   unresolved: z.array(z.unknown()).catch([]),
 });
+const missingSchema = z.object({
+  missing: z.array(z.string().trim().min(1).max(300)).catch([]),
+});
+
+// The generator is the only place that can tell an asked fact is absent: the
+// evidence relevance and the claim verifier both see a relevant dossier.
+export function missingFacts(raw: unknown) {
+  return missingSchema.parse(raw).missing;
+}
 
 function sourceQuote(text: string, quote: string) {
   const pattern = quote
