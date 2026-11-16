@@ -53,6 +53,7 @@ export async function fetchDocumentPdf(
   rawUrl: string,
   fetchFn: PdfFetchFn = defaultFetch,
   resolveHost: ResolveHost = defaultResolveHost,
+  maxBytes: number = MAX_PDF_BYTES,
 ): Promise<FetchedPdf> {
   const result = await fetchWithRedirects(rawUrl, {
     fetchFn,
@@ -62,7 +63,7 @@ export async function fetchDocumentPdf(
     },
     timeoutMs: PDF_FETCH_TIMEOUT_MS,
     contentType: /application\/pdf|application\/octet-stream/i,
-    maxBytes: MAX_PDF_BYTES,
+    maxBytes,
     sizeReason: "Document exceeds size bound",
     resolveHost,
     checkContentLength: true,

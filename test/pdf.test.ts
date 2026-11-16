@@ -87,15 +87,17 @@ test("document fetch rejects non-PDF formats and oversized bodies", async () => 
     ),
     { ok: false, reason: "Unsupported format: text/html" },
   );
+  const cap = 1024;
   assert.deepEqual(
     await fetchDocumentPdf(
       "https://dserver.bundestag.de/x",
       async () =>
         response(200, {
           headers: { "content-type": "application/pdf" },
-          body: new Uint8Array(MAX_PDF_BYTES + 1),
+          body: new Uint8Array(cap + 1),
         }),
       publicResolve,
+      cap,
     ),
     { ok: false, reason: "Document exceeds size bound" },
   );
