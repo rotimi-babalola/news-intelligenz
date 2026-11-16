@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MIN_CLAIM_QUOTE_LENGTH } from "../constants";
-import { verifyClaims, type Verify } from "./provider";
+import { chatCompletionsProvider, type Verify } from "./provider";
 import {
   sections,
   type BriefLanguage,
@@ -58,7 +58,7 @@ export async function validateAnswer(
   raw: unknown,
   evidence: Evidence[],
   language: BriefLanguage,
-  verify: Verify = verifyClaims,
+  verify: Verify = chatCompletionsProvider().verify,
 ) {
   const result = validateCitations(raw, evidence);
   const claims = sections

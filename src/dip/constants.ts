@@ -53,6 +53,7 @@ export const REINDEX_PAGE_SIZE = 500;
 export const REINDEX_DOCUMENT_PAGE_SIZE = 100;
 
 // Explain
+export const EXPLAIN_DEFAULT_BASE_URL = "https://api.openai.com/v1";
 export const EXPLAIN_TIMEOUT_MS = 120_000;
 export const BRIEF_CACHE_VERSION = 9;
 export const MAX_BRIEF_QUESTION_LENGTH = 1000;
