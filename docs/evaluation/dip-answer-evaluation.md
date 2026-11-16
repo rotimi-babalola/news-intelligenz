@@ -139,4 +139,6 @@ produces a new answer and a new cache key.
 
 Treat the result as a diagnostic on this small topic-selected set, not as an
 estimate of production answer quality. Do not compare coverage across different
-corpus snapshots or explainer configurations.
+corpus snapshots or explainer configurations. The model is also
+nondeterministic, so compare a change against a control run of the unchanged
+branch on the same corpus snapshot rather than against an older report.
