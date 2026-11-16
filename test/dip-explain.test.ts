@@ -887,6 +887,27 @@ test("a cited page exposes every passage on it, not only the retrieved chunk", a
   );
 });
 
+test("two retrieved chunks of one page become a single page evidence item", async () => {
+  const { prisma } = store();
+  const twice = buildDossiers(
+    [hit, { ...hit, chunk: 2, score: 0.7 } as DipHit],
+    new Map([["1", timeline]]),
+    1,
+  )[0]!;
+  let pageIds: string[] = [];
+  await generateProceedingBrief(
+    prisma,
+    { question: "What does it cover?", language: "en", dossier: twice },
+    fixtureProvider(async ({ evidence }) => {
+      pageIds = evidence
+        .filter((item) => item.citation.kind === "page")
+        .map((item) => item.id);
+      return answer("en");
+    }),
+  );
+  assert.deepEqual(pageIds, ["page:3:2"]);
+});
+
 test("both briefs cite the same retrieved page when the model omits it", async () => {
   const { prisma } = store();
   const translations = {

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Translate } from "./provider";
-import { stepDate, stepSource } from "./evidence";
+import { stepDate, stepSource, pageEvidenceId } from "./evidence";
 import type {
   BriefLanguage,
   Claim,
@@ -138,7 +138,9 @@ export async function alignDocumentClaims(
   const kept = new Map<string, Claim[]>();
   for (const claim of claims) {
     if (claim.citation.kind !== "page") continue;
-    const id = `page:${claim.citation.referenceId}:${claim.citation.page}`;
+    const { referenceId, page: pageNo } = claim.citation;
+    if (!referenceId || pageNo === undefined) continue;
+    const id = pageEvidenceId(referenceId, pageNo);
     const page = pages.get(id);
     if (!page) continue;
     if (language === "en" && copiedText(claim.text, page.text)) continue;

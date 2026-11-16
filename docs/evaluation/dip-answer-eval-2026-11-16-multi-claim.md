@@ -70,8 +70,11 @@ not attributable to this change.
 
 Coverage rises on the university funding, housing costs and German motorway
 cases. The German university-funding answer now states all three reviewed
-facts from page 1 of Drucksache 21/8697, each with its own quote and the same
-page citation.
+facts from page 1 of Drucksache 21/8697, where the control stated none of them;
+the English answer states the 50 percent and 38 percent facts. Both answers
+still merge several facts into one claim, so the review does not yet show one
+claim per page fact in generated output, only that the extra facts are no
+longer invisible.
 
 ## Remaining misses
 
@@ -82,7 +85,9 @@ reached the explainer but the answer did not state the reviewed fact.
   answer states the ESR framework as "binding national targets for greenhouse
   gas emission reductions outside the EU Emissions Trading System for 2021 to
   2030", and the 2026/895 decision as "allocation amounts". The reviewed terms
-  are "pathways" and "allocations", so the fact-builder records it missing.
+  are "pathways" and "allocations", so the fact-builder records both missing.
+- **German climate (338509)** states the 2026/895 allocation quantities but not
+  the ESR framework, so one reviewed fact is genuinely absent.
 - **The German motorway answer (340174)** states the three-pillar fact and
   quotes it from page 11 of Drucksache 21/8868. The label lists only page 1 as
   supporting evidence, so citation support records the fact as uncited even
@@ -90,9 +95,11 @@ reached the explainer but the answer did not state the reviewed fact.
 - **The private-law company form (340174)** and the 30.1 percent equity return
   (339848) remain unstated in both languages. They are on the cited pages, but
   neither language's generator chose to include them.
-- **The English university-funding answer** states the 50 percent and 38
-  percent facts but omits the 60 million euro amount, so it covers one of three
-  facts.
+- **Both university-funding answers write units differently from the reviewed
+  terms.** The German answer says "60 Mio. Euro" where the term is "60
+  Millionen Euro"; the English answer says "50%" and "38%" where the terms
+  spell out "percent". The facts are stated, but term-based coverage records
+  them as missing.
 
 ## Limitations
 

@@ -31,6 +31,10 @@ export function stepDate(step: TimelineStep, language: BriefLanguage) {
     : null;
 }
 
+export function pageEvidenceId(referenceId: string, page: number) {
+  return `page:${referenceId}:${page}`;
+}
+
 export function matchesDossier(current: CurrentProceeding, dossier: Dossier) {
   return (
     (current.proceeding?.versionNo ?? null) === dossier.proceedingVersionNo &&
@@ -59,6 +63,7 @@ export async function collectEvidence(
     citation: { kind: "step", stepId: step.apiId, url: step.sourceUrl },
   }));
   const documentVersions: [string, string, string][] = [];
+  const citedPages = new Set<string>();
   for (const hit of dossier.evidence) {
     if (
       hit.entity !== "dokument" ||
@@ -94,18 +99,20 @@ export async function collectEvidence(
       hit.chunk,
     );
     if (storedChunk?.text !== hit.passage) continue;
+    const id = pageEvidenceId(hit.document.referenceId, hit.page);
+    if (citedPages.has(id)) continue;
     // The citation is the whole page, so the generator sees every chunk of it:
     // one retrieved passage must not hide the page's other relevant facts.
     const page = await findDocumentPage(prisma, variant.id, hit.page);
-    if (!page) continue;
     documentVersions.push([
       hit.document.referenceId,
       variant.byteHash,
       hit.document.pdfUrl!,
     ]);
+    citedPages.add(id);
     evidence.push({
-      id: `page:${hit.document.referenceId}:${hit.page}`,
-      text: page.text,
+      id,
+      text: page?.text ?? hit.passage,
       citation: {
         kind: "page",
         stepId: step.apiId,

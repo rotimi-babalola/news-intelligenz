@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-16T04:34:47.982Z",
+  "generatedAt": "2026-11-16T04:39:26.916Z",
   "configuration": {
     "baseUrl": "https://api.openai.com/v1",
     "model": "gpt-4o",
@@ -259,7 +259,7 @@
         "qualification": "Die gespeicherten Belege enthalten die gefragten Angaben nicht: Bilanzierten Stand der Emissionszuweisungen für 2026 bis 2030.",
         "proceedingApiId": "338509",
         "answerConfidence": "partial",
-        "retrievalRelevance": 0.7258053619017172
+        "retrievalRelevance": 0.7258121796787192
       },
       "notice": null,
       "scores": {
@@ -1396,7 +1396,7 @@
         "qualification": "The stored evidence does not establish every part of the answer.",
         "proceedingApiId": "339848",
         "answerConfidence": "partial",
-        "retrievalRelevance": 0.5454874951651468
+        "retrievalRelevance": 0.5455282532973433
       },
       "notice": null,
       "scores": {
@@ -1616,7 +1616,7 @@
         "qualification": "The stored evidence does not contain the requested facts: expected development of electricity grid charges through 2045.",
         "proceedingApiId": "340178",
         "answerConfidence": "partial",
-        "retrievalRelevance": 0.6755708205895421
+        "retrievalRelevance": 0.6755890330837566
       },
       "notice": null,
       "scores": {
@@ -2463,7 +2463,7 @@
         "qualification": "Die gespeicherten Belege enthalten die gefragten Angaben nicht: Bilanzierten Stand der Emissionszuweisungen für 2026 bis 2030.",
         "proceedingApiId": "338509",
         "answerConfidence": "partial",
-        "retrievalRelevance": 0.7258053619017172
+        "retrievalRelevance": 0.7258121796787192
       },
       "expected": {
         "text": "Die ESR legt national verbindliche Zielpfade für die THG-Emissionsentwicklung außerhalb des EU-Emissionshandels für 2021 bis 2030 fest.",
@@ -3649,7 +3649,7 @@
         "qualification": "The stored evidence does not establish every part of the answer.",
         "proceedingApiId": "339848",
         "answerConfidence": "partial",
-        "retrievalRelevance": 0.5454874951651468
+        "retrievalRelevance": 0.5455282532973433
       },
       "expected": {
         "text": "The 18 largest German distribution network operators achieved a weighted equity return of 30.1 percent in 2024.",
