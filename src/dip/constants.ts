@@ -21,8 +21,6 @@ export const SYNC_OVERLAP_MS = 6 * 60 * 60 * 1000;
 // Documents
 export const MAX_PDF_BYTES = 25_000_000;
 export const PDF_FETCH_TIMEOUT_MS = 30_000;
-export const PDF_USER_AGENT =
-  "NewsIntelligenz/0.1 (local operator verification)";
 export const DOCUMENT_BACKFILL_BATCH_SIZE = 100;
 export const DOCUMENT_CHUNK_SIZE = 1200;
 export const DOCUMENT_CHUNK_OVERLAP = 200;

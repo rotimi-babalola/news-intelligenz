@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "../../generated/prisma/client";
+import { ensureRun } from "../../run.repository";
 import {
   EMBED_PROCEEDING,
   EMBED_STEP,
@@ -27,17 +28,14 @@ export async function enqueueDipReindex(
       2 ** 32 <
     samplePercent / 100;
   const runId = `embedding-reindex:${model}`;
-  await prisma.run.upsert({
-    where: { id: runId },
-    update: {},
-    create: {
-      id: runId,
-      feedId: "/reindex",
-      sourceKind: "dip_endpoint",
-      inputHash: model,
-      status: "completed",
-      completedAt: new Date(),
-    },
+  await ensureRun(prisma, {
+    id: runId,
+    // Legacy `feedId` column: holds the reindex source key, not a feed id.
+    feedId: "/reindex",
+    sourceKind: "dip_endpoint",
+    inputHash: model,
+    status: "completed",
+    completedAt: new Date(),
   });
   const counts = { proceedings: 0, steps: 0, chunks: 0 };
   let cursor: string | undefined;

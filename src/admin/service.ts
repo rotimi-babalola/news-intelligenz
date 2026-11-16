@@ -33,7 +33,8 @@ import {
   getPublicationDetail,
   listPublications,
 } from "./publication.repository";
-import { getRunOrThrow, listNewsRuns } from "./run.repository";
+import { listNewsRuns } from "./run.repository";
+import { findRunOrThrow } from "../run.repository";
 
 const NEWS_KINDS: SourceKind[] = ["news_feed", "search_query"];
 const DIP_KINDS: SourceKind[] = ["dip_endpoint"];
@@ -196,7 +197,7 @@ export async function retryJob(jobId: string) {
       return;
     }
     await drainJobs(prisma, "admin-retry", { runId: retried.runId });
-    const run = await getRunOrThrow(prisma, retried.runId);
+    const run = await findRunOrThrow(prisma, retried.runId);
     await finalizeRunIfSettled(prisma, retried.runId, run.error);
   } catch (error) {
     console.error(
@@ -226,7 +227,7 @@ export async function reextractPublication(
       orderBy: [{ discoveredAt: "desc" }],
     });
     if (!discovery) throw new Error("Publication has no discovery run");
-    const run = await getRunOrThrow(prisma, discovery.runId);
+    const run = await findRunOrThrow(prisma, discovery.runId);
     const candidate = await prisma.candidate.findFirst({
       where: { runId: run.id, publicationId },
     });

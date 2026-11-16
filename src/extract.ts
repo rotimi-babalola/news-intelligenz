@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
 import { publicNewsFeeds } from "./sources";
+import {
+  FETCH_USER_AGENT,
+  fetchWithRedirects,
+  type ResolveHost,
+} from "./url-safety";
 
 // Private-use permission gate: full-text retention is permitted only for
 // hosts on the allowlist. Defaults to the configured public-news feed hosts;
@@ -31,47 +36,8 @@ export function isExtractionPermitted(
   return allowedHosts.has(host);
 }
 
-// SSRF guard on literal destinations only: blocks loopback/link-local/private
-// IPv4, bracketed IPv6 loopback/link-local, and local names. Hostnames that
-// resolve to private addresses are not inspected here.
-// ponytail: no DNS resolution; add resolved-IP check if fetching untrusted hosts.
-export function isBlockedDestination(rawUrl: string): boolean {
-  let url: URL;
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    return true;
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") return true;
-  if (url.username || url.password) return true;
-  const host = url.hostname.toLowerCase().replace(/\.+$/, "");
-  if (
-    host === "localhost" ||
-    host.endsWith(".localhost") ||
-    host.endsWith(".local") ||
-    host.endsWith(".internal") ||
-    host === "metadata.google.internal"
-  )
-    return true;
-  if (host === "::1" || host === "::ffff:127.0.0.1") return true;
-  const v4 = host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-  if (v4) {
-    const octets = v4.slice(1).map(Number);
-    if (octets.some((n) => n > 255)) return true;
-    const [a, b] = octets as [number, number, number, number];
-    if (a === 10 || a === 127) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 0 || a >= 224) return true;
-    return false;
-  }
-  if (host.includes(":")) return true;
-  return false;
-}
-
-export const MAX_REDIRECTS = 3;
 export const MAX_HTML_BYTES = 1_000_000;
+const ARTICLE_FETCH_TIMEOUT_MS = 15_000;
 
 export type FetchResult =
   { ok: true; finalUrl: string; html: string } | { ok: false; reason: string };
@@ -98,62 +64,40 @@ function defaultFetch(
 
 // Fetch only the directly linked resource: manual redirect handling with a
 // bound, same-guard rechecks per hop, and no credentialed/private targets.
+// The feed-host allowlist bounds this fetcher; pass resolveHost to add the
+// resolved-IP check for broader host sets.
 export async function fetchArticleHtml(
   rawUrl: string,
   fetchFn: FetchFn = defaultFetch,
   allowedHosts: Set<string> = defaultPermittedHosts(),
+  resolveHost?: ResolveHost,
 ): Promise<FetchResult> {
   if (!isExtractionPermitted(rawUrl, allowedHosts))
     return { ok: false, reason: "Full-text retention not permitted for host" };
-  let current = rawUrl;
-  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    if (isBlockedDestination(current))
-      return { ok: false, reason: "Blocked private/local destination" };
-    let response: Awaited<ReturnType<FetchFn>>;
-    try {
-      response = await fetchFn(current, {
-        signal: AbortSignal.timeout(15_000),
-        headers: {
-          "user-agent": "NewsIntelligenz/0.1 (local operator verification)",
-          accept: "text/html, application/xhtml+xml",
-        },
-      });
-    } catch {
-      return { ok: false, reason: "Fetch failed" };
-    }
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get("location");
-      if (!location) return { ok: false, reason: "Redirect without location" };
-      let next: string;
-      try {
-        next = new URL(location, current).toString();
-      } catch {
-        return { ok: false, reason: "Invalid redirect location" };
-      }
-      if (!isExtractionPermitted(next, allowedHosts))
-        return {
-          ok: false,
-          reason: "Redirect target host not permitted; kept original link",
-        };
-      current = next;
-      continue;
-    }
-    if (response.status === 429)
-      return { ok: false, reason: "Rate limited; kept original link" };
-    if (response.status < 200 || response.status >= 300)
-      return {
-        ok: false,
-        reason: `HTTP ${response.status}; kept original link`,
-      };
-    const contentType = response.headers.get("content-type") ?? "";
-    if (contentType && !/text\/html|application\/xhtml/i.test(contentType))
-      return { ok: false, reason: `Unsupported format: ${contentType}` };
-    const html = await response.text();
-    if (Buffer.byteLength(html) > MAX_HTML_BYTES)
-      return { ok: false, reason: "Article exceeds size bound" };
-    return { ok: true, finalUrl: current, html };
-  }
-  return { ok: false, reason: "Too many redirects; kept original link" };
+  const result = await fetchWithRedirects(rawUrl, {
+    fetchFn,
+    headers: {
+      "user-agent": FETCH_USER_AGENT,
+      accept: "text/html, application/xhtml+xml",
+    },
+    timeoutMs: ARTICLE_FETCH_TIMEOUT_MS,
+    contentType: /text\/html|application\/xhtml/i,
+    maxBytes: MAX_HTML_BYTES,
+    sizeReason: "Article exceeds size bound",
+    permittedHost: (url) =>
+      isExtractionPermitted(url.toString(), allowedHosts)
+        ? null
+        : "Redirect target host not permitted; kept original link",
+    resolveHost,
+    remoteFailure: (reason) =>
+      `${reason === "HTTP 429" ? "Rate limited" : reason}; kept original link`,
+    read: async (response) => {
+      const html = await response.text();
+      return { bytes: Buffer.byteLength(html), value: html };
+    },
+  });
+  if (!result.ok) return result;
+  return { ok: true, finalUrl: result.finalUrl, html: result.value };
 }
 
 function decodeEntities(text: string): string {

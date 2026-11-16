@@ -1,13 +1,12 @@
 import { execFile } from "node:child_process";
 import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
 import { join } from "node:path";
-import { MAX_REDIRECTS, isBlockedDestination } from "../../extract";
 import {
-  MAX_PDF_BYTES,
-  PDF_FETCH_TIMEOUT_MS,
-  PDF_USER_AGENT,
-} from "../constants";
+  FETCH_USER_AGENT,
+  fetchWithRedirects,
+  type ResolveHost,
+} from "../../url-safety";
+import { MAX_PDF_BYTES, PDF_FETCH_TIMEOUT_MS } from "../constants";
 
 // Fetched PDF bytes and their extracted page text. Fetching and extraction are
 // independent of DIP collection: this module never touches a checkpoint and
@@ -37,30 +36,9 @@ function defaultFetch(
   });
 }
 
-export type ResolveHost = (hostname: string) => Promise<string[]>;
-
 async function defaultResolveHost(hostname: string): Promise<string[]> {
   const addresses = await lookup(hostname, { all: true });
   return addresses.map(({ address }) => address);
-}
-
-// A hostname can pass the literal URL check and still resolve to a private
-// address, so every hop is resolved before the request is made.
-async function isBlockedResolved(rawUrl: string, resolveHost: ResolveHost) {
-  const url = new URL(rawUrl);
-  if (isIP(url.hostname)) return false;
-  let addresses: string[];
-  try {
-    addresses = await resolveHost(url.hostname);
-  } catch {
-    return true;
-  }
-  if (addresses.length === 0) return true;
-  return addresses.some((address) =>
-    isBlockedDestination(
-      `http://${address.includes(":") ? `[${address}]` : address}`,
-    ),
-  );
 }
 
 // Metadata and the original link are retained before this runs, so a failed
@@ -70,53 +48,26 @@ export async function fetchDocumentPdf(
   fetchFn: PdfFetchFn = defaultFetch,
   resolveHost: ResolveHost = defaultResolveHost,
 ): Promise<FetchedPdf> {
-  let current = rawUrl;
-  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    if (
-      isBlockedDestination(current) ||
-      (await isBlockedResolved(current, resolveHost))
-    )
-      return { ok: false, reason: "Blocked private/local destination" };
-    let response: Awaited<ReturnType<PdfFetchFn>>;
-    try {
-      response = await fetchFn(current, {
-        signal: AbortSignal.timeout(PDF_FETCH_TIMEOUT_MS),
-        headers: {
-          "user-agent": PDF_USER_AGENT,
-          accept: "application/pdf",
-        },
-      });
-    } catch {
-      return { ok: false, reason: "Fetch failed" };
-    }
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get("location");
-      if (!location) return { ok: false, reason: "Redirect without location" };
-      try {
-        current = new URL(location, current).toString();
-      } catch {
-        return { ok: false, reason: "Invalid redirect location" };
-      }
-      continue;
-    }
-    if (response.status < 200 || response.status >= 300)
-      return { ok: false, reason: `HTTP ${response.status}` };
-    const contentType = response.headers.get("content-type") ?? "";
-    if (
-      contentType &&
-      !/application\/pdf|application\/octet-stream/i.test(contentType)
-    )
-      return { ok: false, reason: `Unsupported format: ${contentType}` };
-    const declaredSize = response.headers.get("content-length");
-    if (declaredSize !== null && Number(declaredSize) > MAX_PDF_BYTES)
-      return { ok: false, reason: "Document exceeds size bound" };
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.byteLength === 0) return { ok: false, reason: "Empty document" };
-    if (bytes.byteLength > MAX_PDF_BYTES)
-      return { ok: false, reason: "Document exceeds size bound" };
-    return { ok: true, bytes, finalUrl: current };
-  }
-  return { ok: false, reason: "Too many redirects" };
+  const result = await fetchWithRedirects(rawUrl, {
+    fetchFn,
+    headers: {
+      "user-agent": FETCH_USER_AGENT,
+      accept: "application/pdf",
+    },
+    timeoutMs: PDF_FETCH_TIMEOUT_MS,
+    contentType: /application\/pdf|application\/octet-stream/i,
+    maxBytes: MAX_PDF_BYTES,
+    sizeReason: "Document exceeds size bound",
+    resolveHost,
+    checkContentLength: true,
+    emptyReason: "Empty document",
+    read: async (response) => {
+      const bytes = Buffer.from(await response.arrayBuffer());
+      return { bytes: bytes.byteLength, value: bytes };
+    },
+  });
+  if (!result.ok) return result;
+  return { ok: true, bytes: result.value, finalUrl: result.finalUrl };
 }
 
 export type ExtractedPage = { page: number; text: string };

@@ -3,7 +3,7 @@ import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import type { Candidate } from "../feed";
 import type { SearchProvider } from "../search";
 import type { Feed } from "../sources";
-import { createRun, findRun } from "./run.repository";
+import { createRun, findRun } from "../run.repository";
 
 export function providerApiKey(provider: SearchProvider): string {
   return (

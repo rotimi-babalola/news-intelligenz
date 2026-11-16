@@ -4,11 +4,11 @@ import {
   defaultPermittedHosts,
   extractArticleText,
   fetchArticleHtml,
-  isBlockedDestination,
   isChangedText,
   isExtractionPermitted,
   textHash,
 } from "../src/extract.js";
+import { isBlockedDestination } from "../src/url-safety.js";
 
 function stubFetch(
   handler: (url: string) => {
@@ -122,6 +122,25 @@ test("default fetch leaves redirects for the permission guard", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("article fetch blocks hostnames resolving to a private address", async () => {
+  let called = 0;
+  const result = await fetchArticleHtml(
+    "https://a.example/x",
+    stubFetch(() => {
+      called += 1;
+      return {
+        status: 200,
+        headers: { "content-type": "text/html" },
+        body: "x",
+      };
+    }),
+    new Set(["a.example"]),
+    async () => ["10.1.2.3"],
+  );
+  assert.equal(result.ok, false);
+  assert.equal(called, 0);
 });
 
 test("fetch preserves link on failure or unsupported formats", async () => {
