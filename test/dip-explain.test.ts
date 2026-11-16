@@ -722,6 +722,23 @@ test("the current stage falls back to the latest step when the model omits it", 
   assert.equal(brief.claims.stage[0]?.citation.stepId, "2");
 });
 
+test("the matter falls back to the earliest titled step when the model omits it", async () => {
+  const { prisma } = store();
+  for (const language of ["en", "de"] as const) {
+    const brief = await generateProceedingBrief(
+      prisma,
+      { question: "What is this about?", language, dossier: dossier },
+      fixtureProvider(async () => ({})),
+    );
+    assert.equal(brief.claims.matter.length, 1);
+    assert.match(
+      brief.claims.matter[0]?.text ?? "",
+      /Housing bill introduced/u,
+    );
+    assert.equal(brief.claims.matter[0]?.citation.stepId, "2");
+  }
+});
+
 test("both briefs cite the same retrieved page when the model omits it", async () => {
   const { prisma } = store();
   const translations = {
