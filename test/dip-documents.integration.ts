@@ -5,6 +5,7 @@ import { retryJob } from "../src/admin/service.js";
 import {
   backfillDocumentObjects,
   queueUnprocessedDocuments,
+  type QueueUnprocessedDocumentsProgress,
 } from "../src/dip/documents/backfill.js";
 import {
   processNextDocument,
@@ -913,10 +914,25 @@ test("backfill queues cold eligible documents until a current variant exists", a
       data: { metadata: { herausgeber: "BT", dokumentart: "Drucksache" } },
     });
 
+    const progress: QueueUnprocessedDocumentsProgress[] = [];
     assert.deepEqual(
-      await queueUnprocessedDocuments(prisma, { dryRun: true }),
+      await queueUnprocessedDocuments(prisma, {
+        dryRun: true,
+        onProgress: (item) => progress.push(item),
+      }),
       { queued: 1, current: 0, existing: 0, skipped: 0 },
     );
+    assert.deepEqual(progress, [
+      {
+        queued: 1,
+        current: 0,
+        existing: 0,
+        skipped: 0,
+        scanned: 1,
+        total: 1,
+        cursor: "29701499",
+      },
+    ]);
     assert.equal(
       await prisma.processingJob.count({
         where: { operation: "process_document" },

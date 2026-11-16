@@ -58,10 +58,12 @@ job, not the download.
 
 The 14-day rule leaves older references unqueued. `pnpm
 backfill:document-jobs` queues every older eligible reference that has no
-current processed variant (`DRY_RUN=1` reports counts without writing). It only
-enqueues; the cron or `pnpm drain:dip` still fetches, extracts and embeds.
-Re-running is safe because current variants are skipped and job dedupe keys are
-unchanged.
+current processed variant (`DRY_RUN=1` reports counts without writing). It
+prints per-batch progress and accepts `RESUME_FROM=<referenceId>` after a
+dropped connection; job creation is idempotent, so replaying the interrupted
+batch is safe. It only enqueues; the cron or `pnpm drain:dip` still fetches,
+extracts and embeds. Re-running is safe because current variants are skipped and
+job dedupe keys are unchanged.
 
 Priority (`processing_jobs.priority`, higher first) lets `GET
 /api/documents/:referenceId` raise unprocessed work ahead of older background

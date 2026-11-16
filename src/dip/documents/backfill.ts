@@ -2,13 +2,14 @@ import { createHash } from "node:crypto";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { DOCUMENT_BACKFILL_BATCH_SIZE } from "../constants";
 import {
+  countDocumentReferences,
   documentJobsByKey,
   latestDocumentContents,
   latestStepDiscoveries,
   listLatestDocumentReferences,
 } from "../db/index";
 import { documentJobKey } from "../jobs/identity";
-import { enqueueDocumentProcessing } from "../jobs/queue";
+import { enqueueDocumentProcessingBatch } from "../jobs/queue";
 import { classifyDocumentReference } from "./excerpts";
 import { documentObjectKey, putDocumentPdf } from "./object-store";
 import { fetchDocumentPdf } from "./pdf";
@@ -102,21 +103,39 @@ export type QueueUnprocessedDocumentsResult = {
   skipped: number;
 };
 
+export type QueueUnprocessedDocumentsProgress =
+  QueueUnprocessedDocumentsResult & {
+    scanned: number;
+    total: number;
+    cursor: string;
+  };
+
 // Background processing queues only references dated in the previous 14 days.
 // This pass queues every older eligible reference that has no current processed
 // variant; the drain worker, not this script, still does the fetching.
 export async function queueUnprocessedDocuments(
   prisma: PrismaClient,
-  options: { batchSize?: number; dryRun?: boolean } = {},
+  options: {
+    batchSize?: number;
+    dryRun?: boolean;
+    afterReferenceId?: string;
+    onProgress?: (progress: QueueUnprocessedDocumentsProgress) => void;
+  } = {},
 ): Promise<QueueUnprocessedDocumentsResult> {
   const batchSize = options.batchSize ?? DOCUMENT_BACKFILL_BATCH_SIZE;
+  const total = await countDocumentReferences(prisma);
+  let scanned = options.afterReferenceId
+    ? await countDocumentReferences(prisma, {
+        throughReferenceId: options.afterReferenceId,
+      })
+    : 0;
   const result: QueueUnprocessedDocumentsResult = {
     queued: 0,
     current: 0,
     existing: 0,
     skipped: 0,
   };
-  let cursor: string | undefined;
+  let cursor = options.afterReferenceId;
   for (;;) {
     const references = await listLatestDocumentReferences(prisma, {
       afterReferenceId: cursor,
@@ -150,6 +169,13 @@ export async function queueUnprocessedDocuments(
       prisma,
       references.map(({ stepApiId }) => stepApiId),
     );
+    const pending: {
+      runId: string;
+      stepApiId: string;
+      referenceId: string;
+      pdfUrl: string | null;
+      documentDate: Date | null;
+    }[] = [];
     for (const reference of references) {
       if (
         requestedUrls.get(reference.referenceId) === reference.pdfUrl &&
@@ -184,16 +210,26 @@ export async function queueUnprocessedDocuments(
         result.skipped += 1;
         continue;
       }
-      if (!options.dryRun)
-        await enqueueDocumentProcessing(prisma, {
-          runId,
-          itemIndex: null,
-          electoralTerm: null,
-          stepApiId: reference.stepApiId,
-          ...identity,
-        });
-      result.queued += 1;
+      pending.push({
+        runId,
+        stepApiId: reference.stepApiId,
+        ...identity,
+      });
     }
+    if (options.dryRun) {
+      result.queued += pending.length;
+    } else if (pending.length) {
+      result.queued += (
+        await enqueueDocumentProcessingBatch(prisma, pending)
+      ).count;
+    }
+    scanned += references.length;
+    options.onProgress?.({
+      ...result,
+      scanned,
+      total,
+      cursor,
+    });
     if (references.length < batchSize) break;
   }
   return result;

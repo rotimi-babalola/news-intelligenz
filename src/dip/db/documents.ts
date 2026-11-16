@@ -1,4 +1,5 @@
 import type { Prisma } from "../../generated/prisma/client";
+import { qualifiedTable } from "../../db";
 import type { Client } from "./client";
 
 export function findDocumentReference(client: Client, stepApiId: string) {
@@ -93,6 +94,20 @@ export function listLatestDocumentReferences(
       step: { select: { institution: true, documentType: true } },
     },
   });
+}
+
+export async function countDocumentReferences(
+  client: Client,
+  options: { throughReferenceId?: string } = {},
+) {
+  const rows = await client.$queryRawUnsafe<{ count: bigint }[]>(
+    `SELECT count(DISTINCT reference_id) AS count
+     FROM ${qualifiedTable("document_references")}
+     WHERE pdf_url IS NOT NULL
+     ${options.throughReferenceId ? "AND reference_id <= $1" : ""}`,
+    ...(options.throughReferenceId ? [options.throughReferenceId] : []),
+  );
+  return Number(rows[0]?.count ?? 0);
 }
 
 export function findDocumentChunk(
