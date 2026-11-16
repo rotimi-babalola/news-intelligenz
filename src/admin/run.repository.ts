@@ -7,7 +7,3 @@ export function listNewsRuns(prisma: PrismaClient) {
     take: 100,
   });
 }
-
-export function getRunOrThrow(prisma: PrismaClient, id: string) {
-  return prisma.run.findUniqueOrThrow({ where: { id } });
-}

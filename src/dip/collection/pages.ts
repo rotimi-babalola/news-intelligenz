@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
-import { createRun, finalizeRun, findRun } from "../../import/run.repository";
+import { createRun, finalizeRun, findRun } from "../../run.repository";
 import { RateLimitedError, backoffMs } from "../../jobs/index";
 import { runIdSchema } from "../../validation";
 import {
@@ -125,6 +125,7 @@ export async function collectDipPages(
     } else {
       await createRun(tx, {
         id: runId,
+        // Legacy `feedId` column: holds the DIP source key, not a feed id.
         feedId: endpoint,
         sourceKind: "dip_endpoint",
         sourceScope: scope as Prisma.InputJsonValue,

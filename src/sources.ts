@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { parseRetryAfterMs, RateLimitedError } from "./jobs/index";
+import { FETCH_USER_AGENT } from "./url-safety";
 
 export type Feed = {
   id: string;
@@ -103,7 +104,7 @@ export async function fetchFeedXml(url: string): Promise<string> {
   try {
     const response = await fetch(url, {
       headers: {
-        "user-agent": "NewsIntelligenz/0.1 (local operator verification)",
+        "user-agent": FETCH_USER_AGENT,
         accept: "application/rss+xml, application/xml, text/xml",
       },
       signal: AbortSignal.timeout(15_000),
