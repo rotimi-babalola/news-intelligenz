@@ -21,13 +21,61 @@ type Result = {
     retrieved: boolean;
   }[];
 };
-const groups = [
-  ["matter", "Matter"],
-  ["stage", "Current stage"],
-  ["steps", "Ordered steps"],
-  ["documents", "Cited documents"],
-  ["unresolved", "Unresolved"],
-] as const;
+type BriefCopy = {
+  groups: readonly (readonly [keyof Brief["claims"], string])[];
+  confidence: Record<Brief["answerConfidence"], string>;
+  retrieval: string;
+  quote: string;
+  step: (id: string) => string;
+  document: (id: string | undefined, page: number | undefined) => string;
+  noDocument: string;
+  noClaim: string;
+};
+
+const copy: Record<"en" | "de", BriefCopy> = {
+  en: {
+    groups: [
+      ["matter", "Matter"],
+      ["stage", "Current stage"],
+      ["steps", "Ordered steps"],
+      ["documents", "Cited documents"],
+      ["unresolved", "Unresolved"],
+    ],
+    confidence: {
+      abstain: "abstain",
+      partial: "partial",
+      supported: "supported",
+    },
+    retrieval: "Retrieval",
+    quote: "Source quote:",
+    step: (id: string) => `Step ${id}`,
+    document: (id: string | undefined, page: number | undefined) =>
+      `Document ${id}, page ${page}`,
+    noDocument: "No retrieved document page supported a claim.",
+    noClaim: "No supported claim.",
+  },
+  de: {
+    groups: [
+      ["matter", "Gegenstand"],
+      ["stage", "Aktuelles Stadium"],
+      ["steps", "Geordnete Schritte"],
+      ["documents", "Zitierte Dokumente"],
+      ["unresolved", "Ungelöst"],
+    ],
+    confidence: {
+      abstain: "keine Antwort",
+      partial: "teilweise",
+      supported: "belegt",
+    },
+    retrieval: "Relevanz",
+    quote: "Quellenbeleg:",
+    step: (id: string) => `Schritt ${id}`,
+    document: (id: string | undefined, page: number | undefined) =>
+      `Dokument ${id}, Seite ${page}`,
+    noDocument: "Keine abgerufene Dokumentseite stützt eine Aussage.",
+    noClaim: "Keine belegte Aussage.",
+  },
+};
 
 export function BriefTester({
   proceedings,
@@ -347,6 +395,7 @@ export function BriefTester({
             <div className="grid gap-4 lg:grid-cols-2">
               {(["en", "de"] as const).map((language) => {
                 const brief = result.briefs![language];
+                const labels = copy[language];
                 return (
                   <article
                     key={language}
@@ -364,10 +413,10 @@ export function BriefTester({
                             : "outline"
                         }
                       >
-                        {brief.answerConfidence}
+                        {labels.confidence[brief.answerConfidence]}
                       </Badge>
                       <span className="text-xs text-stone-500">
-                        Retrieval {brief.retrievalRelevance.toFixed(2)}
+                        {labels.retrieval} {brief.retrievalRelevance.toFixed(2)}
                       </span>
                     </div>
                     {brief.qualification && (
@@ -375,7 +424,7 @@ export function BriefTester({
                         {brief.qualification}
                       </p>
                     )}
-                    {groups.map(([key, label]) => (
+                    {labels.groups.map(([key, label]) => (
                       <section key={key} className="mt-5">
                         <h4 className="text-sm font-semibold">{label}</h4>
                         {brief.claims[key].length ? (
@@ -387,7 +436,7 @@ export function BriefTester({
                               >
                                 <p>{claim.text}</p>
                                 <p className="mt-1 text-xs text-stone-500">
-                                  Source quote: <q>{claim.quote}</q>
+                                  {labels.quote} <q>{claim.quote}</q>
                                 </p>
                                 <a
                                   href={claim.citation.url}
@@ -396,8 +445,11 @@ export function BriefTester({
                                   className="mt-1 inline-block text-xs font-medium text-emerald-900 underline underline-offset-2"
                                 >
                                   {claim.citation.kind === "page"
-                                    ? `Document ${claim.citation.referenceId}, page ${claim.citation.page}`
-                                    : `Step ${claim.citation.stepId}`}
+                                    ? labels.document(
+                                        claim.citation.referenceId,
+                                        claim.citation.page,
+                                      )
+                                    : labels.step(claim.citation.stepId)}
                                 </a>
                               </li>
                             ))}
@@ -405,8 +457,8 @@ export function BriefTester({
                         ) : (
                           <p className="mt-1 text-sm text-stone-500">
                             {key === "documents"
-                              ? "No retrieved document page supported a claim."
-                              : "No supported claim."}
+                              ? labels.noDocument
+                              : labels.noClaim}
                           </p>
                         )}
                       </section>

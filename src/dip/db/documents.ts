@@ -14,6 +14,18 @@ export function latestStepDiscovery(client: Client, apiId: string) {
   });
 }
 
+export async function latestStepDiscoveries(client: Client, apiIds: string[]) {
+  const rows = await client.parliamentaryDiscovery.findMany({
+    where: { entity: "vorgangsposition", apiId: { in: apiIds } },
+    orderBy: { discoveredAt: "desc" },
+    select: { apiId: true, runId: true },
+  });
+  const latest = new Map<string, string>();
+  for (const row of rows)
+    if (!latest.has(row.apiId)) latest.set(row.apiId, row.runId);
+  return latest;
+}
+
 // A reference id may be cited by more than one step; on-demand requests only
 // need one stored citation to resolve metadata for the document.
 export function findDocumentReferenceById(client: Client, referenceId: string) {
@@ -38,6 +50,48 @@ export function latestDocumentContent(client: Client, referenceId: string) {
   return client.documentContent.findFirst({
     where: { referenceId, isLatest: true },
     orderBy: { variantNo: "desc" },
+  });
+}
+
+export function latestDocumentContents(client: Client, referenceIds: string[]) {
+  return client.documentContent.findMany({
+    where: { referenceId: { in: referenceIds }, isLatest: true },
+    select: { referenceId: true, requestedUrl: true },
+  });
+}
+
+export function documentJobsByKey(client: Client, dedupeKeys: string[]) {
+  return client.processingJob.findMany({
+    where: { dedupeKey: { in: dedupeKeys } },
+    select: { dedupeKey: true },
+  });
+}
+
+// One row per referenced document: the latest observation wins, so a changed
+// URL or date is queued as its current revision rather than an older one.
+export function listLatestDocumentReferences(
+  client: Client,
+  options: { afterReferenceId?: string; take: number },
+) {
+  return client.documentReference.findMany({
+    where: {
+      pdfUrl: { not: null },
+      ...(options.afterReferenceId
+        ? { referenceId: { gt: options.afterReferenceId } }
+        : {}),
+    },
+    distinct: ["referenceId"],
+    orderBy: [{ referenceId: "asc" }, { observedAt: "desc" }],
+    take: options.take,
+    select: {
+      stepApiId: true,
+      referenceId: true,
+      documentNumber: true,
+      pdfUrl: true,
+      documentDate: true,
+      metadata: true,
+      step: { select: { institution: true, documentType: true } },
+    },
   });
 }
 

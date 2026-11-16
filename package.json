@@ -30,6 +30,7 @@
     "mcp": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/run-mcp.js",
     "mcp:invites": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/mcp-invites.js",
     "backfill:documents": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/backfill-document-objects.js",
+    "backfill:document-jobs": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/backfill-document-jobs.js",
     "backfill:sections": "pnpm build:collect && node --env-file-if-exists=.env dist/scripts/backfill-document-sections.js"
   },
   "dependencies": {
