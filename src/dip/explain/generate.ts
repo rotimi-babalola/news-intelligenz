@@ -35,6 +35,16 @@ export async function generateProceedingBrief(
     throw new Error("Question must contain 1–1000 characters");
   if (language !== "en" && language !== "de")
     throw new Error("Unsupported language");
+  // An orphan step timeline has no proceeding to explain, so it can only
+  // abstain; never present those steps as an answer.
+  if (dossier.parentMissing)
+    return {
+      ...buildBrief(dossier, language, question.trim(), emptyClaims(), []),
+      qualification:
+        language === "en"
+          ? "The proceeding record for this timeline is missing; no explainer can be offered."
+          : "Der Vorgang zu dieser Chronologie fehlt; es kann keine Erläuterung angeboten werden.",
+    };
   const current = await getProceeding(prisma, dossier.apiId);
   if (!current || !matchesDossier(current, dossier))
     throw new Error("Dossier changed; search again before generating a brief");
