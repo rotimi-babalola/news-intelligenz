@@ -1,0 +1,82 @@
+{
+  "reviewed": true,
+  "languages": {
+    "fr": "French",
+    "pl": "Polish",
+    "tr": "Turkish"
+  },
+  "cases": [
+    {
+      "id": "climate-allocations",
+      "proceeding": "338509",
+      "questionEn": "How are Germany's emissions allocations for 2021 to 2030 accounted for?",
+      "questionDe": "Wie werden Deutschlands Emissionszuweisungen für die Jahre 2021 bis 2030 bilanziert?",
+      "expectedEvidenceIds": ["page:290322:3", "page:290340:5"],
+      "facts": [
+        {
+          "text": "The ESR sets binding national greenhouse-gas pathways outside the EU emissions trading system for 2021 to 2030.",
+          "terms": ["ETS"],
+          "evidenceIds": ["page:290322:3"],
+          "quote": "national verbindliche Zielpfade für die THG-Emissionsentwicklung außerhalb des EU-Emissionshandels (ETS 1)"
+        },
+        {
+          "text": "Implementing decision 2026/895 sets the ESR allocation quantities for 2021 to 2030.",
+          "terms": ["2026/895"],
+          "evidenceIds": ["page:290322:3", "page:290340:5"],
+          "quote": "ESR-Zuweisungsmengen (AEA) für jeden Mitgliedstaat für die Jahre 2021-2030"
+        }
+      ]
+    },
+    {
+      "id": "university-funding",
+      "proceeding": "340641",
+      "questionEn": "What federal funding do universities of applied sciences receive?",
+      "questionDe": "Welche Bundesmittel erhalten Hochschulen für angewandte Wissenschaften?",
+      "expectedEvidenceIds": ["page:291815:1"],
+      "facts": [
+        {
+          "text": "About half of German higher education institutions were universities of applied sciences in winter semester 2024/2025.",
+          "terms": ["50"],
+          "evidenceIds": ["page:291815:1"],
+          "quote": "Etwa 50 Prozent aller Hochschulen in Deutschland waren im Wintersemester 2024/2025 Hochschulen für angewandte Wissenschaften (HAW)"
+        },
+        {
+          "text": "Universities of applied sciences teach about 38 percent of all students.",
+          "terms": ["38"],
+          "evidenceIds": ["page:291815:1"],
+          "quote": "Sie bilden mit rund 38 Prozent aller Studenten"
+        },
+        {
+          "text": "The federal government provided at least 60 million euros annually for applied research at these institutions from 2019 to 2023.",
+          "terms": ["60"],
+          "evidenceIds": ["page:291815:1"],
+          "quote": "jährlich ein Fördervolumen von mindestens 60 Mio. Euro"
+        }
+      ]
+    },
+    {
+      "id": "truck-toll-2025",
+      "proceeding": "340174",
+      "questionEn": "How much did the Autobahn GmbH receive from the truck toll in 2025?",
+      "questionDe": "Wie hoch waren die Einnahmen der Autobahn GmbH aus der Lkw-Maut im Jahr 2025?",
+      "expectedEvidenceIds": [],
+      "expectMissing": ["2025"]
+    },
+    {
+      "id": "housing-costs",
+      "proceeding": "339930",
+      "questionEn": "What is documented about housing construction costs?",
+      "questionDe": "Was ist zu den Baukosten im Wohnungsbau dokumentiert?",
+      "expectedEvidenceIds": ["step:700983", "step:701230"],
+      "reviewOnly": true
+    },
+    {
+      "id": "lunar-minerals",
+      "questionEn": "What rules does the law on taxing lunar minerals set for space mining?",
+      "questionDe": "Welche Vorgaben macht das Gesetz zur Besteuerung von Mondmineralien für den Abbau im Weltraum?",
+      "expectedEvidenceIds": [],
+      "expectAbstain": true,
+      "proceeding": "325604"
+    }
+  ]
+}
