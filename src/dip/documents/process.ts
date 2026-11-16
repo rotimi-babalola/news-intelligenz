@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import { ensureDocumentChunks } from "./chunks";
 import { resolveDocumentCitation } from "./citation";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
-import { runNextJob, type ClaimedJob } from "../../jobs/index";
+import {
+  runNextJob,
+  type ClaimedJob,
+  PermanentJobError,
+} from "../../jobs/index";
 import { PROCESS_DOCUMENT } from "../constants";
 import {
   enqueueDocumentEmbeddings,
@@ -13,6 +17,7 @@ import { documentJobKey, documentProcessingPayload } from "../jobs/identity";
 import { documentObjectKey, putDocumentPdf } from "./object-store";
 import {
   fetchDocumentPdf,
+  isPermanentFetchFailure,
   pymupdfExtractor,
   type ExtractedPage,
   type PageExtractor,
@@ -36,15 +41,15 @@ import {
 // reference, its metadata and its original link intact and never holds an
 // endpoint checkpoint open.
 //
-// shortcut: permanent-looking failures (missing url, 404, unreadable PDF) use
-// the full bounded retry budget. Split a permanent-failure path once document
-// volume makes repeated fetches costly.
+// shortcut: permanent-looking failures (missing url, unreadable PDF) use the
+// full bounded retry budget. A 404/410 is the exception and exhausts at once.
 
 export type ProcessDocumentOptions = {
   fetchPdf?: typeof fetchDocumentPdf;
   extract?: PageExtractor;
   putPdf?: typeof putDocumentPdf;
   jobId?: string;
+  onExhausted?: (job: ClaimedJob, error: Error) => void;
 };
 
 // Concurrent revisions of one document must not pick the same variant number
@@ -120,7 +125,10 @@ export async function processNextDocument(
     workerId,
     { operation: PROCESS_DOCUMENT, jobId: options.jobId },
     (job) => processDocumentJob(prisma, job, options),
-    { failureMessage: "Document processing failed" },
+    {
+      failureMessage: "Document processing failed",
+      onExhausted: options.onExhausted,
+    },
   );
 }
 
@@ -136,7 +144,12 @@ async function processDocumentJob(
   if (!pdfUrl) throw new Error("Document reference has no pdf_url");
 
   const fetched = await (options.fetchPdf ?? fetchDocumentPdf)(pdfUrl);
-  if (!fetched.ok) throw new Error(`Document fetch failed: ${fetched.reason}`);
+  if (!fetched.ok) {
+    const reason = `Document fetch failed: ${fetched.reason}`;
+    throw isPermanentFetchFailure(fetched.reason)
+      ? new PermanentJobError(reason)
+      : new Error(reason);
+  }
   const byteHash = createHash("sha256").update(fetched.bytes).digest("hex");
 
   // Identical bytes are the same content variant: reuse the cached row and

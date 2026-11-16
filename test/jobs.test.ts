@@ -3,7 +3,9 @@ import { test } from "node:test";
 import {
   backoffMs,
   dipSource,
+  isExhausting,
   parseRetryAfterMs,
+  PermanentJobError,
   RateLimitedError,
   searchSource,
 } from "../src/jobs/index.js";
@@ -29,6 +31,16 @@ test("rate-limited errors carry their delay", () => {
   const error = new RateLimitedError("HTTP 429", 90_000);
   assert.equal(error.retryAfterMs, 90_000);
   assert.match(error.message, /429/);
+});
+
+test("a permanent failure exhausts on the first attempt", () => {
+  const job = { attempts: 1, maxAttempts: 5 };
+  assert.equal(isExhausting(job, new PermanentJobError("HTTP 404")), true);
+  assert.equal(isExhausting(job, new Error("HTTP 500")), false);
+  assert.equal(
+    isExhausting({ attempts: 5, maxAttempts: 5 }, new Error("HTTP 500")),
+    true,
+  );
 });
 
 test("source constructors scope search and DIP identities", () => {

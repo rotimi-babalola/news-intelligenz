@@ -1,6 +1,6 @@
 import type { PrismaClient } from "../generated/prisma/client";
 import type { ClaimedJob } from "./claim";
-import { RateLimitedError, backoffMs } from "./policy";
+import { RateLimitedError, backoffMs, isExhausting } from "./policy";
 
 export async function completeJob(
   prisma: PrismaClient,
@@ -40,7 +40,7 @@ export async function failJob(
   const retryAfterMs =
     options.retryAfterMs ??
     (error instanceof RateLimitedError ? error.retryAfterMs : undefined);
-  const exhausted = job.attempts >= job.maxAttempts;
+  const exhausted = isExhausting(job, error);
   const nextAttemptAt = exhausted
     ? null
     : new Date(Date.now() + (retryAfterMs ?? backoffMs(job.attempts)));
