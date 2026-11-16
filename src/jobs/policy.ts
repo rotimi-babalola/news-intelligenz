@@ -26,3 +26,14 @@ export class RateLimitedError extends Error {
     this.retryAfterMs = retryAfterMs;
   }
 }
+
+// A failure the source will never stop producing, such as a link it never
+// published. Retrying only spends the budget, so one attempt exhausts the job.
+export class PermanentJobError extends Error {}
+
+export function isExhausting(
+  job: { attempts: number; maxAttempts: number },
+  error: Error,
+) {
+  return error instanceof PermanentJobError || job.attempts >= job.maxAttempts;
+}
