@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { database } from "../../../../src/db";
 import { requestDocument } from "../../../../src/dip/documents/process";
 
@@ -9,8 +8,34 @@ export async function GET(
   { params }: { params: Promise<{ referenceId: string }> },
 ) {
   const { referenceId } = await params;
+  return documentResponse(referenceId);
+}
+
+// The same request as an explicit write, for a UI action that queues one
+// document rather than reading its metadata. A state-changing request must come
+// from this page, like the brief tester.
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ referenceId: string }> },
+) {
+  const host = request.headers.get("host");
+  const origin = request.headers.get("origin");
+  if (
+    !host ||
+    (origin !== `http://${host}` && origin !== `https://${host}`) ||
+    !request.headers.get("content-type")?.startsWith("application/json")
+  )
+    return Response.json(
+      { error: "Local page request required." },
+      { status: 403 },
+    );
+  const { referenceId } = await params;
+  return documentResponse(referenceId);
+}
+
+async function documentResponse(referenceId: string) {
   if (!/^\d+$/.test(referenceId))
-    return NextResponse.json(
+    return Response.json(
       { error: "Document reference ID must be numeric" },
       { status: 400 },
     );
@@ -18,13 +43,13 @@ export async function GET(
   try {
     const document = await requestDocument(prisma, referenceId);
     if (!document)
-      return NextResponse.json(
+      return Response.json(
         { error: "Document reference not found" },
         { status: 404 },
       );
-    return NextResponse.json(document);
+    return Response.json(document);
   } catch (error) {
-    return NextResponse.json(
+    return Response.json(
       {
         error:
           error instanceof Error ? error.message : "Document request failed",
