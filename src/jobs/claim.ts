@@ -81,10 +81,15 @@ export async function claimNextJob(
         : ` AND (payload->>'model' IS NULL OR payload->>'model' = $${params.length})`;
   }
   const jobsTable = qualifiedTable("processing_jobs");
-  return prisma.$transaction(async (tx) => {
-    await exhaustExpiredClaims(tx);
-    const rows = (await tx.$queryRawUnsafe(
-      `UPDATE ${jobsTable} SET
+  // Ready and reclaimable work are claimed in two ordered tries instead of one
+  // OR: an OR makes the planner bitmap both availability states, losing the
+  // index order, so every claim sorts the whole ready set. Each state alone
+  // stops at its first row. A ready job therefore wins over a reclaimable one,
+  // whose dead worker's priority no longer outranks live work. The ready try is
+  // why the partial index in 20261117093000_processing_job_claim_index exists.
+  // On-demand document requests set a higher priority; ties keep the earliest
+  // ready job first.
+  const claimSql = (available: string) => `UPDATE ${jobsTable} SET
       status = 'claimed',
       claimed_at = now(),
       claimed_by = $1,
@@ -93,14 +98,7 @@ export async function claimNextJob(
       updated_at = now()
     WHERE id = (
       SELECT id FROM ${jobsTable}
-      WHERE next_attempt_at <= now() AND attempts < max_attempts ${filterClause} AND (
-        status IN ('pending', 'retrying') OR
-        (status = 'claimed' AND lease_expires_at IS NOT NULL AND lease_expires_at <= now())
-      )
-      -- On-demand document requests set a higher priority; ties keep the
-      -- earliest ready job first.
-      -- shortcut: no (priority, next_attempt_at) index; add one if the jobs
-      -- table grows far beyond local single-operator scale.
+      WHERE next_attempt_at <= now() AND attempts < max_attempts ${filterClause} AND ${available}
       ORDER BY priority DESC, next_attempt_at ASC, created_at ASC
       LIMIT 1
       FOR UPDATE SKIP LOCKED
@@ -108,10 +106,21 @@ export async function claimNextJob(
     RETURNING id, dedupe_key AS "dedupeKey", source_kind AS "sourceKind", source_key AS "sourceKey",
       source_scope AS "sourceScope", run_id AS "runId",
       item_index AS "itemIndex", operation, payload, attempts, max_attempts AS "maxAttempts",
-      priority`,
-      ...params,
-    )) as ClaimedJob[];
-    const job = rows[0] ?? null;
+      priority`;
+  return prisma.$transaction(async (tx) => {
+    await exhaustExpiredClaims(tx);
+    const claim = async (available: string) =>
+      (
+        (await tx.$queryRawUnsafe(
+          claimSql(available),
+          ...params,
+        )) as ClaimedJob[]
+      )[0] ?? null;
+    const job =
+      (await claim("status IN ('pending', 'retrying')")) ??
+      (await claim(
+        "status = 'claimed' AND lease_expires_at IS NOT NULL AND lease_expires_at <= now()",
+      ));
     if (!job) return null;
     if (job.attempts > 1)
       await tx.jobAttempt.updateMany({
