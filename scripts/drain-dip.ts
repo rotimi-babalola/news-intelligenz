@@ -1,7 +1,7 @@
 import { database } from "../src/db.js";
 import { processNextDocument } from "../src/dip/documents/process.js";
 import { embeddingCost } from "../src/dip/search/embedding.js";
-import { processNextDipEmbedding } from "../src/dip/jobs/embedding.js";
+import { drainDipEmbeddings } from "../src/dip/jobs/embedding.js";
 import { PermanentJobError } from "../src/jobs/index.js";
 
 function cap(name: string, fallback: number) {
@@ -22,6 +22,8 @@ try {
     exhausted: 0,
     permanent: 0,
   };
+  // Documents stay one call per job: the document cap is small, so the extra
+  // recovery pass per job costs seconds, and embeddings are where the time is.
   for (let i = 0; i < documentCap; i++) {
     const result = await processNextDocument(prisma, "cron-drain-documents", {
       onExhausted: (_job, error) => {
@@ -33,18 +35,13 @@ try {
     if (result.status === "retrying") counts.retrying++;
     if (result.status === "exhausted") counts.exhausted++;
   }
-  for (let i = 0; i < embeddingCap; i++) {
-    const result = await processNextDipEmbedding(
-      prisma,
-      "cron-drain-embeddings",
-      { reindexOnly: process.env.DIP_EMBEDDING_REINDEX_ONLY === "1" },
-    );
-    if (result.status === "empty") break;
-    counts.embeddings++;
-    if (result.status === "retrying") {
-      counts.retrying++;
-      break; // A provider outage or rate limit must not consume the queue's retry budget.
-    }
+  const embeddings = await drainDipEmbeddings(prisma, "cron-drain-embeddings", {
+    limit: embeddingCap,
+    reindexOnly: process.env.DIP_EMBEDDING_REINDEX_ONLY === "1",
+  });
+  counts.embeddings = embeddings.length;
+  for (const result of embeddings) {
+    if (result.status === "retrying") counts.retrying++;
     if (result.status === "exhausted") counts.exhausted++;
   }
   console.log({ ...counts, ...embeddingCost() });

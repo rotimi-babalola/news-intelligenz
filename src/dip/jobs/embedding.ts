@@ -1,5 +1,5 @@
 import type { PrismaClient } from "../../generated/prisma/client";
-import { runNextJob, type ClaimedJob } from "../../jobs/index";
+import { runJobs, runNextJob, type ClaimedJob } from "../../jobs/index";
 import { ensureDocumentChunks } from "../documents/chunks";
 import {
   findDocumentContent,
@@ -35,19 +35,48 @@ export async function processNextDipEmbedding(
   return runNextJob(
     prisma,
     workerId,
-    {
-      operation: options.operation ?? [
-        EMBED_PROCEEDING,
-        EMBED_STEP,
-        EMBED_DOCUMENT,
-      ],
-      jobId: options.jobId,
-      payloadModel: config.indexId,
-      includeModelLess: !options.reindexOnly,
-    },
+    embeddingFilter(options, config),
     (job) => embedJob(prisma, job, options, config),
     { failureMessage: "DIP embedding failed" },
   );
+}
+
+// The drain's pass: one recovery and one claim loop for the whole cap instead
+// of one of each per job. A retry still ends the pass, because a provider
+// outage or rate limit must not consume the queue's retry budget.
+export async function drainDipEmbeddings(
+  prisma: PrismaClient,
+  workerId: string,
+  options: EmbeddingWorkerOptions & { limit: number },
+) {
+  const config = embeddingConfig();
+  return runJobs(
+    prisma,
+    workerId,
+    embeddingFilter(options, config),
+    (job) => embedJob(prisma, job, options, config),
+    {
+      limit: options.limit,
+      stopWhen: (outcome) => outcome.status === "retrying",
+      failureMessage: "DIP embedding failed",
+    },
+  );
+}
+
+function embeddingFilter(
+  options: EmbeddingWorkerOptions,
+  config: ReturnType<typeof embeddingConfig>,
+) {
+  return {
+    operation: options.operation ?? [
+      EMBED_PROCEEDING,
+      EMBED_STEP,
+      EMBED_DOCUMENT,
+    ],
+    jobId: options.jobId,
+    payloadModel: config.indexId,
+    includeModelLess: !options.reindexOnly,
+  };
 }
 
 async function embedJob(
