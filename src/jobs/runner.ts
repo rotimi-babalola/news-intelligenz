@@ -13,6 +13,10 @@ export type JobOutcome<T extends object = Record<never, never>> =
 export type RunOptions = {
   limit?: number;
   failureMessage?: string;
+  // Ends the pass on the first outcome that satisfies it, so a caller that
+  // must not keep claiming after a particular result (a provider outage) can
+  // stop without giving up the batched pass for every other result.
+  stopWhen?: (outcome: JobOutcome) => boolean;
   onExhausted?: (job: ClaimedJob, error: Error) => Promise<void> | void;
 };
 
@@ -58,9 +62,15 @@ export async function runJobs<T extends object = Record<never, never>>(
   while (options.limit === undefined || outcomes.length < options.limit) {
     const job = await claimNextJob(prisma, workerId, undefined, filter);
     if (!job) break;
-    outcomes.push(
-      await settleClaimedJob(prisma, job, workerId, handler, options),
+    const outcome = await settleClaimedJob(
+      prisma,
+      job,
+      workerId,
+      handler,
+      options,
     );
+    outcomes.push(outcome);
+    if (options.stopWhen?.(outcome)) break;
   }
   return outcomes;
 }

@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { retryJob } from "../src/admin/service.js";
 import { embeddingConfig } from "../src/dip/search/embedding.js";
-import { processNextDipEmbedding } from "../src/dip/jobs/embedding.js";
+import {
+  drainDipEmbeddings,
+  processNextDipEmbedding,
+} from "../src/dip/jobs/embedding.js";
 import { EMBED_PROCEEDING, EMBED_STEP } from "../src/dip/constants.js";
 import { collectVorgang } from "../src/dip/collection/proceedings.js";
 import { collectSteps } from "../src/dip/collection/steps.js";
@@ -169,6 +172,40 @@ test("model failure retries without changing the DIP source or checkpoint", asyn
         },
       }),
       before,
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("a drain pass stops at the first retry and leaves the rest queued", async () => {
+  const prisma = await isolatedDatabase();
+  try {
+    await collect(prisma, "drain-v1", "Wohnraumgesetz");
+    await collect(prisma, "drain-v2", "Geändertes Wohnraumgesetz");
+    await collect(prisma, "drain-v3", "Nochmals geändertes Wohnraumgesetz");
+    let calls = 0;
+    const outcomes = await drainDipEmbeddings(prisma, "drain-worker", {
+      limit: 10,
+      embed: async () => {
+        calls++;
+        if (calls === 2) throw new Error("model offline");
+        return Array.from({ length: 1024 }, () => 0.1);
+      },
+    });
+    // One failed attempt buys one retry, not the whole pass: the third job is
+    // left pending for the next run instead of being claimed against a dead
+    // provider.
+    assert.deepEqual(
+      outcomes.map((outcome) => outcome.status),
+      ["succeeded", "retrying"],
+    );
+    assert.equal(calls, 2);
+    assert.equal(
+      await prisma.processingJob.count({
+        where: { operation: EMBED_PROCEEDING, status: "pending" },
+      }),
+      1,
     );
   } finally {
     await prisma.$disconnect();
