@@ -52,6 +52,10 @@ export const EMBED_DOCUMENT = "embed_document";
 export const PROCESS_DOCUMENT = "process_document";
 export const ON_DEMAND_PRIORITY = 10;
 export const EMBED_JOB_BATCH_SIZE = 500;
+// Passages per provider request and per claim statement. Chunks are small, so
+// 64 stays far under the provider's per-request token limit and bounds the work
+// a failed batch retries.
+export const EMBED_DOCUMENT_BATCH_SIZE = 64;
 export const REINDEX_PAGE_SIZE = 500;
 export const REINDEX_DOCUMENT_PAGE_SIZE = 100;
 

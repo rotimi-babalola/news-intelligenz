@@ -53,6 +53,20 @@ export async function claimNextJob(
   leaseMs: number = LEASE_MS_DEFAULT,
   filter: ClaimFilter = {},
 ): Promise<ClaimedJob | null> {
+  return (await claimNextJobs(prisma, workerId, leaseMs, filter, 1))[0] ?? null;
+}
+
+// A batch claim keeps one statement and one transaction for the whole batch;
+// claiming one job at a time would cost more than the provider call it saves.
+// The batch is claimed in priority order, so on-demand work still comes first,
+// and it shares one claim timestamp and lease, so recovery requeues it together.
+export async function claimNextJobs(
+  prisma: PrismaClient,
+  workerId: string,
+  leaseMs: number = LEASE_MS_DEFAULT,
+  filter: ClaimFilter = {},
+  limit: number = 1,
+): Promise<ClaimedJob[]> {
   const params: unknown[] = [workerId, leaseMs / 1000];
   let filterClause = "";
   if (filter.runId) {
@@ -96,11 +110,11 @@ export async function claimNextJob(
       lease_expires_at = now() + make_interval(secs => $2),
       attempts = attempts + 1,
       updated_at = now()
-    WHERE id = (
+    WHERE id IN (
       SELECT id FROM ${jobsTable}
       WHERE next_attempt_at <= now() AND attempts < max_attempts ${filterClause} AND ${available}
       ORDER BY priority DESC, next_attempt_at ASC, created_at ASC
-      LIMIT 1
+      LIMIT $${params.length + 1}
       FOR UPDATE SKIP LOCKED
     )
     RETURNING id, dedupe_key AS "dedupeKey", source_kind AS "sourceKind", source_key AS "sourceKey",
@@ -109,27 +123,51 @@ export async function claimNextJob(
       priority`;
   return prisma.$transaction(async (tx) => {
     await exhaustExpiredClaims(tx);
-    const claim = async (available: string) =>
-      (
-        (await tx.$queryRawUnsafe(
-          claimSql(available),
-          ...params,
-        )) as ClaimedJob[]
-      )[0] ?? null;
-    const job =
-      (await claim("status IN ('pending', 'retrying')")) ??
-      (await claim(
-        "status = 'claimed' AND lease_expires_at IS NOT NULL AND lease_expires_at <= now()",
-      ));
-    if (!job) return null;
-    if (job.attempts > 1)
-      await tx.jobAttempt.updateMany({
-        where: { jobId: job.id, attemptNo: job.attempts - 1, finishedAt: null },
-        data: { finishedAt: new Date(), outcome: "abandoned" },
-      });
-    await tx.jobAttempt.create({
-      data: { jobId: job.id, attemptNo: job.attempts, workerId },
+    const claim = async (available: string, size: number) =>
+      size <= 0
+        ? []
+        : ((await tx.$queryRawUnsafe(
+            claimSql(available),
+            ...params,
+            size,
+          )) as ClaimedJob[]);
+    // Ready jobs win over reclaimable ones; a partial ready batch is topped up
+    // with reclaimable work so a batch is full whenever the queue has work.
+    const ready = await claim("status IN ('pending', 'retrying')", limit);
+    const jobs =
+      ready.length < limit
+        ? [
+            ...ready,
+            ...(await claim(
+              "status = 'claimed' AND lease_expires_at IS NOT NULL AND lease_expires_at <= now()",
+              limit - ready.length,
+            )),
+          ]
+        : ready;
+    if (!jobs.length) return jobs;
+    const abandoned = jobs
+      .filter((job) => job.attempts > 1)
+      .map((job) => [job.id, job.attempts - 1] as const);
+    if (abandoned.length)
+      await tx.$executeRawUnsafe(
+        `UPDATE ${qualifiedTable("job_attempts")} AS log SET
+          finished_at = now(), outcome = 'abandoned'
+        FROM (VALUES ${abandoned
+          .map(
+            (_, index) => `($${index * 2 + 1}::uuid, $${index * 2 + 2}::int)`,
+          )
+          .join(", ")}) AS v(job_id, attempt_no)
+        WHERE log.job_id = v.job_id AND log.attempt_no = v.attempt_no
+          AND log.finished_at IS NULL`,
+        ...abandoned.flat(),
+      );
+    await tx.jobAttempt.createMany({
+      data: jobs.map((job) => ({
+        jobId: job.id,
+        attemptNo: job.attempts,
+        workerId,
+      })),
     });
-    return job;
+    return jobs;
   });
 }

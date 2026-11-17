@@ -121,6 +121,39 @@ export function findDocumentChunk(
   });
 }
 
+// One query loads every passage a batch needs, so the database round trips do
+// not grow with the batch size.
+export function findDocumentChunks(
+  client: Client,
+  keys: {
+    referenceId: string;
+    variantNo: number;
+    pageNo: number;
+    chunkNo: number;
+  }[],
+) {
+  if (!keys.length) return Promise.resolve([]);
+  return client.documentChunk.findMany({
+    where: {
+      OR: keys.map((key) => ({
+        content: {
+          referenceId: key.referenceId,
+          variantNo: key.variantNo,
+        },
+        pageNo: key.pageNo,
+        chunkNo: key.chunkNo,
+      })),
+    },
+    select: {
+      pageNo: true,
+      chunkNo: true,
+      text: true,
+      contentId: true,
+      content: { select: { referenceId: true, variantNo: true } },
+    },
+  });
+}
+
 // Variant numbers only grow, even when an older variant is promoted back to
 // latest: reused bytes must never reuse a number held by another variant.
 export async function maxDocumentVariantNo(

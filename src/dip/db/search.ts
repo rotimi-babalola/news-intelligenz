@@ -5,34 +5,51 @@ import type {
 import { qualifiedTable } from "../../db";
 import type { Client } from "./client";
 
-export function saveDipEmbedding(
-  client: Client,
-  input: {
-    sourceEntity: ParliamentaryEntity;
-    apiId: string;
-    versionNo: number;
-    sourcePage?: number;
-    sourceChunk?: number;
-    model: string;
-    documentInstruction: string;
-    queryInstruction: string;
-    embedding: number[];
-  },
-) {
+export type DipEmbeddingInput = {
+  sourceEntity: ParliamentaryEntity;
+  apiId: string;
+  versionNo: number;
+  sourcePage?: number;
+  sourceChunk?: number;
+  model: string;
+  documentInstruction: string;
+  queryInstruction: string;
+  embedding: number[];
+};
+
+export function saveDipEmbedding(client: Client, input: DipEmbeddingInput) {
+  return saveDipEmbeddings(client, [input]);
+}
+
+// A batch writes every vector in one statement, so a passage costs a shared
+// commit rather than its own. Conflict semantics are the single-row insert's.
+export function saveDipEmbeddings(client: Client, inputs: DipEmbeddingInput[]) {
+  if (!inputs.length) return Promise.resolve(0);
+  const values = inputs
+    .map((_, row) => {
+      const params = Array.from(
+        { length: 8 },
+        (_unused, column) => `$${row * 9 + column + 1}`,
+      );
+      return `(gen_random_uuid(), ${params.join(", ")}, $${row * 9 + 9}::public.vector)`;
+    })
+    .join(", ");
   return client.$executeRawUnsafe(
     `INSERT INTO ${qualifiedTable("dip_embeddings")}
       (id, source_entity, source_api_id, source_version_no, source_page, source_chunk, model, document_instruction, query_instruction, embedding)
-     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9::public.vector)
+     VALUES ${values}
      ON CONFLICT (source_entity, source_api_id, source_version_no, source_page, source_chunk, model, document_instruction) DO NOTHING`,
-    input.sourceEntity,
-    input.apiId,
-    input.versionNo,
-    input.sourcePage ?? 0,
-    input.sourceChunk ?? 0,
-    input.model,
-    input.documentInstruction,
-    input.queryInstruction,
-    JSON.stringify(input.embedding),
+    ...inputs.flatMap((input) => [
+      input.sourceEntity,
+      input.apiId,
+      input.versionNo,
+      input.sourcePage ?? 0,
+      input.sourceChunk ?? 0,
+      input.model,
+      input.documentInstruction,
+      input.queryInstruction,
+      JSON.stringify(input.embedding),
+    ]),
   );
 }
 

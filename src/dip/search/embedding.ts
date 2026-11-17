@@ -103,6 +103,24 @@ export async function embedText(
   text: string,
   kind: "query" | "document" = "document",
 ): Promise<number[]> {
+  return (await requestEmbeddings(text, kind))[0]!;
+}
+
+// One request carries the whole batch; the provider returns one embedding per
+// input. Vectors are ordered by the response index so a batch stores each
+// passage under its own identity.
+export async function embedTexts(
+  texts: string[],
+  kind: "query" | "document" = "document",
+): Promise<number[][]> {
+  return requestEmbeddings(texts, kind);
+}
+
+async function requestEmbeddings(
+  input: string | string[],
+  kind: "query" | "document",
+): Promise<number[][]> {
+  const expected = Array.isArray(input) ? input.length : 1;
   const config = embeddingConfig();
   if (config.baseUrl === "https://api.openai.com/v1" && !config.apiKey)
     throw new Error("OPENAI_API_KEY or EMBEDDING_API_KEY is required");
@@ -131,7 +149,9 @@ export async function embedText(
     },
     body: JSON.stringify({
       model: config.model,
-      input: embeddingInput(text, kind, config),
+      input: Array.isArray(input)
+        ? input.map((text) => embeddingInput(text, kind, config))
+        : embeddingInput(input, kind, config),
       ...(config.format === "ollama"
         ? { truncate: false }
         : config.format === "voyage"
@@ -159,18 +179,25 @@ export async function embedText(
   const body = (await response.json()) as {
     model?: string;
     embeddings?: number[][];
-    data?: { embedding: number[] }[];
+    data?: { embedding: number[]; index?: number }[];
     usage?: { total_tokens?: number };
   };
   if (body.model && body.model !== config.model)
     throw new Error("Embedding provider returned an unexpected model");
-  const embedding =
+  const embeddings =
     config.format === "ollama"
-      ? body.embeddings?.[0]
-      : body.data?.[0]?.embedding;
-  assertEmbedding(embedding ?? []);
+      ? body.embeddings
+      : body.data
+          ?.slice()
+          .sort((left, right) => (left.index ?? 0) - (right.index ?? 0))
+          .map((item) => item.embedding);
+  if (!embeddings || embeddings.length !== expected)
+    throw new Error(
+      "Embedding provider returned an unexpected number of embeddings",
+    );
+  embeddings.forEach(assertEmbedding);
   if (typeof body.usage?.total_tokens === "number")
     billedTokens += body.usage.total_tokens;
   else unmeteredRequests++;
-  return embedding!;
+  return embeddings;
 }

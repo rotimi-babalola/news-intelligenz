@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   embedText,
+  embedTexts,
   embeddingConfig,
   embeddingInput,
 } from "../src/dip/search/embedding.js";
@@ -44,6 +45,44 @@ test("OpenAI-compatible provider uses configured model and 1024 dimensions", asy
       embedText("Hallo"),
       (error) =>
         error instanceof RateLimitedError && error.retryAfterMs === 2000,
+    );
+  } finally {
+    globalThis.fetch = fetchBefore;
+    process.env = previous;
+  }
+});
+
+test("a batch embeds every input in one request and keeps response order", async () => {
+  const previous = { ...process.env };
+  const fetchBefore = globalThis.fetch;
+  try {
+    process.env.EMBEDDING_BASE_URL = "https://example.com/v1";
+    process.env.EMBEDDING_MODEL = "batch-model";
+    process.env.EMBEDDING_API_KEY = "test-key";
+    process.env.EMBEDDING_API_FORMAT = "openai";
+    const vectors = [1, 2, 3].map((value) => Array(1024).fill(value / 10));
+    globalThis.fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as { input: string[] };
+      assert.deepEqual(body.input, ["one", "two", "three"]);
+      return Response.json({
+        model: "batch-model",
+        data: [
+          { index: 2, embedding: vectors[2] },
+          { index: 0, embedding: vectors[0] },
+          { index: 1, embedding: vectors[1] },
+        ],
+        usage: { total_tokens: 9 },
+      });
+    };
+    assert.deepEqual(await embedTexts(["one", "two", "three"]), vectors);
+    globalThis.fetch = async () =>
+      Response.json({
+        model: "batch-model",
+        data: [{ embedding: vectors[0] }],
+      });
+    await assert.rejects(
+      embedTexts(["one", "two"]),
+      /unexpected number of embeddings/,
     );
   } finally {
     globalThis.fetch = fetchBefore;

@@ -9,7 +9,9 @@ import {
 import { EMBED_PROCEEDING, EMBED_STEP } from "../src/dip/constants.js";
 import { collectVorgang } from "../src/dip/collection/proceedings.js";
 import { collectSteps } from "../src/dip/collection/steps.js";
+import { enqueueDocumentEmbeddings } from "../src/dip/jobs/queue.js";
 import { dipSource, enqueueJob } from "../src/jobs/index.js";
+import { qualifiedTable } from "../src/db.js";
 import { isolatedDatabase } from "./dip-test-db.js";
 
 function proceeding(title: string, withSummary = true) {
@@ -38,6 +40,48 @@ async function collect(
       cursor: "x",
       numFound: 1,
     }),
+  });
+}
+
+// A run with one stored document variant whose passages are queued for
+// embedding, which is the shape the drain's batched path handles.
+async function queueDocumentPassages(
+  prisma: Awaited<ReturnType<typeof isolatedDatabase>>,
+  runId: string,
+  texts: string[],
+) {
+  await prisma.run.create({
+    data: {
+      id: runId,
+      feedId: "/vorgangsposition",
+      inputHash: runId,
+      status: "running",
+    },
+  });
+  const content = await prisma.documentContent.create({
+    data: {
+      referenceId: runId,
+      variantNo: 1,
+      byteHash: runId,
+      byteSize: texts.length,
+      pageCount: texts.length,
+    },
+  });
+  await prisma.documentChunk.createMany({
+    data: texts.map((text, index) => ({
+      contentId: content.id,
+      pageNo: index + 1,
+      chunkNo: 1,
+      text,
+    })),
+  });
+  await enqueueDocumentEmbeddings(prisma, {
+    runId,
+    itemIndex: null,
+    electoralTerm: null,
+    referenceId: runId,
+    variantNo: 1,
+    chunks: texts.map((_, index) => ({ pageNo: index + 1, chunkNo: 1 })),
   });
 }
 
@@ -343,6 +387,102 @@ test("admin retry of a DIP job preserves the completed collection run", async ()
     else process.env.EMBEDDING_API_FORMAT = previousFormat;
     if (previousBaseUrl === undefined) delete process.env.EMBEDDING_BASE_URL;
     else process.env.EMBEDDING_BASE_URL = previousBaseUrl;
+    await prisma.$disconnect();
+  }
+});
+
+test("a drain batch embeds passages in order under their own identities", async () => {
+  const prisma = await isolatedDatabase();
+  try {
+    const texts = ["Erster Absatz", "Zweiter Absatz", "Dritter Absatz"];
+    await queueDocumentPassages(prisma, "doc-batch", texts);
+    const inputs: string[] = [];
+    const vectors = texts.map((_, index) =>
+      Array.from({ length: 1024 }, () => index + 1),
+    );
+    const outcomes = await drainDipEmbeddings(prisma, "batch-worker", {
+      limit: 10,
+      embedBatch: async (batch) => {
+        inputs.push(...batch);
+        return batch.map((text) => vectors[texts.indexOf(text)]!);
+      },
+    });
+    assert.deepEqual(
+      outcomes.map((outcome) => outcome.status),
+      ["succeeded", "succeeded", "succeeded"],
+    );
+    // Claim order is the queue's, not the caller's; every passage must still
+    // receive the vector the provider returned for it.
+    assert.deepEqual(inputs.slice().sort(), texts.slice().sort());
+    const stored = await prisma.$queryRawUnsafe<
+      { sourcePage: number; value: number }[]
+    >(
+      `SELECT source_page AS "sourcePage",
+        trim(both '[' from split_part(embedding::text, ',', 1))::float8 AS value
+       FROM ${qualifiedTable("dip_embeddings")}
+       ORDER BY source_page`,
+    );
+    assert.deepEqual(
+      stored,
+      texts.map((_, index) => ({ sourcePage: index + 1, value: index + 1 })),
+    );
+    assert.deepEqual(
+      await prisma.dipEmbedding.findMany({
+        orderBy: { sourcePage: "asc" },
+        select: {
+          sourceEntity: true,
+          sourceApiId: true,
+          sourceVersionNo: true,
+          sourcePage: true,
+          sourceChunk: true,
+          model: true,
+        },
+      }),
+      texts.map((_, index) => ({
+        sourceEntity: "dokument",
+        sourceApiId: "doc-batch",
+        sourceVersionNo: 1,
+        sourcePage: index + 1,
+        sourceChunk: 1,
+        model: embeddingConfig().indexId,
+      })),
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("a failed batch retries exactly its passages and leaves the rest pending", async () => {
+  const prisma = await isolatedDatabase();
+  try {
+    const texts = Array.from({ length: 66 }, (_, index) => `Absatz ${index}`);
+    await queueDocumentPassages(prisma, "doc-batch-fail", texts);
+    let calls = 0;
+    const outcomes = await drainDipEmbeddings(prisma, "batch-worker", {
+      limit: 100,
+      embedBatch: async (batch) => {
+        calls++;
+        assert.equal(batch.length, 64);
+        throw new Error("model offline");
+      },
+    });
+    assert.equal(calls, 1);
+    assert.equal(outcomes.length, 64);
+    assert.ok(outcomes.every((outcome) => outcome.status === "retrying"));
+    assert.equal(
+      await prisma.processingJob.count({ where: { status: "retrying" } }),
+      64,
+    );
+    assert.equal(
+      await prisma.processingJob.count({ where: { status: "pending" } }),
+      2,
+    );
+    assert.equal(
+      await prisma.jobAttempt.count({ where: { outcome: "retrying" } }),
+      64,
+    );
+    assert.equal(await prisma.dipEmbedding.count(), 0);
+  } finally {
     await prisma.$disconnect();
   }
 });

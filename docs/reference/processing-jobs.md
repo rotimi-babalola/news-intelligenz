@@ -95,6 +95,19 @@ cron jobs have no disk for the file path to use.
 | `DIP_EMBEDDING_DRAIN_CAP`    | 2000  | embedding jobs per run (about 7 minutes, 8,000 per hour) |
 | `DIP_EMBEDDING_REINDEX_ONLY` | unset | set to `1` to drain only reindex work                    |
 
+`embed_document` passages are claimed and embedded in batches of up to
+`EMBED_DOCUMENT_BATCH_SIZE` (64) in `src/dip/constants.ts`: one claim, one
+provider request and one vector write per batch. Batches are claimed in
+priority order, so an on-demand passage leads the batch; a batch may mix
+priorities at the boundary. A failed batch retries every passage in it with the
+same attempt and backoff, so the failed set is normally re-claimed together and
+one provider blip consumes one attempt from each passage in that batch. Legacy
+page jobs hand off inside the batch; `embed_proceeding`/`embed_step` stay on the
+single-job path. The drain runs one document batch before those record jobs and
+the rest of the document backlog after them. The cap still counts passages per
+run, not batches; each batch logs its passages, outcomes, duration and billed
+tokens.
+
 The script exits non-zero when a job is retrying, or when a job exhausted for a
 reason other than a permanent source failure. Permanent exhaustion is counted
 separately (`permanent`) so a dead upstream link, which no retry can fix, does
