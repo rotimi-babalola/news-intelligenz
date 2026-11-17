@@ -41,10 +41,18 @@ async function isolatedDb() {
   const admin = new pg.Pool({ connectionString: baseUrl });
   const schema = `test_${randomUUID().replaceAll("-", "")}`;
   await admin.query(`CREATE SCHEMA ${schema}`);
-  const url = `${baseUrl}?schema=${schema}`;
+  const scoped = (value: string) => {
+    const parsed = new URL(value);
+    parsed.searchParams.set("schema", schema);
+    return parsed.toString();
+  };
+  const url = scoped(baseUrl);
   process.env.DATABASE_URL = url;
-  // Prisma migrate prefers DATABASE_URL_UNPOOLED when set (prisma.config.ts).
-  process.env.DATABASE_URL_UNPOOLED = url;
+  // Prisma migrate prefers DATABASE_URL_UNPOOLED when set (prisma.config.ts),
+  // and its advisory lock must not pass through a transaction pooler.
+  process.env.DATABASE_URL_UNPOOLED = scoped(
+    process.env.DATABASE_URL_UNPOOLED ?? baseUrl,
+  );
   await promisify(execFile)("node_modules/.bin/prisma", ["migrate", "deploy"], {
     env: { ...process.env, DATABASE_URL: url },
     cwd: root,
