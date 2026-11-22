@@ -1,6 +1,6 @@
 # News Intelligenz
 
-News Intelligenz helps immigrants living in Germany understand parliamentary activity through English explanations grounded in official records.
+News Intelligenz helps immigrants living in Germany understand parliamentary activity through explanations in their language grounded in official records.
 
 **Stack:** Next.js · TypeScript · PostgreSQL with pgvector · Prisma · Neon · Cloudflare R2 · DIP API · OpenAI-compatible embeddings
 
@@ -368,7 +368,7 @@ RSS/search sample and contribution metrics are superseded.
   PDF variants.
 - [Domain glossary](CONTEXT.md) — parliamentary terms.
 - [ADR 0006](docs/adr/0006-proceeding-centric-explainers.md) — future grounded
-  English explanations.
+  explanations in the reader's language.
 - [DIP answer evaluation](docs/evaluation/dip-answer-evaluation.md) — reviewed English and
   German labels, answer coverage, citation support and abstention.
 - [Original design interview](docs/architecture/phase-1-design-notes.md), [feed catalog](docs/research/phase-1-feed-catalog.md),

@@ -65,25 +65,21 @@ export function readerAnswer(brief: Brief): ReaderAnswer {
     claims.map((claim) => toReaderClaim(claim, language));
   const direct = [...brief.claims.matter, ...brief.claims.stage];
   const steps = brief.claims.steps;
-  const directStepIds = new Set(
-    direct
-      .filter((claim) => claim.citation.kind === "step")
-      .map((claim) => claim.citation.stepId),
-  );
-  // Never drop the only supported claim: a lone step with no direct answer
-  // becomes the short answer instead of a one-item timeline.
-  const loneStep =
-    steps.length === 1 && !directStepIds.has(steps[0]!.citation.stepId)
-      ? steps
-      : [];
-  const shortAnswer = toReaderClaims([...direct, ...loneStep]);
+  const timelineSteps =
+    new Set(steps.map((claim) => claim.citation.stepId)).size > 1 ? steps : [];
+  // Steps that cannot form a timeline stay in the answer: with no direct
+  // answer they are the short answer, otherwise they are context.
+  const looseSteps = timelineSteps.length ? [] : steps;
+  const shortAnswer = toReaderClaims([
+    ...direct,
+    ...(direct.length ? [] : looseSteps),
+  ]);
   const context = toReaderClaims([
     ...brief.claims.documents,
     ...brief.claims.unresolved,
+    ...(direct.length ? looseSteps : []),
   ]);
-  const timeline = toReaderClaims(
-    new Set(steps.map((claim) => claim.citation.stepId)).size > 1 ? steps : [],
-  );
+  const timeline = toReaderClaims(timelineSteps);
   return {
     language,
     status: brief.answerConfidence,

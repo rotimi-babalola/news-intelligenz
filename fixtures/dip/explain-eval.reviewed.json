@@ -261,6 +261,37 @@
       ]
     },
     {
+      "question": "For how many people with a tax identification number does the Federal Ministry of Finance currently hold bank details under the direct payment mechanism, and what is the Federal Government doing to increase the share?",
+      "language": "en",
+      "proceeding": "341626",
+      "facts": [
+        {
+          "text": "As of 22 September 2026, 119,636,353 identification numbers were stored in the IdNr database.",
+          "terms": ["identification numbers"],
+          "evidenceIds": ["page:291070:8"],
+          "quote": "Zum 22. September 2026 waren in der Identifikationsnummer-Datenbank (IdNr-Datenbank) 119.636.353 Identifikationsnummern gespeichert."
+        },
+        {
+          "text": "For 16,410,413 identification numbers, account details were stored, corresponding to 19.1 percent.",
+          "terms": ["19.1 percent"],
+          "evidenceIds": ["page:291070:9"],
+          "quote": "Hiervon sind bei 16.410.413 Identifikationsnummern Kontenverbindungen gespeichert (entspricht 19,1 Prozent)."
+        },
+        {
+          "text": "Providing account details is voluntary.",
+          "terms": ["voluntary"],
+          "evidenceIds": ["page:291070:9"],
+          "quote": "Die Übermittlung der Kontoverbindung ist freiwillig."
+        },
+        {
+          "text": "Information about providing account details appears on the Federal Central Tax Office website, through banks and in Mein ELSTER.",
+          "terms": ["ELSTER"],
+          "evidenceIds": ["page:291070:9"],
+          "quote": "Über die verschiedenen Möglichkeiten der Übermittlung wird zum Beispiel auf der Internetseite des Bundeszentralamtes für Steuern sowie durch die Kreditinstitute informiert. Zudem erscheint bei Nutzung des Portals „Mein ELSTER“ ein Benachrichtigungsfenster, das auf die Möglichkeit der IBAN-Übermittlung hinweist."
+        }
+      ]
+    },
+    {
       "question": "Wie hoch waren die Einnahmen der Autobahn GmbH aus der Lkw-Maut im Jahr 2025?",
       "language": "de",
       "proceeding": "340174",

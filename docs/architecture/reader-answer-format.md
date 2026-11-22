@@ -36,14 +36,14 @@ Mapping rules:
 
 - Claim text is copied from the brief. The mapper never paraphrases, summarises or invents it.
 - `shortAnswer`, `context` and `timeline` appear only when they contain claims.
-- No internal proceeding, step or document reference ID appears in claim text or citation labels. The citation `url` is a stored source link and may contain the source's own ID; the visible `label` never does.
+- The generator never puts an internal proceeding, step or document reference ID in claim text; the mapper copies claim text verbatim. No ID appears in a citation label. The citation `url` is a stored source link and may contain the source's own ID; the visible `label` never does.
 - No retrieval score, source quote, question, or raw JSON reaches the view model.
 
 `status` follows the brief's answer confidence. `supported` means every claim category was filled and no fact was missing from the evidence. `partial` means the answer is usable but incomplete. `abstain` means no category held a supported claim.
 
 ## When the timeline earns its place
 
-The timeline is shown only when the brief carries at least two distinct documented steps. Several claims about one step are context, not a timeline. With one documented step, the step is already the short answer and a timeline adds nothing. A written question with a single question-and-answer pair therefore reads as a short answer plus its document citations, not as a timeline.
+The timeline is shown only when the brief carries at least two distinct documented steps. Claims about a single step never form a timeline: when the brief has a short answer they join the context, and when it has none they become it. A written question with a single question-and-answer pair therefore reads as a short answer plus its document citations, not as a timeline.
 
 The mapper does not derive, sort or extend the timeline. It only decides whether the existing ordered steps are worth showing.
 

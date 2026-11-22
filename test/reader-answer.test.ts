@@ -173,7 +173,7 @@ test("missing facts name what the evidence cannot answer", () => {
   );
 });
 
-test("a single documented step does not become a timeline", () => {
+test("a single documented step does not become a timeline but stays in context", () => {
   const claims = supportedClaims();
   claims.steps = [
     claim("The first reading took place.", stepCitation("600002")),
@@ -183,9 +183,14 @@ test("a single documented step does not become a timeline", () => {
   );
   assert.ok(!("timeline" in answer));
   assert.ok(answer.shortAnswer?.length);
+  assert.ok(
+    answer.context?.some(
+      (item) => item.text === "The first reading took place.",
+    ),
+  );
 });
 
-test("several claims about one step are not a timeline", () => {
+test("several claims about one step are context, not a timeline", () => {
   const claims = supportedClaims();
   claims.steps = [
     claim("First reading opened.", stepCitation("600001")),
@@ -195,6 +200,9 @@ test("several claims about one step are not a timeline", () => {
     buildBrief(dossier, "en", "What happened?", claims, []),
   );
   assert.ok(!("timeline" in answer));
+  const context = answer.context?.map((item) => item.text) ?? [];
+  assert.ok(context.includes("First reading opened."));
+  assert.ok(context.includes("First reading closed."));
 });
 
 test("a lone step with no direct answer becomes the short answer", () => {
