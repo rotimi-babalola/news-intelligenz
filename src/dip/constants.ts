@@ -61,6 +61,6 @@ export const EXPLAIN_TIMEOUT_MS = 120_000;
 // Prompt or model changes already invalidate cached briefs through
 // provider.identity. Bump this only when answer assembly or the stored answer
 // shape changes without a prompt change; it is not a release version.
-export const BRIEF_ASSEMBLY_VERSION = 12;
+export const BRIEF_ASSEMBLY_VERSION = 13;
 export const MAX_BRIEF_QUESTION_LENGTH = 1000;
 export const MIN_CLAIM_QUOTE_LENGTH = 12;

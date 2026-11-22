@@ -6,6 +6,20 @@ import {
   type Dossier,
 } from "./types";
 
+const qualificationMessages: Record<
+  BriefLanguage,
+  Record<"partial" | "abstain", string>
+> = {
+  en: {
+    partial: "The stored evidence does not establish every part of the answer.",
+    abstain: "The stored evidence does not answer this question.",
+  },
+  de: {
+    partial: "Die gespeicherten Belege klären nicht alle Teile der Antwort.",
+    abstain: "Die gespeicherten Belege beantworten diese Frage nicht.",
+  },
+};
+
 export function buildBrief(
   dossier: Dossier,
   language: BriefLanguage,
@@ -39,8 +53,6 @@ export function buildBrief(
       missingStatement ??
       (answerConfidence === "supported"
         ? null
-        : language === "en"
-          ? "The stored evidence does not establish every part of the answer."
-          : "Die gespeicherten Belege klären nicht alle Teile der Antwort."),
+        : qualificationMessages[language][answerConfidence]),
   };
 }
