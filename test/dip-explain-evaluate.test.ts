@@ -21,6 +21,7 @@ const label: AnswerLabel = {
 };
 
 const claims = (overrides: Record<string, unknown> = {}) => ({
+  answer: [],
   matter: [],
   stage: [],
   steps: [],

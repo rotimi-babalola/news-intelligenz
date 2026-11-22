@@ -61,9 +61,20 @@ function toReaderClaim(claim: Claim, language: BriefLanguage): ReaderClaim {
 
 export function readerAnswer(brief: Brief): ReaderAnswer {
   const language = brief.language;
+  // The generator may repeat the lead claim in matter or stage; show it once.
+  const seen = new Set<string>();
   const toReaderClaims = (claims: Claim[]) =>
-    claims.map((claim) => toReaderClaim(claim, language));
-  const direct = [...brief.claims.matter, ...brief.claims.stage];
+    claims.flatMap((claim) => {
+      const key = `${claim.text}\u0000${claim.citation.url}`;
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [toReaderClaim(claim, language)];
+    });
+  const direct = [
+    ...brief.claims.answer,
+    ...brief.claims.matter,
+    ...brief.claims.stage,
+  ];
   const steps = brief.claims.steps;
   const timelineSteps =
     new Set(steps.map((claim) => claim.citation.stepId)).size > 1 ? steps : [];

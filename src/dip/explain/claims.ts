@@ -17,6 +17,12 @@ const termsSchema = z.object({
   terms: z.array(z.object({ id: z.string(), text: z.string().trim().min(1) })),
 });
 
+const selectionSchema = z
+  .object({
+    claimIds: z.array(z.string().trim().min(1)).catch([]),
+  })
+  .catch({ claimIds: [] });
+
 // Fallback claims are built from raw DIP text, so English needs a translated
 // title or step label; the German source is the quote, never the claim text.
 async function englishTerm(text: string, translateTerms: TranslateTerms) {
@@ -28,12 +34,24 @@ async function englishTerm(text: string, translateTerms: TranslateTerms) {
 
 export function emptyClaims(): Claims {
   return {
+    answer: [],
     matter: [],
     stage: [],
     steps: [],
     documents: [],
     unresolved: [],
   };
+}
+
+// The selector only returns ids; the claim text, quote and citation are copied
+// from the verified claim, so selection cannot introduce an uncited statement.
+export function selectedAnswerClaims(
+  candidates: { id: string; claim: Claim }[],
+  raw: unknown,
+) {
+  const byId = new Map(candidates.map(({ id, claim }) => [id, claim]));
+  const ids = new Set(selectionSchema.parse(raw).claimIds);
+  return [...ids].flatMap((id) => byId.get(id) ?? []).slice(0, 2);
 }
 
 export function orderedStepClaims(

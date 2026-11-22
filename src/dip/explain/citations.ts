@@ -14,6 +14,7 @@ const claimSchema = z.object({
   quote: z.string().trim().min(MIN_CLAIM_QUOTE_LENGTH),
 });
 const answerSchema = z.object({
+  answer: z.array(z.unknown()).catch([]),
   matter: z.array(z.unknown()).catch([]),
   stage: z.array(z.unknown()).catch([]),
   steps: z.array(z.unknown()).catch([]),
@@ -21,7 +22,17 @@ const answerSchema = z.object({
   unresolved: z.array(z.unknown()).catch([]),
 });
 const missingSchema = z.object({
-  missing: z.array(z.string().trim().min(1).max(300)).catch([]),
+  // Models return either bare strings or claim-shaped objects for missing facts.
+  missing: z
+    .array(
+      z.union([
+        z.string().trim().min(1).max(300),
+        z
+          .object({ text: z.string().trim().min(1).max(300) })
+          .transform((value) => value.text),
+      ]),
+    )
+    .catch([]),
 });
 
 // The generator is the only place that can tell an asked fact is absent: the
@@ -48,7 +59,10 @@ function validateCitations(raw: unknown, evidence: Evidence[]): Claims {
       const parsedClaim = claimSchema.safeParse(item);
       if (!parsedClaim.success) return [];
       const claim = parsedClaim.data;
-      const source = sources.get(claim.evidenceId);
+      // Models sometimes echo the raw DIP step id instead of step:<id>.
+      const source =
+        sources.get(claim.evidenceId) ??
+        sources.get(`step:${claim.evidenceId}`);
       const quote = source && sourceQuote(source.text, claim.quote);
       if (!source || !quote) return [];
       if (section === "documents" && source.citation.kind !== "page") return [];

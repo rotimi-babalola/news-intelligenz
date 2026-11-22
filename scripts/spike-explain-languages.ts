@@ -820,6 +820,7 @@ try {
           answerConfidence: "abstain" as const,
           retrievalRelevance: dossier.ranking.strongestEvidence,
           claims: {
+            answer: [],
             matter: [],
             stage: [],
             steps: [],

@@ -27,13 +27,16 @@ export function buildBrief(
   claims: Claims,
   missing: string[],
 ) {
-  const answered = sections.filter(
+  // The lead is additive: a brief that fills the original categories is still
+  // supported when no question-facing lead survives.
+  const requiredSections = sections.filter((section) => section !== "answer");
+  const answered = requiredSections.filter(
     (section) => claims[section].length > 0,
   ).length;
   const answerConfidence: AnswerConfidence =
-    answered === 0
+    answered === 0 && claims.answer.length === 0
       ? "abstain"
-      : answered === sections.length && missing.length === 0
+      : answered === requiredSections.length && missing.length === 0
         ? "supported"
         : "partial";
   const missingStatement =

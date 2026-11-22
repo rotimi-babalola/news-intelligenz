@@ -17,7 +17,11 @@ import {
   type TranslateTerms,
   type Verify,
 } from "../src/dip/explain/provider.js";
-import { alignDocumentClaims } from "../src/dip/explain/claims.js";
+import {
+  alignDocumentClaims,
+  selectedAnswerClaims,
+} from "../src/dip/explain/claims.js";
+import { missingFacts } from "../src/dip/explain/citations.js";
 import type { ProceedingTimeline } from "../src/dip/proceedings/timeline.js";
 import type { DipHit } from "../src/dip/search/search.js";
 
@@ -211,6 +215,16 @@ function store(
 }
 
 const answer = (language: "en" | "de") => ({
+  answer: [
+    {
+      text:
+        language === "en"
+          ? "The bill is at its first reading."
+          : "Das Gesetz befindet sich in der ersten Lesung.",
+      evidenceId: "step:2",
+      quote: "First reading",
+    },
+  ],
   matter: [
     {
       text:
@@ -263,6 +277,7 @@ test("English and German briefs cite the same stored step and document page", as
       fixtureProvider(async () => answer(language)),
     );
     assert.equal(brief.answerConfidence, "partial");
+    assert.equal(brief.claims.answer[0]?.citation.stepId, "2");
     assert.equal(brief.claims.stage[0]?.citation.stepId, "2");
     assert.deepEqual(brief.claims.documents[0]?.citation, {
       kind: "page",
@@ -374,6 +389,110 @@ test("unsupported citations are dropped while documented steps remain", async ()
   assert.deepEqual(brief.claims.documents, []);
   assert.equal(brief.claims.steps[0]?.citation.stepId, "2");
   assert.match(brief.qualification!, /does not establish/);
+});
+
+test("an unsupported or absent lead answer leaves the brief without a lead claim", async () => {
+  const { prisma } = store();
+  const invented = await generateProceedingBrief(
+    prisma,
+    { question: "What happened?", language: "en", dossier: dossier },
+    fixtureProvider(async () => ({
+      ...answer("en"),
+      answer: [
+        {
+          text: "The bill has become law.",
+          evidenceId: "step:2",
+          quote: "not in the step",
+        },
+      ],
+    })),
+  );
+  assert.deepEqual(invented.claims.answer, []);
+  assert.equal(invented.claims.matter.length, 1);
+  const absent = await generateProceedingBrief(
+    prisma,
+    { question: "What is this about?", language: "en", dossier: dossier },
+    fixtureProvider(async () => ({ ...answer("en"), answer: [] })),
+  );
+  assert.deepEqual(absent.claims.answer, []);
+  assert.equal(absent.claims.matter.length, 1);
+});
+
+test("selected lead claims use only supplied ids and copy the claim", () => {
+  const stage = {
+    text: "It reached a first reading.",
+    quote: "First reading",
+    citation: {
+      kind: "step" as const,
+      stepId: "2",
+      url: "https://example.org/step/2",
+    },
+  };
+  const matter = { ...stage, text: "The bill concerns housing grants." };
+  const candidates = [
+    { id: "matter:0", claim: matter },
+    { id: "stage:0", claim: stage },
+  ];
+  assert.deepEqual(
+    selectedAnswerClaims(candidates, {
+      claimIds: ["stage:0", "invented", "stage:0", "matter:0"],
+    }),
+    [stage, matter],
+  );
+  assert.deepEqual(selectedAnswerClaims(candidates, { claimIds: [] }), []);
+});
+
+test("an empty lead is filled from this language's verified claims", async () => {
+  const { prisma } = store();
+  const selected: string[][] = [];
+  const brief = await generateProceedingBrief(
+    prisma,
+    { question: "Was ist der Stand?", language: "de", dossier: dossier },
+    {
+      generate: async () => ({ answer: [], stage: [] }),
+      verify: approveFixtureClaims,
+      translate: async () => ({ claims: [] }),
+      translateTerms: async ({ terms }) => ({ terms }),
+      selectAnswer: async ({ claims }) => {
+        selected.push(claims.map(({ id }) => id));
+        return { claimIds: ["stage:0"] };
+      },
+      identity: "fixture",
+    },
+  );
+  assert.equal(selected.length, 1);
+  assert.ok(selected[0]?.includes("stage:0"));
+  assert.equal(brief.claims.answer.length, 1);
+  assert.match(
+    brief.claims.answer[0]?.text ?? "",
+    /Letzter dokumentierter Schritt/u,
+  );
+  assert.equal(brief.claims.answer[0]?.citation.stepId, "2");
+});
+
+test("a generated lead is not replaced by claim selection", async () => {
+  const { prisma } = store();
+  let calls = 0;
+  const brief = await generateProceedingBrief(
+    prisma,
+    { question: "What happened?", language: "en", dossier: dossier },
+    {
+      generate: async () => answer("en"),
+      verify: approveFixtureClaims,
+      translate: async () => ({ claims: [] }),
+      translateTerms: async ({ terms }) => ({ terms }),
+      selectAnswer: async () => {
+        calls += 1;
+        return { claimIds: ["stage:0"] };
+      },
+      identity: "fixture",
+    },
+  );
+  assert.equal(calls, 0);
+  assert.equal(
+    brief.claims.answer[0]?.text,
+    "The bill is at its first reading.",
+  );
 });
 
 test("a proceeding with no step or page evidence abstains", async () => {
@@ -1110,6 +1229,47 @@ test("verification failures and malformed verdicts cannot cache an unverified br
   assert.equal(briefs.size, 0);
 });
 
+test("a bare step id from the model resolves to the stored step evidence", async () => {
+  const result = await validateAnswer(
+    {
+      answer: [
+        {
+          text: "The bill is at its first reading.",
+          evidenceId: "2",
+          quote: "First reading",
+        },
+      ],
+    },
+    [
+      {
+        id: "step:2",
+        text: "First reading | Housing bill introduced",
+        citation: {
+          kind: "step",
+          stepId: "2",
+          url: "https://example.org/step/2",
+        },
+      },
+    ],
+    "en",
+    approveFixtureClaims,
+  );
+  assert.equal(result.answer[0]?.citation.stepId, "2");
+});
+
+test("missing facts accept both plain strings and claim-shaped objects", () => {
+  assert.deepEqual(
+    missingFacts({
+      missing: [
+        "the 2025 truck-toll revenue",
+        { text: "the 2026 target", evidenceId: null, quote: null },
+      ],
+    }),
+    ["the 2025 truck-toll revenue", "the 2026 target"],
+  );
+  assert.deepEqual(missingFacts({ missing: [] }), []);
+});
+
 test("page citations cannot substitute for procedural step evidence", async () => {
   const result = await validateAnswer(
     { steps: [{ ...answer("en").documents[0] }] },
@@ -1165,12 +1325,12 @@ test("the provider path verifies generated claims and reuses only the verified c
           request.messages[0].content,
           /An exact quote alone does not establish/,
         );
-        assert.equal(input.claims[1].text, "The bill has become law.");
-        assert.equal(input.claims[1].quote, "First reading");
+        assert.equal(input.claims[2].text, "The bill has become law.");
+        assert.equal(input.claims[2].quote, "First reading");
         assert.ok(
           input.evidence.some((item: { id: string }) => item.id === "step:2"),
         );
-        content = { supportedClaimIds: [0, 2, 3] };
+        content = { supportedClaimIds: [0, 1, 3, 4] };
       } else {
         assert.equal(requests, 3);
         assert.match(

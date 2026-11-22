@@ -35,6 +35,7 @@ type BriefCopy = {
 const copy: Record<"en" | "de", BriefCopy> = {
   en: {
     groups: [
+      ["answer", "Answer"],
       ["matter", "Matter"],
       ["stage", "Current stage"],
       ["steps", "Ordered steps"],
@@ -56,6 +57,7 @@ const copy: Record<"en" | "de", BriefCopy> = {
   },
   de: {
     groups: [
+      ["answer", "Antwort"],
       ["matter", "Gegenstand"],
       ["stage", "Aktuelles Stadium"],
       ["steps", "Geordnete Schritte"],

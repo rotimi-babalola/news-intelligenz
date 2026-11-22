@@ -2,11 +2,11 @@
 
 Status: accepted shape for the reader chat in [epic #89](https://github.com/rotimi-babalola/news-intelligenz/issues/89). Implementation: [`src/reader/answer.ts`](../../src/reader/answer.ts).
 
-A generated brief is the operator-facing record behind an explainer: it carries internal proceeding IDs, a retrieval score, per-claim source quotes and five claim categories. The reader answer is the same evidence in the order a reader needs it, with none of the operator detail.
+A generated brief is the operator-facing record behind an explainer: it carries internal proceeding IDs, a retrieval score, per-claim source quotes and six claim categories. The reader answer is the same evidence in the order a reader needs it, with none of the operator detail.
 
 ## Order
 
-1. **Short answer.** The direct answer drawn from the brief's `matter` and `stage` claims: what the proceeding is about and where it stands. If both are empty and the brief carries a single step claim, that step becomes the short answer rather than being dropped.
+1. **Short answer.** The direct answer the brief generated for the question (`answer`), followed by what the proceeding is about and where it stands (`matter` and `stage`). If those are all empty and the brief carries a single step claim, that step becomes the short answer rather than being dropped.
 2. **Optional context.** The `documents` and `unresolved` claims: what the relevant document says and what remains open.
 3. **Optional timeline.** The ordered `steps` claims, in the order the brief already established.
 4. **Inline citations.** Every claim carries one citation label and the link to its proceeding step or document page.
@@ -35,11 +35,12 @@ type ReaderAnswer = {
 Mapping rules:
 
 - Claim text is copied from the brief. The mapper never paraphrases, summarises or invents it.
+- The lead `answer` claim comes from the generator, which quotes and cites stored evidence; it is absent when the evidence does not answer the question. When the first generation yields no lead, it is filled by selecting an already-verified claim for that language, so the text, quote and citation are copied rather than rewritten. `matter` and `stage` are never promoted into the `answer` category: they follow it, or form the short answer when it is absent.
 - `shortAnswer`, `context` and `timeline` appear only when they contain claims.
 - The generator never puts an internal proceeding, step or document reference ID in claim text; the mapper copies claim text verbatim. No ID appears in a citation label. The citation `url` is a stored source link and may contain the source's own ID; the visible `label` never does.
 - No retrieval score, source quote, question, or raw JSON reaches the view model.
 
-`status` follows the brief's answer confidence. `supported` means every claim category was filled and no fact was missing from the evidence. `partial` means the answer is usable but incomplete. `abstain` means no category held a supported claim.
+`status` follows the brief's answer confidence. `supported` means every claim category except the optional lead answer was filled and no fact was missing from the evidence. `partial` means the answer is usable but incomplete. `abstain` means no category held a supported claim.
 
 ## When the timeline earns its place
 
