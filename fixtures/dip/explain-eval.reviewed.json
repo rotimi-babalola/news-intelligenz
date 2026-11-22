@@ -230,6 +230,37 @@
       ]
     },
     {
+      "question": "Für wie viele Personen mit einer Steuer-Identifikationsnummer hat das Bundesministerium der Finanzen im Kontext des Direktauszahlungsmechanismus inzwischen eine Bankverbindung, und was unternimmt die Bundesregierung aktuell, um den Anteil zu erhöhen?",
+      "language": "de",
+      "proceeding": "341626",
+      "facts": [
+        {
+          "text": "Zum 22. September 2026 waren in der IdNr-Datenbank 119.636.353 Identifikationsnummern gespeichert.",
+          "terms": ["119.636.353"],
+          "evidenceIds": ["page:291070:8"],
+          "quote": "Zum 22. September 2026 waren in der Identifikationsnummer-Datenbank (IdNr-Datenbank) 119.636.353 Identifikationsnummern gespeichert."
+        },
+        {
+          "text": "Bei 16.410.413 Identifikationsnummern waren Kontoverbindungen gespeichert, das entspricht 19,1 Prozent.",
+          "terms": ["16.410.413", "19,1 Prozent"],
+          "evidenceIds": ["page:291070:9"],
+          "quote": "Hiervon sind bei 16.410.413 Identifikationsnummern Kontenverbindungen gespeichert (entspricht 19,1 Prozent)."
+        },
+        {
+          "text": "Die Übermittlung der Kontoverbindung ist freiwillig.",
+          "terms": ["freiwillig"],
+          "evidenceIds": ["page:291070:9"],
+          "quote": "Die Übermittlung der Kontoverbindung ist freiwillig."
+        },
+        {
+          "text": "Über die Übermittlung wird auf der Internetseite des Bundeszentralamtes für Steuern, durch die Kreditinstitute und in Mein ELSTER informiert.",
+          "terms": ["ELSTER"],
+          "evidenceIds": ["page:291070:9"],
+          "quote": "Über die verschiedenen Möglichkeiten der Übermittlung wird zum Beispiel auf der Internetseite des Bundeszentralamtes für Steuern sowie durch die Kreditinstitute informiert. Zudem erscheint bei Nutzung des Portals „Mein ELSTER“ ein Benachrichtigungsfenster, das auf die Möglichkeit der IBAN-Übermittlung hinweist."
+        }
+      ]
+    },
+    {
       "question": "Wie hoch waren die Einnahmen der Autobahn GmbH aus der Lkw-Maut im Jahr 2025?",
       "language": "de",
       "proceeding": "340174",

@@ -61,9 +61,9 @@ either expected facts or an abstention expectation:
 The reviewed set at
 [`fixtures/dip/explain-eval.reviewed.json`](../../fixtures/dip/explain-eval.reviewed.json)
 covers climate allocations, university funding, motorway financing, grid
-charges, the 2045 grid-charge forecast, housing costs, the truck-toll 2025
-questions in English and German as fact-absent cases, and two
-insufficient-evidence questions in each language.
+charges, the 2045 grid-charge forecast, housing costs, a written question on
+tax-ID bank details, the truck-toll 2025 questions in English and German as
+fact-absent cases, and two insufficient-evidence questions in each language.
 
 ## Missing requested fact
 

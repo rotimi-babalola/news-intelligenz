@@ -39,8 +39,12 @@ export function buildBrief(
       missingStatement ??
       (answerConfidence === "supported"
         ? null
-        : language === "en"
-          ? "The stored evidence does not establish every part of the answer."
-          : "Die gespeicherten Belege klären nicht alle Teile der Antwort."),
+        : answerConfidence === "abstain"
+          ? language === "en"
+            ? "The stored evidence does not answer this question."
+            : "Die gespeicherten Belege beantworten diese Frage nicht."
+          : language === "en"
+            ? "The stored evidence does not establish every part of the answer."
+            : "Die gespeicherten Belege klären nicht alle Teile der Antwort."),
   };
 }
