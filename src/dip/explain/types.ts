@@ -26,6 +26,7 @@ export type TimelineStep = NonNullable<
 >["steps"][number];
 
 export const sections = [
+  "answer",
   "matter",
   "stage",
   "steps",

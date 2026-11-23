@@ -35,6 +35,7 @@ const claim = (text: string, citation: Evidence["citation"]): Claim => ({
 });
 
 const emptyClaims = (): Claims => ({
+  answer: [],
   matter: [],
   stage: [],
   steps: [],
@@ -43,6 +44,7 @@ const emptyClaims = (): Claims => ({
 });
 
 const supportedClaims = (): Claims => ({
+  answer: [claim("The bill is at its first reading.", stepCitation("600002"))],
   matter: [claim("The bill concerns housing grants.", stepCitation("600001"))],
   stage: [
     claim("The latest step is the first reading.", stepCitation("600002")),
@@ -64,6 +66,7 @@ test("a supported generated brief reads in order and cites every claim", () => {
   assert.deepEqual(
     answer.shortAnswer?.map((item) => item.text),
     [
+      "The bill is at its first reading.",
       "The bill concerns housing grants.",
       "The latest step is the first reading.",
     ],
@@ -115,6 +118,61 @@ test("visible text never carries IDs, scores, quotes or JSON shapes", () => {
     "proceedingApiId",
   ])
     assert.ok(!rendered.includes(shape), `leaked ${shape}`);
+});
+
+test("an absent lead answer falls back to the matter and stage", () => {
+  const claims = supportedClaims();
+  claims.answer = [];
+  const answer = readerAnswer(
+    buildBrief(dossier, "en", "What does the bill do?", claims, []),
+  );
+  assert.deepEqual(
+    answer.shortAnswer?.map((item) => item.text),
+    [
+      "The bill concerns housing grants.",
+      "The latest step is the first reading.",
+    ],
+  );
+});
+
+test("a lead claim repeated in matter or stage is shown once", () => {
+  const claims = supportedClaims();
+  claims.stage = [
+    claim("The bill is at its first reading.", stepCitation("600002")),
+  ];
+  const answer = readerAnswer(
+    buildBrief(dossier, "en", "What is the bill's stage?", claims, []),
+  );
+  assert.deepEqual(
+    answer.shortAnswer?.map((item) => item.text),
+    ["The bill is at its first reading.", "The bill concerns housing grants."],
+  );
+});
+
+test("a complete brief without a lead answer is still supported", () => {
+  const claims = supportedClaims();
+  claims.answer = [];
+  const answer = readerAnswer(
+    buildBrief(dossier, "en", "What does the bill do?", claims, []),
+  );
+  assert.equal(answer.status, "supported");
+  assert.equal(answer.limitation, null);
+  assert.ok(answer.shortAnswer?.length);
+});
+
+test("a lone lead claim is a partial answer, not an abstention", () => {
+  const claims = emptyClaims();
+  claims.answer = [
+    claim("The bill is at its first reading.", stepCitation("600002")),
+  ];
+  const answer = readerAnswer(
+    buildBrief(dossier, "en", "What is the bill's stage?", claims, []),
+  );
+  assert.equal(answer.status, "partial");
+  assert.deepEqual(
+    answer.shortAnswer?.map((item) => item.text),
+    ["The bill is at its first reading."],
+  );
 });
 
 test("a partial generated brief drops the empty category and states its limitation", () => {

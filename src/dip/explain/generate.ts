@@ -18,6 +18,7 @@ import {
   latestStageClaim,
   matterClaim,
   orderedStepClaims,
+  selectedAnswerClaims,
 } from "./claims";
 import { missingFacts, validateAnswer } from "./citations";
 import { collectEvidence, matchesDossier } from "./evidence";
@@ -114,6 +115,26 @@ export async function generateProceedingBrief(
     language,
     provider.translate,
   );
+  // A language's lead can be rejected while the other language answers, so an
+  // empty lead is filled from this language's verified claims.
+  if (!claims.answer.length && provider.selectAnswer) {
+    const candidates = (["matter", "stage", "documents"] as const).flatMap(
+      (section) =>
+        claims[section].map((claim, index) => ({
+          id: `${section}:${index}`,
+          claim,
+        })),
+    );
+    if (candidates.length)
+      claims.answer = selectedAnswerClaims(
+        candidates,
+        await provider.selectAnswer({
+          question: question.trim(),
+          language,
+          claims: candidates.map(({ id, claim }) => ({ id, text: claim.text })),
+        }),
+      );
+  }
   const latest = await getProceeding(prisma, dossier.apiId);
   if (!latest || !matchesDossier(latest, dossier))
     throw new Error("Dossier changed during generation; search again");
