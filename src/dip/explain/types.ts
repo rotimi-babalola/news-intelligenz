@@ -16,6 +16,7 @@ export type Evidence = {
     kind: "step" | "page";
     stepId: string;
     url: string;
+    pdfUrl?: string;
     referenceId?: string;
     page?: number;
   };

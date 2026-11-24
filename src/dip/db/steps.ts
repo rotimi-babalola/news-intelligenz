@@ -5,6 +5,18 @@ export function findStep(client: Client, apiId: string) {
   return client.proceedingStep.findUnique({ where: { apiId } });
 }
 
+export const stepTimelineInclude = {
+  versions: { orderBy: { versionNo: "desc" }, take: 1 },
+  documentReference: true,
+} satisfies Prisma.ProceedingStepInclude;
+
+export function findStepForTimeline(client: Client, apiId: string) {
+  return client.proceedingStep.findUnique({
+    where: { apiId },
+    include: stepTimelineInclude,
+  });
+}
+
 export function latestStepVersion(client: Client, stepApiId: string) {
   return client.proceedingStepVersion.findFirst({
     where: { stepApiId },

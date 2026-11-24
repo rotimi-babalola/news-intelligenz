@@ -37,6 +37,16 @@ export function findDocumentReferenceById(client: Client, referenceId: string) {
   });
 }
 
+export function findDocumentReferenceForStep(
+  client: Client,
+  stepApiId: string,
+) {
+  return client.documentReference.findUnique({
+    where: { stepApiId },
+    include: { step: { select: { institution: true, documentType: true } } },
+  });
+}
+
 export function findDocumentContentByHash(
   client: Client,
   referenceId: string,

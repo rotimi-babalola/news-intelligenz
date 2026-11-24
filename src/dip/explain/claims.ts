@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Translate, TranslateTerms } from "./provider";
 import { stepDate, stepSource, pageEvidenceId } from "./evidence";
+import { sourceStepUrl } from "../proceedings/source";
 import type {
   BriefLanguage,
   Claim,
@@ -81,7 +82,7 @@ export function orderedStepClaims(
         citation: {
           kind: "step" as const,
           stepId: step.apiId,
-          url: step.sourceUrl,
+          url: sourceStepUrl(step.apiId),
         },
       },
     ];
@@ -114,7 +115,7 @@ export async function matterClaim(
       citation: {
         kind: "step" as const,
         stepId: step.apiId,
-        url: step.sourceUrl,
+        url: sourceStepUrl(step.apiId),
       },
     },
   ];
@@ -149,7 +150,7 @@ export async function latestStageClaim(
       citation: {
         kind: "step" as const,
         stepId: step.apiId,
-        url: step.sourceUrl,
+        url: sourceStepUrl(step.apiId),
       },
     },
   ];

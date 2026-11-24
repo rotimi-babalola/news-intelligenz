@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import type { PrismaClient } from "../src/generated/prisma/client.js";
 import {
@@ -22,6 +23,7 @@ import {
   selectedAnswerClaims,
 } from "../src/dip/explain/claims.js";
 import { missingFacts } from "../src/dip/explain/citations.js";
+import { stepSource } from "../src/dip/explain/evidence.js";
 import type { ProceedingTimeline } from "../src/dip/proceedings/timeline.js";
 import type { DipHit } from "../src/dip/search/search.js";
 
@@ -279,12 +281,14 @@ test("English and German briefs cite the same stored step and document page", as
     assert.equal(brief.answerConfidence, "partial");
     assert.equal(brief.claims.answer[0]?.citation.stepId, "2");
     assert.equal(brief.claims.stage[0]?.citation.stepId, "2");
+    assert.equal(brief.claims.stage[0]?.citation.url, "/source/step/2");
     assert.deepEqual(brief.claims.documents[0]?.citation, {
       kind: "page",
       stepId: "2",
       referenceId: "3",
       page: 2,
-      url: pdfUrl,
+      url: "/source/document/3?page=2&step=2",
+      pdfUrl: `${pdfUrl}#page=2`,
     });
     assert.equal(brief.retrievalRelevance, 0.8);
   }
@@ -765,6 +769,48 @@ test("cached briefs regenerate for each language and changed PDF evidence", asyn
   assert.equal(briefs.size, 3);
 });
 
+test("a brief cached before source views does not keep its old citation links", async () => {
+  const { prisma, briefs } = store();
+  const oldKey = createHash("sha256")
+    .update(
+      JSON.stringify([
+        16,
+        "Question",
+        "en",
+        "fixture",
+        "1",
+        1,
+        [["2", 1, "3", pdfUrl]],
+        [["3", "hash-one", pdfUrl]],
+        [
+          ["step:2", stepSource(timeline.steps[0]!)],
+          [
+            "page:3:2",
+            "The bill would provide housing grants. It also funds demolition.",
+          ],
+        ],
+      ]),
+    )
+    .digest("hex");
+  briefs.set(oldKey, {
+    claims: {
+      answer: [{ citation: { url: "https://example.org/step/2" } }],
+    },
+  });
+  let calls = 0;
+  const brief = await generateProceedingBrief(
+    prisma,
+    { question: "Question", language: "en", dossier },
+    fixtureProvider(async () => {
+      calls++;
+      return answer("en");
+    }),
+  );
+  assert.equal(calls, 1);
+  assert.equal(brief.claims.answer[0]?.citation.url, "/source/step/2");
+  assert.equal(briefs.size, 2);
+});
+
 test("a cached brief is reused only under the same adapter identity", async () => {
   const { prisma, briefs } = store();
   let calls = 0;
@@ -1102,7 +1148,16 @@ test("both briefs cite the same retrieved page when the model omits it", async (
     );
     assert.deepEqual(
       brief.claims.documents.map((claim) => claim.citation),
-      [{ kind: "page", stepId: "2", referenceId: "3", page: 2, url: pdfUrl }],
+      [
+        {
+          kind: "page",
+          stepId: "2",
+          referenceId: "3",
+          page: 2,
+          url: "/source/document/3?page=2&step=2",
+          pdfUrl: `${pdfUrl}#page=2`,
+        },
+      ],
     );
     assert.equal(brief.claims.documents[0]?.text, translations[language]);
   }
