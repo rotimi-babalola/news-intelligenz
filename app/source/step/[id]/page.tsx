@@ -4,6 +4,7 @@ import { dateText } from "../../_components/display";
 import { database } from "../../../../src/db";
 import {
   getSourceDocumentOutline,
+  isSafePdfUrl,
   sourceDocumentUrl,
 } from "../../../../src/dip/documents/source";
 import {
@@ -115,7 +116,7 @@ export default async function SourceStepPage({
                   >
                     View stored document pages
                   </Link>
-                  {document.pdfUrl && (
+                  {isSafePdfUrl(document.pdfUrl) && (
                     <a
                       href={document.pdfUrl}
                       target="_blank"

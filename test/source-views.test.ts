@@ -4,6 +4,7 @@ import type { PrismaClient } from "../src/generated/prisma/client.js";
 import {
   getSourceDocumentOutline,
   getSourceDocumentPage,
+  isSafePdfUrl,
   pdfPageUrl,
   sourceDocumentUrl,
 } from "../src/dip/documents/source.js";
@@ -159,6 +160,10 @@ test("a stored document page carries its text and covering section", async () =>
   });
   assert.equal(sourceDocumentUrl("3", 2), "/source/document/3?page=2");
   assert.equal(pdfPageUrl(pdfUrl, 2), `${pdfUrl}#page=2`);
+  assert.equal(isSafePdfUrl(pdfUrl), true);
+  assert.equal(isSafePdfUrl("http://example.org/document.pdf"), false);
+  assert.equal(isSafePdfUrl("javascript:alert(1)"), false);
+  assert.equal(isSafePdfUrl(null), false);
 });
 
 test("an unprocessed document reports its reason with the PDF link", async () => {

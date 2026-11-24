@@ -15,6 +15,17 @@ export function pdfPageUrl(pdfUrl: string, page: number) {
   return `${pdfUrl.split("#")[0]}#page=${page}`;
 }
 
+// Stored PDF links are external data; only an HTTPS link may become a reader
+// facing href.
+export function isSafePdfUrl(pdfUrl: string | null): pdfUrl is string {
+  if (!pdfUrl) return false;
+  try {
+    return new URL(pdfUrl).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 // The section outline a step view can link to. Only the current variant's
 // outline is offered, mirroring the stored text rules.
 export async function getSourceDocumentOutline(

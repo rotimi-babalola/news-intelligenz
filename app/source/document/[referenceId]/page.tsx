@@ -4,6 +4,7 @@ import { dateText } from "../../_components/display";
 import { database } from "../../../../src/db";
 import {
   getSourceDocumentPage,
+  isSafePdfUrl,
   pdfPageUrl,
 } from "../../../../src/dip/documents/source";
 import {
@@ -35,7 +36,9 @@ export default async function SourceDocumentPage({
     const view = await getSourceDocumentPage(prisma, referenceId, page);
     if (view.status === "unknown") notFound();
     const { source } = view;
-    const pdfHref = source.pdfUrl ? pdfPageUrl(source.pdfUrl, page) : null;
+    const pdfHref = isSafePdfUrl(source.pdfUrl)
+      ? pdfPageUrl(source.pdfUrl, page)
+      : null;
     return (
       <div className="min-h-screen bg-stone-100 text-stone-900 antialiased">
         <main className="mx-auto max-w-3xl space-y-6 px-6 py-8">
