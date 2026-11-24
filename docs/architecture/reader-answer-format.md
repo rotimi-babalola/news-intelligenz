@@ -37,7 +37,7 @@ Mapping rules:
 - Claim text is copied from the brief. The mapper never paraphrases, summarises or invents it.
 - The lead `answer` claim comes from the generator, which quotes and cites stored evidence; it is absent when the evidence does not answer the question. When the first generation yields no lead, it is filled by selecting an already-verified claim for that language, so the text, quote and citation are copied rather than rewritten. `matter` and `stage` are never promoted into the `answer` category: they follow it, or form the short answer when it is absent.
 - `shortAnswer`, `context` and `timeline` appear only when they contain claims.
-- The generator never puts an internal proceeding, step or document reference ID in claim text; the mapper copies claim text verbatim. No ID appears in a citation label. The citation `url` is a stored source link and may contain the source's own ID; the visible `label` never does.
+- The generator never puts an internal proceeding, step or document reference ID in claim text; the mapper copies claim text verbatim. No ID appears in a citation label. The citation `url` opens the read-only source view for the cited step or document page, which shows the stored text and links on to the original source; the URL may contain the source's own ID, but the visible `label` never does.
 - No retrieval score, source quote, question, or raw JSON reaches the view model.
 
 `status` follows the brief's answer confidence. `supported` means every claim category except the optional lead answer was filled and no fact was missing from the evidence. `partial` means the answer is usable but incomplete. `abstain` means no category held a supported claim.
@@ -55,7 +55,7 @@ The mapper does not derive, sort or extend the timeline. It only decides whether
 | English  | `Proceeding step`   | `Document, page {n}`  |
 | German   | `Verfahrensschritt` | `Dokument, Seite {n}` |
 
-The label names the kind of source and, for a page, its page number. It never includes the internal reference ID. A page citation without a stored page number is labelled `Document` / `Dokument`. The link beside the label opens the stored step or the cited PDF.
+The label names the kind of source and, for a page, its page number. It never includes the internal reference ID. A page citation without a stored page number is labelled `Document` / `Dokument`. The link beside the label opens the stored step or document-page view, which links on to the original PDF at the cited page.
 
 ## Limitation and abstention
 

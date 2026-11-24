@@ -1,20 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { dateText } from "../../_components/display";
 import { database } from "../../../../src/db";
 import { sourceDocumentUrl } from "../../../../src/dip/documents/source";
 import { sourceStepUrl } from "../../../../src/dip/proceedings/source";
 import { getProceeding } from "../../../../src/dip/proceedings/timeline";
 
 export const dynamic = "force-dynamic";
-
-function dateText(value: string | null) {
-  return value
-    ? new Intl.DateTimeFormat("en-GB", {
-        dateStyle: "long",
-        timeZone: "UTC",
-      }).format(new Date(value))
-    : null;
-}
 
 export default async function SourceProceedingPage({
   params,

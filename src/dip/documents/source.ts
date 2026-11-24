@@ -15,6 +15,22 @@ export function pdfPageUrl(pdfUrl: string, page: number) {
   return `${pdfUrl.split("#")[0]}#page=${page}`;
 }
 
+// The section outline a step view can link to. Only the current variant's
+// outline is offered, mirroring the stored text rules.
+export async function getSourceDocumentOutline(
+  prisma: PrismaClient,
+  referenceId: string,
+) {
+  if (!/^\d+$/.test(referenceId)) return [];
+  const citation = await loadDocumentCitation(prisma, referenceId);
+  if (citation.status !== "current") return [];
+  const sections = await listDocumentSections(prisma, citation.variant.id);
+  return sections.flatMap((row) => {
+    const section = toSection(row);
+    return section ? [section] : [];
+  });
+}
+
 // One reader-facing page view: stored text only while the reference and the
 // latest variant still match, with a reason whenever no text may be shown.
 export async function getSourceDocumentPage(
@@ -41,11 +57,24 @@ export async function getSourceDocumentPage(
     reason,
   });
   if (citation.status === "metadata-only")
-    return notProcessed(citation.eligibility.reason);
+    return {
+      status: "metadata-only" as const,
+      source,
+      reason: citation.eligibility.reason,
+    };
   if (citation.status === "stale") return notProcessed(STALE_REVISION_REASON);
   if (citation.status === "missing") return notProcessed(MISSING_PDF_REASON);
 
   const variant = citation.variant;
+  // A page outside the stored range is answered from the document, never sent
+  // to the database as an out-of-range integer.
+  if (page > variant.pageCount)
+    return {
+      status: "page-missing" as const,
+      source,
+      page,
+      pageCount: variant.pageCount,
+    };
   const [pageRow, sections] = await Promise.all([
     findDocumentPage(prisma, variant.id, page),
     listDocumentSections(prisma, variant.id),

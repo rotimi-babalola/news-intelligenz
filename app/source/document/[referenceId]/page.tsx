@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { dateText } from "../../_components/display";
 import { database } from "../../../../src/db";
 import {
   getSourceDocumentPage,
@@ -17,15 +18,6 @@ function pageNumber(raw: string | string[] | undefined) {
   if (typeof raw !== "string" || !/^\d+$/.test(raw)) return null;
   const page = Number(raw);
   return page >= 1 ? page : null;
-}
-
-function dateText(value: string | null) {
-  return value
-    ? new Intl.DateTimeFormat("en-GB", {
-        dateStyle: "long",
-        timeZone: "UTC",
-      }).format(new Date(value))
-    : null;
 }
 
 export default async function SourceDocumentPage({
@@ -96,21 +88,25 @@ export default async function SourceDocumentPage({
             </p>
           </header>
 
-          {view.status === "not-processed" && (
+          {(view.status === "metadata-only" ||
+            view.status === "not-processed") && (
             <section
-              aria-labelledby="not-processed-heading"
+              aria-labelledby="unavailable-heading"
               className="rounded-xl border border-amber-200 bg-amber-50 p-5"
             >
               <h2
-                id="not-processed-heading"
+                id="unavailable-heading"
                 className="text-lg font-semibold text-amber-900"
               >
-                PDF not processed
+                {view.status === "not-processed"
+                  ? "PDF not processed"
+                  : "Document text not available"}
               </h2>
               <p className="mt-2 text-sm text-amber-900">{view.reason}</p>
               <p className="mt-2 text-sm text-amber-900">
-                The stored page text is not available for this document. The
-                original PDF is linked above.
+                {pdfHref
+                  ? "The stored page text is not available for this document. The original PDF is linked above."
+                  : "The stored page text and an original PDF link are not available for this document."}
               </p>
             </section>
           )}

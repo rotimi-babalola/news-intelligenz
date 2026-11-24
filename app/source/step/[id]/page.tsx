@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { dateText } from "../../_components/display";
 import { database } from "../../../../src/db";
-import { sourceDocumentUrl } from "../../../../src/dip/documents/source";
+import {
+  getSourceDocumentOutline,
+  sourceDocumentUrl,
+} from "../../../../src/dip/documents/source";
 import {
   getSourceStep,
   sourceProceedingUrl,
@@ -16,15 +20,6 @@ const institutionNames: Record<string, string> = {
   EK: "Europakammer",
 };
 
-function dateText(value: string | null) {
-  return value
-    ? new Intl.DateTimeFormat("en-GB", {
-        dateStyle: "long",
-        timeZone: "UTC",
-      }).format(new Date(value))
-    : null;
-}
-
 export default async function SourceStepPage({
   params,
 }: {
@@ -38,6 +33,9 @@ export default async function SourceStepPage({
     if (!view) notFound();
     const { step, proceedingApiId, proceeding, parentMissing } = view;
     const document = step.document;
+    const sections = document
+      ? await getSourceDocumentOutline(prisma, document.referenceId)
+      : [];
     const date = dateText(step.documentDate);
     return (
       <div className="min-h-screen bg-stone-100 text-stone-900 antialiased">
@@ -128,6 +126,31 @@ export default async function SourceStepPage({
                     </a>
                   )}
                 </p>
+                {sections.length > 0 && (
+                  <div className="pt-2">
+                    <h3 className="text-sm font-semibold">Document pages</h3>
+                    <ul className="mt-1 space-y-1">
+                      {sections.map((section) => (
+                        <li
+                          key={`${section.startPage}-${section.endPage}-${section.label}`}
+                        >
+                          <Link
+                            href={sourceDocumentUrl(
+                              document.referenceId,
+                              section.startPage,
+                            )}
+                            className="text-emerald-900 underline underline-offset-2"
+                          >
+                            {section.label} · {section.title}
+                          </Link>{" "}
+                          <span className="text-stone-500">
+                            (pages {section.startPage}–{section.endPage})
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="mt-3 text-sm text-stone-500">

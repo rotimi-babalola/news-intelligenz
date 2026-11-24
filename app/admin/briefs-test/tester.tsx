@@ -453,6 +453,16 @@ export function BriefTester({
                                       )
                                     : labels.step(claim.citation.stepId)}
                                 </a>
+                                {claim.citation.pdfUrl && (
+                                  <a
+                                    href={claim.citation.pdfUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="mt-1 ml-3 inline-block text-xs text-stone-600 underline underline-offset-2"
+                                  >
+                                    PDF page
+                                  </a>
+                                )}
                               </li>
                             ))}
                           </ul>

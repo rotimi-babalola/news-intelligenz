@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PrismaClient } from "../src/generated/prisma/client.js";
 import {
+  getSourceDocumentOutline,
   getSourceDocumentPage,
   pdfPageUrl,
   sourceDocumentUrl,
@@ -183,8 +184,8 @@ test("a metadata-only document reports why its text is withheld", async () => {
     "3",
     2,
   );
-  assert.equal(view.status, "not-processed");
-  if (view.status !== "not-processed") return;
+  assert.equal(view.status, "metadata-only");
+  if (view.status !== "metadata-only") return;
   assert.equal(view.reason, "Unconfirmed official issuer");
   assert.equal(view.source.pdfUrl, pdfUrl);
 });
@@ -213,6 +214,28 @@ test("a page that is not stored is distinct from an unprocessed document", async
   assert.equal(view.page, 2);
   assert.equal(view.pageCount, 5);
   assert.equal(view.source.pdfUrl, pdfUrl);
+});
+
+test("a page beyond the stored range is answered without a database read", async () => {
+  const view = await getSourceDocumentPage(
+    documentClient({ pageRow: null }),
+    "3",
+    99,
+  );
+  assert.equal(view.status, "page-missing");
+  if (view.status !== "page-missing") return;
+  assert.equal(view.page, 99);
+});
+
+test("the step view can link the current document's sections", async () => {
+  const sections = await getSourceDocumentOutline(documentClient(), "3");
+  assert.deepEqual(sections, [
+    { label: "§ 1", title: "Grants", startPage: 1, endPage: 3 },
+  ]);
+  assert.deepEqual(
+    await getSourceDocumentOutline(documentClient({ contentRow: null }), "3"),
+    [],
+  );
 });
 
 test("an unknown reference resolves to no source view", async () => {
