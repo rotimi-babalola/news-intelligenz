@@ -1,5 +1,6 @@
 import type { Prisma } from "../../generated/prisma/client";
 import type { Client } from "./client";
+import { stepTimelineInclude } from "./steps";
 
 export function findProceeding(client: Client, apiId: string) {
   return client.proceeding.findUnique({ where: { apiId } });
@@ -17,16 +18,20 @@ const proceedingInclude = {
   versions: { orderBy: { versionNo: "desc" }, take: 1 },
 } satisfies Prisma.ProceedingInclude;
 
-const stepInclude = {
-  versions: { orderBy: { versionNo: "desc" }, take: 1 },
-  documentReference: true,
-} satisfies Prisma.ProceedingStepInclude;
+export function findProceedingForTimeline(client: Client, apiId: string) {
+  return client.proceeding.findUnique({
+    where: { apiId },
+    include: proceedingInclude,
+  });
+}
 
 type ProceedingTimelineRow = {
   proceeding: Prisma.ProceedingGetPayload<{
     include: typeof proceedingInclude;
   }> | null;
-  steps: Prisma.ProceedingStepGetPayload<{ include: typeof stepInclude }>[];
+  steps: Prisma.ProceedingStepGetPayload<{
+    include: typeof stepTimelineInclude;
+  }>[];
 };
 
 export async function readProceedingTimeline(
@@ -34,13 +39,10 @@ export async function readProceedingTimeline(
   apiId: string,
 ): Promise<ProceedingTimelineRow> {
   const [proceeding, steps] = await Promise.all([
-    client.proceeding.findUnique({
-      where: { apiId },
-      include: proceedingInclude,
-    }),
+    findProceedingForTimeline(client, apiId),
     client.proceedingStep.findMany({
       where: { proceedingApiId: apiId },
-      include: stepInclude,
+      include: stepTimelineInclude,
     }),
   ]);
   return { proceeding, steps };
@@ -59,7 +61,7 @@ export async function readProceedingTimelines(
     }),
     client.proceedingStep.findMany({
       where: { proceedingApiId: { in: apiIds } },
-      include: stepInclude,
+      include: stepTimelineInclude,
     }),
   ]);
   const rows = new Map<string, ProceedingTimelineRow>(

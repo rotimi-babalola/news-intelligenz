@@ -1,6 +1,6 @@
 import type { PrismaClient } from "../../generated/prisma/client";
-import { findStep } from "../db/index";
-import { getProceeding } from "./timeline";
+import { findProceedingForTimeline, findStepForTimeline } from "../db/index";
+import { toTimelineProceeding, toTimelineStep } from "./timeline";
 
 export function sourceStepUrl(apiId: string) {
   return `/source/step/${apiId}`;
@@ -14,15 +14,16 @@ export function sourceProceedingUrl(apiId: string) {
 // to, shaped by the same timeline read model used by dossiers and explainers.
 export async function getSourceStep(prisma: PrismaClient, apiId: string) {
   if (!/^\d+$/.test(apiId)) return null;
-  const step = await findStep(prisma, apiId);
+  const step = await findStepForTimeline(prisma, apiId);
   if (!step) return null;
-  const timeline = await getProceeding(prisma, step.proceedingApiId);
-  const view = timeline?.steps.find((item) => item.apiId === apiId);
-  if (!timeline || !view) return null;
+  const proceeding = await findProceedingForTimeline(
+    prisma,
+    step.proceedingApiId,
+  );
   return {
-    step: view,
+    step: toTimelineStep(step),
     proceedingApiId: step.proceedingApiId,
-    proceeding: timeline.proceeding,
-    parentMissing: timeline.parentMissing,
+    proceeding: proceeding ? toTimelineProceeding(proceeding) : null,
+    parentMissing: !proceeding,
   };
 }

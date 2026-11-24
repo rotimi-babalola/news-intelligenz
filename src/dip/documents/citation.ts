@@ -1,5 +1,9 @@
 import type { PrismaClient } from "../../generated/prisma/client";
-import { findDocumentReferenceById, latestDocumentContent } from "../db/index";
+import {
+  findDocumentReferenceById,
+  findDocumentReferenceForStep,
+  latestDocumentContent,
+} from "../db/index";
 import { classifyDocumentReference } from "./excerpts";
 
 type ReferenceRow = NonNullable<
@@ -118,9 +122,17 @@ export function resolveDocumentCitation(
 export async function loadDocumentCitation(
   prisma: PrismaClient,
   referenceId: string,
+  stepApiId?: string,
 ): Promise<DocumentCitation> {
-  const reference = await findDocumentReferenceById(prisma, referenceId);
-  if (!reference) return { status: "unknown" };
+  const reference =
+    stepApiId !== undefined
+      ? await findDocumentReferenceForStep(prisma, stepApiId)
+      : await findDocumentReferenceById(prisma, referenceId);
+  if (
+    !reference ||
+    (stepApiId !== undefined && reference.referenceId !== referenceId)
+  )
+    return { status: "unknown" };
   const eligibility = documentEligibility(reference);
   // Ineligible metadata never needs the stored variant, so it is never read.
   const variant =

@@ -124,7 +124,10 @@ export async function collectEvidence(
         stepId: step.apiId,
         referenceId: hit.document.referenceId,
         page: hit.page,
-        url: sourceDocumentUrl(hit.document.referenceId, hit.page),
+        url: sourceDocumentUrl(hit.document.referenceId, {
+          page: hit.page,
+          stepId: step.apiId,
+        }),
         pdfUrl: pdfPageUrl(hit.document.pdfUrl!, hit.page),
       },
     });

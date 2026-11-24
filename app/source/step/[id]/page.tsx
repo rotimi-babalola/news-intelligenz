@@ -35,7 +35,7 @@ export default async function SourceStepPage({
     const { step, proceedingApiId, proceeding, parentMissing } = view;
     const document = step.document;
     const sections = document
-      ? await getSourceDocumentOutline(prisma, document.referenceId)
+      ? await getSourceDocumentOutline(prisma, document.referenceId, step.apiId)
       : [];
     const date = dateText(step.documentDate);
     return (
@@ -111,7 +111,9 @@ export default async function SourceStepPage({
                 )}
                 <p className="flex flex-wrap gap-4">
                   <Link
-                    href={sourceDocumentUrl(document.referenceId)}
+                    href={sourceDocumentUrl(document.referenceId, {
+                      stepId: step.apiId,
+                    })}
                     className="font-medium text-emerald-900 underline underline-offset-2"
                   >
                     View stored document pages
@@ -136,10 +138,10 @@ export default async function SourceStepPage({
                           key={`${section.startPage}-${section.endPage}-${section.label}`}
                         >
                           <Link
-                            href={sourceDocumentUrl(
-                              document.referenceId,
-                              section.startPage,
-                            )}
+                            href={sourceDocumentUrl(document.referenceId, {
+                              page: section.startPage,
+                              stepId: step.apiId,
+                            })}
                             className="text-emerald-900 underline underline-offset-2"
                           >
                             {section.label} · {section.title}

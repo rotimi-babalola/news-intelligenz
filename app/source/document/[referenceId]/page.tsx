@@ -6,6 +6,7 @@ import {
   getSourceDocumentPage,
   isSafePdfUrl,
   pdfPageUrl,
+  sourceDocumentUrl,
 } from "../../../../src/dip/documents/source";
 import {
   sourceProceedingUrl,
@@ -26,14 +27,25 @@ export default async function SourceDocumentPage({
   searchParams,
 }: {
   params: Promise<{ referenceId: string }>;
-  searchParams: Promise<{ page?: string | string[] }>;
+  searchParams: Promise<{
+    page?: string | string[];
+    step?: string | string[];
+  }>;
 }) {
   const { referenceId } = await params;
-  const page = pageNumber((await searchParams).page);
-  if (!/^\d+$/.test(referenceId) || page === null) notFound();
+  const query = await searchParams;
+  const page = pageNumber(query.page);
+  const stepId = query.step;
+  if (
+    !/^\d+$/.test(referenceId) ||
+    page === null ||
+    (stepId !== undefined &&
+      (typeof stepId !== "string" || !/^\d+$/.test(stepId)))
+  )
+    notFound();
   const prisma = database();
   try {
-    const view = await getSourceDocumentPage(prisma, referenceId, page);
+    const view = await getSourceDocumentPage(prisma, referenceId, page, stepId);
     if (view.status === "unknown") notFound();
     const { source } = view;
     const pdfHref = isSafePdfUrl(source.pdfUrl)
@@ -147,6 +159,43 @@ export default async function SourceDocumentPage({
                 {view.text}
               </p>
             </article>
+          )}
+
+          {view.status === "available" && view.pageCount > 1 && (
+            <nav
+              aria-label="Document pages"
+              className="flex items-center justify-between gap-4 text-sm"
+            >
+              {page > 1 ? (
+                <Link
+                  href={sourceDocumentUrl(referenceId, {
+                    page: page - 1,
+                    stepId: source.stepApiId,
+                  })}
+                  className="font-medium text-emerald-900 underline underline-offset-2"
+                >
+                  ← Previous page
+                </Link>
+              ) : (
+                <span />
+              )}
+              <span className="text-stone-600">
+                Page {page} of {view.pageCount}
+              </span>
+              {page < view.pageCount ? (
+                <Link
+                  href={sourceDocumentUrl(referenceId, {
+                    page: page + 1,
+                    stepId: source.stepApiId,
+                  })}
+                  className="font-medium text-emerald-900 underline underline-offset-2"
+                >
+                  Next page →
+                </Link>
+              ) : (
+                <span />
+              )}
+            </nav>
           )}
         </main>
       </div>

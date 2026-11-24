@@ -59,6 +59,7 @@ function documentClient({
     },
   ],
   referenceRow = reference,
+  referenceForStepRow = referenceRow,
 }: {
   contentRow?: typeof content | null;
   pageRow?: { contentId: string; pageNo: number; text: string } | null;
@@ -71,9 +72,16 @@ function documentClient({
     endPage: number;
   }[];
   referenceRow?: typeof reference | null;
+  referenceForStepRow?: typeof reference | null;
 } = {}) {
   return {
-    documentReference: { findFirst: async () => referenceRow },
+    documentReference: {
+      findFirst: async () => referenceRow,
+      findUnique: async ({ where }: { where: { stepApiId: string } }) =>
+        referenceForStepRow?.stepApiId === where.stepApiId
+          ? referenceForStepRow
+          : null,
+    },
     documentContent: { findFirst: async () => contentRow },
     documentPage: { findUnique: async () => pageRow },
     documentSection: { findMany: async () => sections },
@@ -94,6 +102,11 @@ const stepRow = {
   metadata: { text: "The bill was introduced." },
   latestVersionNo: 1,
 };
+const sourceStepRow = {
+  ...stepRow,
+  versions: [{ id: "s1", observedAt: date }],
+  documentReference: reference,
+};
 
 const proceedingRow = {
   apiId: "1",
@@ -110,21 +123,20 @@ const proceedingRow = {
 };
 
 function stepClient({
-  found = stepRow,
-  steps = [
-    {
-      ...stepRow,
-      versions: [{ id: "s1", observedAt: date }],
-      documentReference: reference,
-    },
-  ],
-}: { found?: typeof stepRow | null; steps?: unknown[] } = {}) {
+  found = sourceStepRow,
+  parent = proceedingRow,
+}: {
+  found?: typeof sourceStepRow | null;
+  parent?: typeof proceedingRow | null;
+} = {}) {
   return {
     proceedingStep: {
       findUnique: async () => found,
-      findMany: async () => steps,
+      findMany: async () => {
+        throw new Error("A step view must not load the full timeline");
+      },
     },
-    proceeding: { findUnique: async () => proceedingRow },
+    proceeding: { findUnique: async () => parent },
   } as unknown as PrismaClient;
 }
 
@@ -145,6 +157,13 @@ test("a step source view is absent for a missing or non-numeric id", async () =>
   assert.equal(await getSourceStep(stepClient(), "abc"), null);
 });
 
+test("an orphan step still has a source view", async () => {
+  const view = await getSourceStep(stepClient({ parent: null }), "2");
+  assert.equal(view?.step.apiId, "2");
+  assert.equal(view?.proceeding, null);
+  assert.equal(view?.parentMissing, true);
+});
+
 test("a stored document page carries its text and covering section", async () => {
   const view = await getSourceDocumentPage(documentClient(), "3", 2);
   assert.equal(view.status, "available");
@@ -158,12 +177,41 @@ test("a stored document page carries its text and covering section", async () =>
     startPage: 1,
     endPage: 3,
   });
-  assert.equal(sourceDocumentUrl("3", 2), "/source/document/3?page=2");
+  assert.equal(
+    sourceDocumentUrl("3", { page: 2, stepId: "2" }),
+    "/source/document/3?page=2&step=2",
+  );
+  assert.equal(sourceDocumentUrl("3"), "/source/document/3");
   assert.equal(pdfPageUrl(pdfUrl, 2), `${pdfUrl}#page=2`);
   assert.equal(isSafePdfUrl(pdfUrl), true);
   assert.equal(isSafePdfUrl("http://example.org/document.pdf"), false);
   assert.equal(isSafePdfUrl("javascript:alert(1)"), false);
   assert.equal(isSafePdfUrl(null), false);
+});
+
+test("a cited page uses its step's reference when another step shares the document", async () => {
+  const client = documentClient({
+    referenceRow: {
+      ...reference,
+      stepApiId: "4",
+      proceedingApiId: "5",
+      pdfUrl: "https://example.org/new.pdf",
+    },
+    referenceForStepRow: reference,
+  });
+  const cited = await getSourceDocumentPage(client, "3", 2, "2");
+  assert.equal(cited.status, "available");
+  if (cited.status !== "available") return;
+  assert.equal(cited.text, "Housing grants.");
+  assert.equal(cited.source.stepApiId, "2");
+  assert.equal(cited.source.proceedingApiId, "1");
+  assert.equal(cited.source.pdfUrl, pdfUrl);
+
+  const unscoped = await getSourceDocumentPage(client, "3", 2);
+  assert.equal(unscoped.status, "not-processed");
+  assert.deepEqual(await getSourceDocumentPage(client, "7", 2, "2"), {
+    status: "unknown",
+  });
 });
 
 test("an unprocessed document reports its reason with the PDF link", async () => {
@@ -233,12 +281,16 @@ test("a page beyond the stored range is answered without a database read", async
 });
 
 test("the step view can link the current document's sections", async () => {
-  const sections = await getSourceDocumentOutline(documentClient(), "3");
+  const sections = await getSourceDocumentOutline(documentClient(), "3", "2");
   assert.deepEqual(sections, [
     { label: "§ 1", title: "Grants", startPage: 1, endPage: 3 },
   ]);
   assert.deepEqual(
     await getSourceDocumentOutline(documentClient({ contentRow: null }), "3"),
+    [],
+  );
+  assert.deepEqual(
+    await getSourceDocumentOutline(documentClient(), "3", "4"),
     [],
   );
 });

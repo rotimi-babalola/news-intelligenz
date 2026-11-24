@@ -12,30 +12,61 @@ function optionalText(metadata: unknown, key: string): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-function toTimeline(
-  apiId: string,
-  { proceeding, steps }: Awaited<ReturnType<typeof readProceedingTimeline>>,
+type TimelineRows = Awaited<ReturnType<typeof readProceedingTimeline>>;
+
+export function toTimelineProceeding(
+  proceeding: NonNullable<TimelineRows["proceeding"]>,
 ) {
+  return {
+    title: proceeding.title,
+    type: proceeding.proceedingType,
+    deliberationState: proceeding.deliberationState,
+    summary: optionalText(proceeding.metadata, "abstract"),
+    documentDate: proceeding.documentDate?.toISOString() ?? null,
+    sourceUpdatedAt: proceeding.sourceUpdatedAt.toISOString(),
+    firstObservedAt: proceeding.firstObservedAt.toISOString(),
+    lastObservedAt: proceeding.lastObservedAt.toISOString(),
+    versionNo: proceeding.latestVersionNo,
+    versionId: proceeding.versions[0]?.id ?? null,
+    versionObservedAt: proceeding.versions[0]?.observedAt.toISOString() ?? null,
+    sourceUrl: `${DIP_API_BASE_URL}/vorgang/${proceeding.apiId}`,
+  };
+}
+
+export function toTimelineStep(step: TimelineRows["steps"][number]) {
+  return {
+    apiId: step.apiId,
+    institution: step.institution,
+    label: step.stepLabel,
+    title: step.title,
+    text: optionalText(step.metadata, "text"),
+    documentType: step.documentType,
+    documentDate: step.documentDate?.toISOString() ?? null,
+    sourceUpdatedAt: step.sourceUpdatedAt.toISOString(),
+    firstObservedAt: step.firstObservedAt.toISOString(),
+    lastObservedAt: step.lastObservedAt.toISOString(),
+    versionNo: step.latestVersionNo,
+    versionId: step.versions[0]?.id ?? null,
+    versionObservedAt: step.versions[0]?.observedAt.toISOString() ?? null,
+    sourceUrl: `${DIP_API_BASE_URL}/vorgangsposition/${step.apiId}`,
+    document: step.documentReference
+      ? {
+          referenceId: step.documentReference.referenceId,
+          number: step.documentReference.documentNumber,
+          date: step.documentReference.documentDate?.toISOString() ?? null,
+          pdfUrl: step.documentReference.pdfUrl,
+          metadata: step.documentReference.metadata,
+          observedAt: step.documentReference.observedAt.toISOString(),
+        }
+      : null,
+  };
+}
+
+function toTimeline(apiId: string, { proceeding, steps }: TimelineRows) {
   return {
     apiId,
     parentMissing: !proceeding,
-    proceeding: proceeding
-      ? {
-          title: proceeding.title,
-          type: proceeding.proceedingType,
-          deliberationState: proceeding.deliberationState,
-          summary: optionalText(proceeding.metadata, "abstract"),
-          documentDate: proceeding.documentDate?.toISOString() ?? null,
-          sourceUpdatedAt: proceeding.sourceUpdatedAt.toISOString(),
-          firstObservedAt: proceeding.firstObservedAt.toISOString(),
-          lastObservedAt: proceeding.lastObservedAt.toISOString(),
-          versionNo: proceeding.latestVersionNo,
-          versionId: proceeding.versions[0]?.id ?? null,
-          versionObservedAt:
-            proceeding.versions[0]?.observedAt.toISOString() ?? null,
-          sourceUrl: `${DIP_API_BASE_URL}/vorgang/${apiId}`,
-        }
-      : null,
+    proceeding: proceeding ? toTimelineProceeding(proceeding) : null,
     steps: steps
       .sort(
         (a, b) =>
@@ -44,32 +75,7 @@ function toTimeline(
           a.sourceUpdatedAt.getTime() - b.sourceUpdatedAt.getTime() ||
           a.apiId.localeCompare(b.apiId, "en", { numeric: true }),
       )
-      .map((step) => ({
-        apiId: step.apiId,
-        institution: step.institution,
-        label: step.stepLabel,
-        title: step.title,
-        text: optionalText(step.metadata, "text"),
-        documentType: step.documentType,
-        documentDate: step.documentDate?.toISOString() ?? null,
-        sourceUpdatedAt: step.sourceUpdatedAt.toISOString(),
-        firstObservedAt: step.firstObservedAt.toISOString(),
-        lastObservedAt: step.lastObservedAt.toISOString(),
-        versionNo: step.latestVersionNo,
-        versionId: step.versions[0]?.id ?? null,
-        versionObservedAt: step.versions[0]?.observedAt.toISOString() ?? null,
-        sourceUrl: `${DIP_API_BASE_URL}/vorgangsposition/${step.apiId}`,
-        document: step.documentReference
-          ? {
-              referenceId: step.documentReference.referenceId,
-              number: step.documentReference.documentNumber,
-              date: step.documentReference.documentDate?.toISOString() ?? null,
-              pdfUrl: step.documentReference.pdfUrl,
-              metadata: step.documentReference.metadata,
-              observedAt: step.documentReference.observedAt.toISOString(),
-            }
-          : null,
-      })),
+      .map(toTimelineStep),
   };
 }
 

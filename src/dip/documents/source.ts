@@ -5,10 +5,15 @@ import { toSection } from "./sections";
 
 export const MISSING_PDF_REASON = "The PDF has not been processed.";
 
-export function sourceDocumentUrl(referenceId: string, page?: number) {
-  return page === undefined
-    ? `/source/document/${referenceId}`
-    : `/source/document/${referenceId}?page=${page}`;
+export function sourceDocumentUrl(
+  referenceId: string,
+  { page, stepId }: { page?: number; stepId?: string } = {},
+) {
+  const params = new URLSearchParams();
+  if (page !== undefined) params.set("page", String(page));
+  if (stepId !== undefined) params.set("step", stepId);
+  const query = params.toString();
+  return `/source/document/${referenceId}${query ? `?${query}` : ""}`;
 }
 
 export function pdfPageUrl(pdfUrl: string, page: number) {
@@ -31,9 +36,14 @@ export function isSafePdfUrl(pdfUrl: string | null): pdfUrl is string {
 export async function getSourceDocumentOutline(
   prisma: PrismaClient,
   referenceId: string,
+  stepApiId?: string,
 ) {
-  if (!/^\d+$/.test(referenceId)) return [];
-  const citation = await loadDocumentCitation(prisma, referenceId);
+  if (
+    !/^\d+$/.test(referenceId) ||
+    (stepApiId !== undefined && !/^\d+$/.test(stepApiId))
+  )
+    return [];
+  const citation = await loadDocumentCitation(prisma, referenceId, stepApiId);
   if (citation.status !== "current") return [];
   const sections = await listDocumentSections(prisma, citation.variant.id);
   return sections.flatMap((row) => {
@@ -48,10 +58,16 @@ export async function getSourceDocumentPage(
   prisma: PrismaClient,
   referenceId: string,
   page: number,
+  stepApiId?: string,
 ) {
-  if (!/^\d+$/.test(referenceId) || !Number.isInteger(page) || page < 1)
+  if (
+    !/^\d+$/.test(referenceId) ||
+    (stepApiId !== undefined && !/^\d+$/.test(stepApiId)) ||
+    !Number.isInteger(page) ||
+    page < 1
+  )
     return { status: "unknown" as const };
-  const citation = await loadDocumentCitation(prisma, referenceId);
+  const citation = await loadDocumentCitation(prisma, referenceId, stepApiId);
   if (citation.status === "unknown") return { status: "unknown" as const };
   const reference = citation.reference;
   const source = {

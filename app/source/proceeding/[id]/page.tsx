@@ -77,7 +77,9 @@ export default async function SourceProceedingPage({
                       {step.document && (
                         <p className="mt-1 text-xs">
                           <Link
-                            href={sourceDocumentUrl(step.document.referenceId)}
+                            href={sourceDocumentUrl(step.document.referenceId, {
+                              stepId: step.apiId,
+                            })}
                             className="text-emerald-900 underline underline-offset-2"
                           >
                             Document {step.document.number}
