@@ -5,6 +5,8 @@ import {
   latestDocumentContent,
 } from "../db/index";
 import { isCitedDocumentVariant } from "../documents/citation";
+import { pdfPageUrl, sourceDocumentUrl } from "../documents/source";
+import { sourceStepUrl } from "../proceedings/source";
 import { getProceeding } from "../proceedings/timeline";
 import type { BriefLanguage, Dossier, Evidence, TimelineStep } from "./types";
 
@@ -60,7 +62,11 @@ export async function collectEvidence(
   const evidence: Evidence[] = current.steps.map((step) => ({
     id: `step:${step.apiId}`,
     text: stepSource(step),
-    citation: { kind: "step", stepId: step.apiId, url: step.sourceUrl },
+    citation: {
+      kind: "step",
+      stepId: step.apiId,
+      url: sourceStepUrl(step.apiId),
+    },
   }));
   const documentVersions: [string, string, string][] = [];
   const citedPages = new Set<string>();
@@ -118,7 +124,8 @@ export async function collectEvidence(
         stepId: step.apiId,
         referenceId: hit.document.referenceId,
         page: hit.page,
-        url: hit.document.pdfUrl!,
+        url: sourceDocumentUrl(hit.document.referenceId, hit.page),
+        pdfUrl: pdfPageUrl(hit.document.pdfUrl!, hit.page),
       },
     });
   }

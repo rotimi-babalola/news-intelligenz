@@ -279,12 +279,14 @@ test("English and German briefs cite the same stored step and document page", as
     assert.equal(brief.answerConfidence, "partial");
     assert.equal(brief.claims.answer[0]?.citation.stepId, "2");
     assert.equal(brief.claims.stage[0]?.citation.stepId, "2");
+    assert.equal(brief.claims.stage[0]?.citation.url, "/source/step/2");
     assert.deepEqual(brief.claims.documents[0]?.citation, {
       kind: "page",
       stepId: "2",
       referenceId: "3",
       page: 2,
-      url: pdfUrl,
+      url: "/source/document/3?page=2",
+      pdfUrl: `${pdfUrl}#page=2`,
     });
     assert.equal(brief.retrievalRelevance, 0.8);
   }
@@ -1102,7 +1104,16 @@ test("both briefs cite the same retrieved page when the model omits it", async (
     );
     assert.deepEqual(
       brief.claims.documents.map((claim) => claim.citation),
-      [{ kind: "page", stepId: "2", referenceId: "3", page: 2, url: pdfUrl }],
+      [
+        {
+          kind: "page",
+          stepId: "2",
+          referenceId: "3",
+          page: 2,
+          url: "/source/document/3?page=2",
+          pdfUrl: `${pdfUrl}#page=2`,
+        },
+      ],
     );
     assert.equal(brief.claims.documents[0]?.text, translations[language]);
   }
