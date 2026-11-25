@@ -61,8 +61,9 @@ export async function POST(request: Request) {
 
   const { question, proceedingApiId } = parsed.data;
   const language = inferLanguage(question, parsed.data.language);
-  const prisma = database();
+  let prisma: ReturnType<typeof database> | undefined;
   try {
+    prisma = database();
     const dossiers = await searchProceedingDossiers(
       prisma,
       question,
@@ -123,6 +124,6 @@ export async function POST(request: Request) {
       500,
     );
   } finally {
-    await prisma.$disconnect();
+    await prisma?.$disconnect();
   }
 }

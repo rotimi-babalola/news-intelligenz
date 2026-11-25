@@ -41,3 +41,34 @@ test("ask rejects a question over 1,000 characters", async () => {
   assert.equal(response.status, 400);
   assert.equal(await code(response), "invalid_request");
 });
+
+for (const { name, url, message } of [
+  {
+    name: "missing",
+    url: undefined,
+    message: "DATABASE_URL is required",
+  },
+  {
+    name: "malformed",
+    url: "invalid",
+    message: "DATABASE_URL must be a valid PostgreSQL URL",
+  },
+]) {
+  test(`ask returns a typed error for ${name} database configuration`, async (t) => {
+    const previousUrl = process.env.DATABASE_URL;
+    t.after(() => {
+      if (previousUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = previousUrl;
+    });
+    if (url === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = url;
+
+    const response = await POST(
+      request("http://localhost:3000", { question: "Housing costs?" }),
+    );
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), {
+      error: { code: "generation_failed", message },
+    });
+  });
+}
