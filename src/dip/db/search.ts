@@ -1,8 +1,13 @@
 import type {
   ParliamentaryEntity,
   Prisma,
+  PrismaClient,
 } from "../../generated/prisma/client";
 import { qualifiedTable } from "../../db";
+import {
+  DIP_SEARCH_CANDIDATE_LIMIT,
+  DIP_SEARCH_HNSW_EF_SEARCH,
+} from "../constants";
 import type { Client } from "./client";
 
 export function saveDipEmbedding(
@@ -73,7 +78,7 @@ export type DipSearchRow = {
 // busy proceeding cannot fill a caller's page: at most two pages per document
 // and five hits per proceeding survive regardless of the requested limit.
 export function searchDipEmbeddings(
-  client: Client,
+  client: PrismaClient,
   input: {
     embedding: number[];
     model: string;
@@ -83,8 +88,41 @@ export function searchDipEmbeddings(
     documentProceedingIds?: string[];
   },
 ) {
-  return client.$queryRawUnsafe<DipSearchRow[]>(
-    `SELECT * FROM (
+  // The scoped follow-up ranks exactly within the requested proceedings: an ANN
+  // scan filters after collecting its candidate list, so a narrow scope could
+  // return nothing. The unscoped search keeps the ANN candidate window.
+  const candidateWindow = input.documentProceedingIds
+    ? `(WITH scoped AS MATERIALIZED (
+         SELECT e.source_entity, e.source_api_id, e.source_version_no,
+           e.source_page, e.source_chunk, e.embedding
+         FROM ${qualifiedTable("dip_embeddings")} e
+         WHERE e.model = $2 AND e.document_instruction = $3
+           AND e.query_instruction = $4 AND e.source_entity = 'dokument'
+           AND EXISTS (
+             SELECT 1 FROM ${qualifiedTable("document_references")} r
+             WHERE r.reference_id = e.source_api_id
+               AND r.proceeding_id = ANY($6::text[])
+           )
+       )
+       SELECT * FROM scoped
+       ORDER BY embedding <=> $1::public.vector
+       LIMIT $7)`
+    : `(SELECT e.source_entity, e.source_api_id, e.source_version_no,
+         e.source_page, e.source_chunk, e.embedding
+       FROM ${qualifiedTable("dip_embeddings")} e
+       WHERE e.model = $2 AND e.document_instruction = $3
+         AND e.query_instruction = $4
+         AND ($6::text[] IS NULL OR e.source_entity = 'dokument')
+       ORDER BY e.embedding <=> $1::public.vector
+       LIMIT $7)`;
+  return client.$transaction(
+    async (tx) => {
+      await tx.$queryRawUnsafe(
+        "SELECT set_config('hnsw.ef_search', $1, true)",
+        String(DIP_SEARCH_HNSW_EF_SEARCH),
+      );
+      return tx.$queryRawUnsafe<DipSearchRow[]>(
+        `SELECT * FROM (
      SELECT capped.*, ROW_NUMBER() OVER (
        PARTITION BY CASE WHEN "entity" = 'vorgang' THEN "apiId" ELSE "proceedingApiId" END
        ORDER BY "score" DESC, "sortEntity", "apiId", "pageNo"
@@ -122,7 +160,7 @@ export function searchDipEmbeddings(
       sec."sectionTitle",
       sec."sectionStartPage",
       sec."sectionEndPage"
-     FROM ${qualifiedTable("dip_embeddings")} e
+     FROM ${candidateWindow} e
      LEFT JOIN ${qualifiedTable("proceedings")} p
        ON e.source_entity = 'vorgang' AND p.api_id = e.source_api_id
        AND p.latest_version_no = e.source_version_no
@@ -165,9 +203,7 @@ export function searchDipEmbeddings(
          )
        LIMIT 1
      ) sec ON true
-     WHERE e.model = $2 AND e.document_instruction = $3 AND e.query_instruction = $4
-       AND ($6::text[] IS NULL OR e.source_entity = 'dokument')
-       AND (p.api_id IS NOT NULL OR s.api_id IS NOT NULL OR dc.content_id IS NOT NULL)
+     WHERE p.api_id IS NOT NULL OR s.api_id IS NOT NULL OR dc.content_id IS NOT NULL
      ) ranked
      WHERE "pageRank" = 1
      ) capped
@@ -178,11 +214,15 @@ export function searchDipEmbeddings(
      WHERE "proceedingRank" <= 5
      ORDER BY "score" DESC, "sortEntity", "apiId"
      LIMIT $5`,
-    JSON.stringify(input.embedding),
-    input.model,
-    input.documentInstruction,
-    input.queryInstruction,
-    input.limit,
-    input.documentProceedingIds ?? null,
+        JSON.stringify(input.embedding),
+        input.model,
+        input.documentInstruction,
+        input.queryInstruction,
+        input.limit,
+        input.documentProceedingIds ?? null,
+        DIP_SEARCH_CANDIDATE_LIMIT,
+      );
+    },
+    { timeout: 30_000 },
   );
 }

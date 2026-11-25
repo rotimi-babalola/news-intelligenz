@@ -196,6 +196,16 @@ earlier text counts as a new version, mirroring publications).
 | `document_pages`            | (`content_id`, `page_no`)       | Extracted page text from PyMuPDF; `dip_embeddings` joins the variant and page so retrieval can cite a specific page                                                                                                                                                        |
 | `document_sections`         | (`content_id`, `section_no`)    | Derived section outline from explicit headings in the extracted pages: `label`, `title`, and inclusive `start_page`/`end_page`. Rows belong to one content variant, so changed bytes regenerate the outline                                                                |
 
+`dip_embeddings` carries an HNSW index on the `vector(1024)` column using
+`vector_cosine_ops`, so retrieval ranks a bounded candidate window instead of
+scoring the whole corpus before joining. Each search sets
+`hnsw.ef_search` above the window because the index returns at most that many
+tuples; the default 40 would otherwise starve the window. The first migration
+builds the index with `CREATE INDEX CONCURRENTLY`; the build scans every
+embedding, writes the index, and adds I/O while it runs but does not block
+writes. Rebuilding after a bulk reindex costs the same scan; keep the default
+`m = 16` and `ef_construction = 64` unless recall requires more.
+
 Fetched PDF bytes are cached in Cloudflare R2 under
 `documents/<reference_id>/<byte_hash>.pdf`; PostgreSQL keeps the object key and
 metadata. A null `object_key` marks a row captured before the move; the

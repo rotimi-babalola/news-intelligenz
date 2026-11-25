@@ -739,3 +739,79 @@ test(
     }
   },
 );
+
+test("a scoped search ranks inside its own proceedings, not the global nearest", async () => {
+  const prisma = await isolatedDatabase();
+  const pdfUrl = "https://dserver.bundestag.de/scoped.pdf";
+  const date = new Date("2026-10-14");
+  try {
+    for (const [apiId, proceedingApiId, referenceId] of [
+      ["1", "123", "doc-a"],
+      ["2", "124", "doc-b"],
+    ] as const) {
+      await prisma.proceedingStep.create({
+        data: {
+          apiId,
+          proceedingApiId,
+          institution: "BT",
+          stepLabel: "Beratung",
+          title: `Document ${referenceId}`,
+          documentType: "Drucksache",
+          sourceUpdatedAt: date,
+          metadata: {},
+          latestVersionNo: 1,
+          documentReference: {
+            create: {
+              proceedingApiId,
+              referenceId,
+              documentNumber: `21/${apiId}`,
+              pdfUrl,
+              metadata: { herausgeber: "BT", dokumentart: "Drucksache" },
+              observedAt: date,
+            },
+          },
+        },
+      });
+      const content = await prisma.documentContent.create({
+        data: {
+          referenceId,
+          variantNo: 1,
+          byteHash: `hash-${referenceId}`,
+          byteSize: 4,
+          pageCount: 1,
+          objectKey: `documents/${referenceId}.pdf`,
+          requestedUrl: pdfUrl,
+        },
+      });
+      await prisma.documentChunk.create({
+        data: {
+          contentId: content.id,
+          pageNo: 1,
+          chunkNo: 1,
+          text: `Text ${referenceId}`,
+        },
+      });
+      await saveDipEmbedding(prisma, {
+        sourceEntity: "dokument",
+        apiId: referenceId,
+        versionNo: 1,
+        sourcePage: 1,
+        sourceChunk: 1,
+        model: embeddingConfig().indexId,
+        documentInstruction: embeddingConfig().documentInstruction,
+        queryInstruction: embeddingConfig().queryInstruction,
+        embedding: referenceId === "doc-b" ? vector(1, 0) : vector(0, 1),
+      });
+    }
+    const scoped = await searchDip(prisma, "Scoped", 5, {
+      embed: async () => vector(1, 0),
+      documentProceedingIds: ["123"],
+    });
+    assert.deepEqual(
+      scoped.map((hit) => hit.proceedingApiId),
+      ["123"],
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
+});

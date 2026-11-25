@@ -125,6 +125,7 @@ function store(
   let byteHash = "hash-one";
   let requestedUrl = pdfUrl;
   const briefs = new Map<string, unknown>();
+  const reads = { variants: 0, chunks: 0, pages: 0 };
   const prisma = {
     proceeding: {
       findUnique: async () => ({
@@ -177,16 +178,32 @@ function store(
         byteHash,
         requestedUrl,
       }),
+      findMany: async () => {
+        reads.variants++;
+        return [
+          {
+            id: "content-one",
+            referenceId: "3",
+            variantNo,
+            byteHash,
+            requestedUrl,
+          },
+        ];
+      },
     },
     documentChunk: {
-      findUnique: async () => ({
-        text: "The bill would provide housing grants.",
-      }),
+      findUnique: async () => {
+        reads.chunks++;
+        return { text: "The bill would provide housing grants." };
+      },
     },
     documentPage: {
-      findUnique: async () => ({
-        text: "The bill would provide housing grants. It also funds demolition.",
-      }),
+      findUnique: async () => {
+        reads.pages++;
+        return {
+          text: "The bill would provide housing grants. It also funds demolition.",
+        };
+      },
     },
     proceedingBrief: {
       findUnique: async ({ where }: { where: { key: string } }) =>
@@ -203,6 +220,7 @@ function store(
   return {
     prisma,
     briefs,
+    reads,
     setVersion: (value: number) => {
       proceedingVersion = value;
     },
@@ -769,6 +787,32 @@ test("cached briefs regenerate for each language and changed PDF evidence", asyn
   assert.equal(briefs.size, 3);
 });
 
+test("a cache hit returns before reading pages and chunks", async () => {
+  const { prisma, reads } = store();
+  let generated = 0;
+  const provider = fixtureProvider(async () => {
+    generated++;
+    return answer("en");
+  });
+  const request = { question: "Question", language: "en" as const, dossier };
+  const first = await generateProceedingBrief(prisma, request, provider);
+  assert.equal(generated, 1);
+  assert.equal(reads.variants, 1);
+  assert.ok(reads.chunks > 0);
+  assert.ok(reads.pages > 0);
+
+  const chunks = reads.chunks;
+  const pages = reads.pages;
+  assert.deepEqual(
+    await generateProceedingBrief(prisma, request, provider),
+    first,
+  );
+  assert.equal(generated, 1);
+  assert.equal(reads.variants, 2);
+  assert.equal(reads.chunks, chunks);
+  assert.equal(reads.pages, pages);
+});
+
 test("a brief cached before source views does not keep its old citation links", async () => {
   const { prisma, briefs } = store();
   const oldKey = createHash("sha256")
@@ -960,6 +1004,7 @@ test("English fallbacks translate the German title and label, not copy them", as
     "Schriftliche Frage/Schriftliche Antwort":
       "Written question/Written answer",
   };
+  let termCalls = 0;
   const brief = await generateProceedingBrief(
     prisma,
     { question: "What happened?", language: "en", dossier: dossier },
@@ -967,14 +1012,18 @@ test("English fallbacks translate the German title and label, not copy them", as
       async () => ({}),
       async () => ({ claims: [] }),
       "fixture",
-      async ({ terms }) => ({
-        terms: terms.map(({ id, text }) => ({
-          id,
-          text: translations[text] ?? text,
-        })),
-      }),
+      async ({ terms }) => {
+        termCalls++;
+        return {
+          terms: terms.map(({ id, text }) => ({
+            id,
+            text: translations[text] ?? text,
+          })),
+        };
+      },
     ),
   );
+  assert.equal(termCalls, 1);
   assert.equal(
     brief.claims.matter[0]?.text,
     "The proceeding concerns Museum spending.",

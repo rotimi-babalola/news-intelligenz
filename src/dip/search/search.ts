@@ -5,7 +5,8 @@ import {
   embedText,
 } from "./embedding";
 import { QUERY_INSTRUCTION } from "../constants";
-import { searchDipEmbeddings, type Client } from "../db/index";
+import { searchDipEmbeddings } from "../db/index";
+import type { PrismaClient } from "../../generated/prisma/client";
 import {
   isCurrentDocumentVariant,
   STALE_REVISION_REASON,
@@ -18,7 +19,7 @@ export { QUERY_INSTRUCTION };
 import { DIP_API_BASE_URL } from "../constants";
 
 export async function searchDip(
-  prisma: Client,
+  prisma: PrismaClient,
   query: string,
   limit: number,
   options: {

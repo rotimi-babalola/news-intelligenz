@@ -2,7 +2,7 @@ import type { PrismaClient } from "../../generated/prisma/client";
 import {
   findDocumentChunk,
   findDocumentPage,
-  latestDocumentContent,
+  latestDocumentContents,
 } from "../db/index";
 import { isCitedDocumentVariant } from "../documents/citation";
 import { pdfPageUrl, sourceDocumentUrl } from "../documents/source";
@@ -52,13 +52,35 @@ export function matchesDossier(current: CurrentProceeding, dossier: Dossier) {
   );
 }
 
+export type DocumentVariants = Awaited<
+  ReturnType<typeof latestDocumentContents>
+>;
+
+export function citedDocumentIds(dossier: Dossier) {
+  return [
+    ...new Set(
+      dossier.evidence.flatMap((hit) =>
+        hit.entity === "dokument" ? [hit.document.referenceId] : [],
+      ),
+    ),
+  ];
+}
+
 // Only pages that are still the latest variant of the cited document become
 // evidence; the returned identities are rechecked after generation.
 export async function collectEvidence(
   prisma: PrismaClient,
   current: CurrentProceeding,
   dossier: Dossier,
+  variants?: DocumentVariants,
 ) {
+  // The brief path has already fetched them to key its cache; the evaluation
+  // scripts collect evidence directly and let this fetch once.
+  const contents = new Map<string, DocumentVariants[number]>();
+  for (const variant of variants ??
+    (await latestDocumentContents(prisma, citedDocumentIds(dossier))))
+    if (!contents.has(variant.referenceId))
+      contents.set(variant.referenceId, variant);
   const evidence: Evidence[] = current.steps.map((step) => ({
     id: `step:${step.apiId}`,
     text: stepSource(step),
@@ -86,10 +108,7 @@ export async function collectEvidence(
         item.document.pdfUrl === hit.document.pdfUrl,
     );
     if (!step) continue;
-    const variant = await latestDocumentContent(
-      prisma,
-      hit.document.referenceId,
-    );
+    const variant = contents.get(hit.document.referenceId);
     if (
       !variant ||
       !isCitedDocumentVariant(variant, {

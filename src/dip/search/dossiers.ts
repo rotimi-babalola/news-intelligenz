@@ -14,8 +14,8 @@ export async function searchProceedingDossiers(
   limit: number,
 ) {
   const embedding = await embedText(query, "query");
-  // Read-only: no transaction, so a slow vector scan never hits an interactive
-  // transaction timeout. `isCurrent` already drops hits that changed meanwhile.
+  // The search transaction holds the HNSW candidate-list setting and a timeout
+  // wide enough for a no-index scan. `isCurrent` drops hits that changed meanwhile.
   const hits = await searchDip(prisma, query, Math.max(100, limit * 5), {
     embed: async () => embedding,
   });

@@ -140,8 +140,10 @@ test("MCP search accepts German and English queries and returns current DIP evid
     assert.equal(queries.length, 2);
     assert.match(queries[0]!, /Erdölreserven/);
     assert.match(queries[1]!, /petroleum reserves/);
+    const searches = sql.filter((query) => !query.includes("set_config"));
+    assert.ok(searches.length >= 2);
     assert.ok(
-      sql.every(
+      searches.every(
         (query) =>
           query.includes("latest_version_no") && query.includes("c.is_latest"),
       ),
