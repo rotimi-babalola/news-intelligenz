@@ -3,6 +3,7 @@ import { database } from "../../../src/db";
 import { searchProceedingDossiers } from "../../../src/dip/search/dossiers";
 import { getDocumentPages } from "../../../src/dip/documents/pages";
 import { generateProceedingBrief } from "../../../src/dip/explain/index";
+import { isLocalPageRequest } from "../local-page";
 
 const bodySchema = z.object({
   question: z.string().trim().min(1).max(1000),
@@ -10,13 +11,7 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const host = request.headers.get("host");
-  const origin = request.headers.get("origin");
-  if (
-    !host ||
-    (origin !== `http://${host}` && origin !== `https://${host}`) ||
-    !request.headers.get("content-type")?.startsWith("application/json")
-  )
+  if (!isLocalPageRequest(request))
     return Response.json(
       { error: "Local page request required." },
       { status: 403 },

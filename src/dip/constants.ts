@@ -44,6 +44,15 @@ export const DOSSIER_CURRENT_ACTIVITY_WEIGHT = 0.02;
 export const DOSSIER_CURRENT_ACTIVITY_DAYS = 30;
 export const DOSSIER_STEP_COUNT_CAP = 10;
 export const DOSSIER_DOCUMENT_LIMIT = 3;
+// A reader question auto-selects a proceeding only when the best dossier's
+// strongest evidence clears this floor and leads every rival by this gap;
+// otherwise the reader chooses. Off-target top hits reached 0.545 in the
+// embedding evaluation, so the floor sits above them, at the cost of sending
+// some weak but relevant English questions to the picker.
+export const PROCEEDING_SELECTION_EVIDENCE_FLOOR = 0.58;
+export const PROCEEDING_SELECTION_EVIDENCE_GAP = 0.05;
+// Reader selection searches this many dossiers before deciding.
+export const PROCEEDING_SELECTION_LIMIT = 20;
 
 // Jobs
 export const EMBED_PROCEEDING = "embed_proceeding";
