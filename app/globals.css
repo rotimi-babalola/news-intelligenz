@@ -35,3 +35,48 @@
   --input: #e7e5e4;
   --ring: #1c1917;
 }
+
+/* Klarantwort reader tokens. The admin keeps the shadcn tokens above. */
+:root {
+  --ka-canvas: #ffffff;
+  --ka-ink: #212121;
+  --ka-primary: #17171c;
+  --ka-deep-green: #003c33;
+  --ka-stone: #eeece7;
+  --ka-pale-green: #edfce9;
+  --ka-hairline: #d9d9dd;
+  --ka-field-line: #e5e7eb;
+  --ka-muted: #616161;
+  --ka-slate: #75758a;
+  --ka-blue: #1863dc;
+  --ka-focus: #4c6ee6;
+  --ka-focus-input: #9b60aa;
+  --ka-on-dark: #ffffff;
+  --ka-on-dark-soft: #c7c7ce;
+  --ka-error: #b30000;
+
+  --ka-radius-xs: 4px;
+  --ka-radius-sm: 8px;
+  --ka-radius-md: 16px;
+  --ka-radius-lg: 22px;
+  --ka-radius-pill: 32px;
+
+  --ka-space-2xs: 4px;
+  --ka-space-xs: 8px;
+  --ka-space-sm: 12px;
+  --ka-space-md: 16px;
+  --ka-space-lg: 24px;
+  --ka-space-xl: 32px;
+  --ka-space-2xl: 48px;
+  --ka-space-3xl: 64px;
+  --ka-space-4xl: 96px;
+  --ka-space-5xl: 120px;
+
+  --ka-container: 1312px;
+  --ka-gutter: clamp(20px, 4vw, 64px);
+  --ka-nav-h: 72px;
+
+  --ka-font-display: "Space Grotesk", "Inter", ui-sans-serif, system-ui,
+    sans-serif;
+  --ka-font-body: "Inter", Arial, ui-sans-serif, system-ui, sans-serif;
+}
