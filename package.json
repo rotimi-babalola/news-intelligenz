@@ -17,7 +17,7 @@
     "start": "pnpm db:migrate && next start -H 127.0.0.1",
     "studio": "prisma studio",
     "test": "pnpm build:test && node --test dist/test/*.test.js",
-    "test:integration": "pnpm build:test && pnpm build && node --env-file-if-exists=.env --test dist/test/*.integration.js",
+    "test:integration": "pnpm build:test && pnpm build && node --env-file-if-exists=.env --test --test-concurrency=1 dist/test/*.integration.js",
     "check": "prisma generate && eslint . && tsc --noEmit -p tsconfig.node.json && tsc --noEmit",
     "format": "prettier --check .",
     "format:write": "prettier --write .",

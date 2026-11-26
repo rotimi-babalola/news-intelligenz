@@ -24,15 +24,6 @@ const selectionSchema = z
   })
   .catch({ claimIds: [] });
 
-// Fallback claims are built from raw DIP text, so English needs a translated
-// title or step label; the German source is the quote, never the claim text.
-async function englishTerm(text: string, translateTerms: TranslateTerms) {
-  const translated = termsSchema.parse(
-    await translateTerms({ language: "en", terms: [{ id: "term", text }] }),
-  );
-  return translated.terms[0]?.text.replace(/[.;]+$/u, "").trim() ?? null;
-}
-
 export function emptyClaims(): Claims {
   return {
     answer: [],
@@ -89,71 +80,87 @@ export function orderedStepClaims(
   });
 }
 
-// The provider omits `matter` unevenly across languages; the earliest titled
-// step establishes the subject the proceeding is about.
-export async function matterClaim(
+// The provider omits `matter` and `stage` unevenly across languages. One call
+// translates both fallback terms; the German source stays the quote, never the
+// English claim text.
+export async function stepFallbackClaims(
   steps: TimelineStep[],
-  claims: Claim[],
+  matterClaims: Claim[],
+  stageClaims: Claim[],
   language: BriefLanguage,
   translateTerms: TranslateTerms,
 ) {
-  if (claims.length) return claims;
-  const step = steps.find((item) => item.title.trim());
-  if (!step) return claims;
-  const title =
-    language === "en"
-      ? await englishTerm(step.title, translateTerms)
-      : step.title;
-  if (!title) return [];
-  return [
-    {
-      text:
-        language === "en"
-          ? `The proceeding concerns ${title}.`
-          : `Das Verfahren betrifft ${title}.`,
-      quote: stepSource(step),
-      citation: {
-        kind: "step" as const,
-        stepId: step.apiId,
-        url: sourceStepUrl(step.apiId),
-      },
-    },
+  const matterStep = matterClaims.length
+    ? undefined
+    : steps.find((item) => item.title.trim());
+  const stageStep = stageClaims.length ? undefined : steps.at(-1);
+  const stageLabel = stageStep?.label || stageStep?.title;
+  const terms = [
+    ...new Set(
+      [matterStep?.title, stageLabel].filter((text): text is string =>
+        Boolean(text?.trim()),
+      ),
+    ),
   ];
-}
-
-// The provider omits `stage` unevenly across languages; the latest step is a
-// strictly supported statement of where the matter stands.
-export async function latestStageClaim(
-  steps: TimelineStep[],
-  claims: Claim[],
-  language: BriefLanguage,
-  translateTerms: TranslateTerms,
-) {
-  if (claims.length) return claims;
-  const step = steps.at(-1);
-  const label = step?.label || step?.title;
-  if (!step || !label) return claims;
-  const term =
-    language === "en" ? await englishTerm(label, translateTerms) : label;
-  if (!term) return [];
-  return [
-    {
-      text: [
-        stepDate(step, language),
-        language === "en"
-          ? `Latest documented step: ${term}`
-          : `Letzter dokumentierter Schritt: ${term}`,
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      quote: stepSource(step),
-      citation: {
-        kind: "step" as const,
-        stepId: step.apiId,
-        url: sourceStepUrl(step.apiId),
-      },
-    },
-  ];
+  const translated = new Map<string, string>();
+  if (language === "en" && terms.length) {
+    const parsed = termsSchema.parse(
+      await translateTerms({
+        language,
+        terms: terms.map((text, index) => ({ id: String(index), text })),
+      }),
+    );
+    for (const item of parsed.terms) {
+      const text = terms[Number(item.id)];
+      if (text) translated.set(text, item.text.replace(/[.;]+$/u, "").trim());
+    }
+  }
+  const term = (text: string | undefined) => {
+    if (!text?.trim()) return null;
+    return language === "en" ? (translated.get(text) ?? null) : text;
+  };
+  const matterTitle = matterStep ? term(matterStep.title) : null;
+  const stageTerm = stageStep && stageLabel ? term(stageLabel) : null;
+  return {
+    matter:
+      matterStep && matterTitle
+        ? [
+            {
+              text:
+                language === "en"
+                  ? `The proceeding concerns ${matterTitle}.`
+                  : `Das Verfahren betrifft ${matterTitle}.`,
+              quote: stepSource(matterStep),
+              citation: {
+                kind: "step" as const,
+                stepId: matterStep.apiId,
+                url: sourceStepUrl(matterStep.apiId),
+              },
+            },
+          ]
+        : matterClaims,
+    stage:
+      stageStep && stageTerm
+        ? [
+            {
+              text: [
+                stepDate(stageStep, language),
+                language === "en"
+                  ? `Latest documented step: ${stageTerm}`
+                  : `Letzter dokumentierter Schritt: ${stageTerm}`,
+              ]
+                .filter(Boolean)
+                .join(" · "),
+              quote: stepSource(stageStep),
+              citation: {
+                kind: "step" as const,
+                stepId: stageStep.apiId,
+                url: sourceStepUrl(stageStep.apiId),
+              },
+            },
+          ]
+        : stageClaims,
+  };
 }
 
 // A claim that repeats the German source is not an English translation.

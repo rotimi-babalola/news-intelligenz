@@ -6,7 +6,7 @@ import {
 } from "../constants";
 import {
   findProceedingBrief,
-  latestDocumentContent,
+  latestDocumentContents,
   saveProceedingBrief,
 } from "../db/index";
 import { isCurrentDocumentVariant } from "../documents/citation";
@@ -15,13 +15,17 @@ import { buildBrief } from "./brief";
 import {
   alignDocumentClaims,
   emptyClaims,
-  latestStageClaim,
-  matterClaim,
   orderedStepClaims,
   selectedAnswerClaims,
+  stepFallbackClaims,
 } from "./claims";
 import { missingFacts, validateAnswer } from "./citations";
-import { collectEvidence, matchesDossier } from "./evidence";
+import {
+  collectEvidence,
+  loadDocumentVariants,
+  matchesDossier,
+  type DocumentVariants,
+} from "./evidence";
 import { chatCompletionsProvider, type ExplainerProvider } from "./provider";
 import type { BriefLanguage, Dossier } from "./types";
 
@@ -54,9 +58,11 @@ export async function generateProceedingBrief(
   if (!current || !matchesDossier(current, dossier))
     throw new Error("Dossier changed; search again before generating a brief");
 
-  const { evidence, documentVersions } = await collectEvidence(
+  // The cache key is computed before evidence collection: the dossier hits and
+  // the latest document hashes fully determine the evidence, so a hit can skip
+  // page and chunk reads. One variant query covers every cited document.
+  const variants: DocumentVariants = await loadDocumentVariants(
     prisma,
-    current,
     dossier,
   );
   const key = createHash("sha256")
@@ -74,8 +80,26 @@ export async function generateProceedingBrief(
           step.document?.referenceId,
           step.document?.pdfUrl,
         ]),
-        documentVersions,
-        evidence.map(({ id, text }) => [id, text]),
+        dossier.evidence.map((hit) =>
+          hit.entity === "dokument"
+            ? [
+                hit.entity,
+                hit.apiId,
+                hit.versionNo,
+                hit.document.referenceId,
+                hit.document.pdfUrl,
+                hit.page,
+                hit.chunk,
+                hit.passage,
+              ]
+            : [hit.entity, hit.apiId, hit.versionNo],
+        ),
+        variants.map((variant) => [
+          variant.referenceId,
+          variant.variantNo,
+          variant.byteHash,
+          variant.requestedUrl,
+        ]),
       ]),
     )
     .digest("hex");
@@ -85,6 +109,12 @@ export async function generateProceedingBrief(
       ...(cached.answer as ReturnType<typeof buildBrief>),
       retrievalRelevance: dossier.ranking.strongestEvidence,
     };
+  const { evidence, documentVersions } = await collectEvidence(
+    prisma,
+    current,
+    dossier,
+    variants,
+  );
   const generated = evidence.length
     ? await provider.generate({
         question: question.trim(),
@@ -96,25 +126,25 @@ export async function generateProceedingBrief(
     ? await validateAnswer(generated, evidence, language, provider.verify)
     : emptyClaims();
   const missing = generated ? missingFacts(generated) : [];
-  claims.matter = await matterClaim(
-    current.steps,
-    claims.matter,
-    language,
-    provider.translateTerms,
-  );
-  claims.stage = await latestStageClaim(
-    current.steps,
-    claims.stage,
-    language,
-    provider.translateTerms,
-  );
+  const [stepFallbacks, documentClaims] = await Promise.all([
+    stepFallbackClaims(
+      current.steps,
+      claims.matter,
+      claims.stage,
+      language,
+      provider.translateTerms,
+    ),
+    alignDocumentClaims(
+      evidence,
+      claims.documents,
+      language,
+      provider.translate,
+    ),
+  ]);
+  claims.matter = stepFallbacks.matter;
+  claims.stage = stepFallbacks.stage;
   claims.steps = orderedStepClaims(current.steps, claims.steps, language);
-  claims.documents = await alignDocumentClaims(
-    evidence,
-    claims.documents,
-    language,
-    provider.translate,
-  );
+  claims.documents = documentClaims;
   // A language's lead can be rejected while the other language answers, so an
   // empty lead is filled from this language's verified claims.
   if (!claims.answer.length && provider.selectAnswer) {
@@ -138,8 +168,18 @@ export async function generateProceedingBrief(
   const latest = await getProceeding(prisma, dossier.apiId);
   if (!latest || !matchesDossier(latest, dossier))
     throw new Error("Dossier changed during generation; search again");
+  const latestVariants = new Map(
+    documentVersions.length
+      ? (
+          await latestDocumentContents(
+            prisma,
+            documentVersions.map(([referenceId]) => referenceId),
+          )
+        ).map((variant) => [variant.referenceId, variant])
+      : [],
+  );
   for (const [referenceId, byteHash, pdfUrl] of documentVersions) {
-    const variant = await latestDocumentContent(prisma, referenceId);
+    const variant = latestVariants.get(referenceId);
     if (
       !variant ||
       variant.byteHash !== byteHash ||

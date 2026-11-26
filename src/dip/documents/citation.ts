@@ -50,7 +50,7 @@ export function isCurrentDocumentVariant(
 // A search hit cites the variant it was indexed from; it stays citable only
 // while that exact variant is still the current one.
 export function isCitedDocumentVariant(
-  variant: DocumentVariant,
+  variant: Pick<DocumentVariant, "variantNo" | "requestedUrl">,
   cited: { variantNo: number; pdfUrl: string | null },
 ) {
   return (

@@ -67,7 +67,14 @@ export function latestDocumentContent(client: Client, referenceId: string) {
 export function latestDocumentContents(client: Client, referenceIds: string[]) {
   return client.documentContent.findMany({
     where: { referenceId: { in: referenceIds }, isLatest: true },
-    select: { referenceId: true, requestedUrl: true },
+    orderBy: [{ referenceId: "asc" }, { variantNo: "desc" }],
+    select: {
+      id: true,
+      referenceId: true,
+      variantNo: true,
+      byteHash: true,
+      requestedUrl: true,
+    },
   });
 }
 

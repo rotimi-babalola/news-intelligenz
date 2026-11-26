@@ -19,6 +19,7 @@ import {
 } from "../src/dip/explain/evaluate.js";
 import {
   collectEvidence,
+  loadDocumentVariants,
   matchesDossier,
   stepSource,
 } from "../src/dip/explain/evidence.js";
@@ -726,6 +727,7 @@ try {
       prisma,
       current,
       dossier,
+      await loadDocumentVariants(prisma, dossier),
     );
     const collected = evidence.map((item) => item.id);
     const availability = evidenceAvailability(spikeCase, dossier, collected);

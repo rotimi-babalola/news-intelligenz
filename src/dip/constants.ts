@@ -44,6 +44,20 @@ export const DOSSIER_CURRENT_ACTIVITY_WEIGHT = 0.02;
 export const DOSSIER_CURRENT_ACTIVITY_DAYS = 30;
 export const DOSSIER_STEP_COUNT_CAP = 10;
 export const DOSSIER_DOCUMENT_LIMIT = 3;
+// Candidate-first retrieval ranks this many nearest eligible chunks before
+// joining documents, steps and pages. It bounds the join cost; raise it if
+// reviewed evidence coverage drops.
+export const DIP_SEARCH_CANDIDATE_LIMIT = 200;
+// The initial HNSW candidate list. It must cover the candidate window;
+// iterative scanning continues past it when model/instruction or eligibility
+// filters remove tuples.
+export const DIP_SEARCH_HNSW_EF_SEARCH = 200;
+// Upper bound for an iterative HNSW scan. A filtered scan stops here; if that
+// leaves no rows, the exact fallback answers instead of returning nothing.
+export const DIP_SEARCH_HNSW_MAX_SCAN_TUPLES = 20_000;
+// Scoped retrieval reserves this many eligible candidates per requested
+// proceeding, so one document-heavy proceeding cannot exhaust another's share.
+export const DIP_SEARCH_DOCUMENTS_PER_PROCEEDING = 5;
 // A reader question auto-selects a proceeding only when the best dossier's
 // strongest evidence clears this floor and leads every rival by this gap;
 // otherwise the reader chooses. Off-target top hits reached 0.545 in the
@@ -70,6 +84,6 @@ export const EXPLAIN_TIMEOUT_MS = 120_000;
 // Prompt or model changes already invalidate cached briefs through
 // provider.identity. Bump this only when answer assembly or the stored answer
 // shape changes without a prompt change; it is not a release version.
-export const BRIEF_ASSEMBLY_VERSION = 17;
+export const BRIEF_ASSEMBLY_VERSION = 18;
 export const MAX_BRIEF_QUESTION_LENGTH = 1000;
 export const MIN_CLAIM_QUOTE_LENGTH = 12;
