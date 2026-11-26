@@ -6,7 +6,6 @@ import {
 } from "../constants";
 import {
   findProceedingBrief,
-  latestDocumentContent,
   latestDocumentContents,
   saveProceedingBrief,
 } from "../db/index";
@@ -22,8 +21,8 @@ import {
 } from "./claims";
 import { missingFacts, validateAnswer } from "./citations";
 import {
-  citedDocumentIds,
   collectEvidence,
+  loadDocumentVariants,
   matchesDossier,
   type DocumentVariants,
 } from "./evidence";
@@ -62,10 +61,10 @@ export async function generateProceedingBrief(
   // The cache key is computed before evidence collection: the dossier hits and
   // the latest document hashes fully determine the evidence, so a hit can skip
   // page and chunk reads. One variant query covers every cited document.
-  const documentIds = citedDocumentIds(dossier);
-  const variants: DocumentVariants = documentIds.length
-    ? await latestDocumentContents(prisma, documentIds)
-    : [];
+  const variants: DocumentVariants = await loadDocumentVariants(
+    prisma,
+    dossier,
+  );
   const key = createHash("sha256")
     .update(
       JSON.stringify([
@@ -169,8 +168,18 @@ export async function generateProceedingBrief(
   const latest = await getProceeding(prisma, dossier.apiId);
   if (!latest || !matchesDossier(latest, dossier))
     throw new Error("Dossier changed during generation; search again");
+  const latestVariants = new Map(
+    documentVersions.length
+      ? (
+          await latestDocumentContents(
+            prisma,
+            documentVersions.map(([referenceId]) => referenceId),
+          )
+        ).map((variant) => [variant.referenceId, variant])
+      : [],
+  );
   for (const [referenceId, byteHash, pdfUrl] of documentVersions) {
-    const variant = await latestDocumentContent(prisma, referenceId);
+    const variant = latestVariants.get(referenceId);
     if (
       !variant ||
       variant.byteHash !== byteHash ||

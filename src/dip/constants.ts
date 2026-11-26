@@ -44,13 +44,20 @@ export const DOSSIER_CURRENT_ACTIVITY_WEIGHT = 0.02;
 export const DOSSIER_CURRENT_ACTIVITY_DAYS = 30;
 export const DOSSIER_STEP_COUNT_CAP = 10;
 export const DOSSIER_DOCUMENT_LIMIT = 3;
-// Candidate-first retrieval ranks this many nearest chunks before joining
-// documents, steps and pages. It bounds the join cost without the index;
-// raise it if reviewed evidence coverage drops.
+// Candidate-first retrieval ranks this many nearest eligible chunks before
+// joining documents, steps and pages. It bounds the join cost; raise it if
+// reviewed evidence coverage drops.
 export const DIP_SEARCH_CANDIDATE_LIMIT = 200;
-// HNSW returns at most hnsw.ef_search tuples, so the candidate list must be
-// larger than the result window for model/instruction filters to fill it.
+// The initial HNSW candidate list. It must cover the candidate window;
+// iterative scanning continues past it when model/instruction or eligibility
+// filters remove tuples.
 export const DIP_SEARCH_HNSW_EF_SEARCH = 200;
+// Upper bound for an iterative HNSW scan. A filtered scan stops here; if that
+// leaves no rows, the exact fallback answers instead of returning nothing.
+export const DIP_SEARCH_HNSW_MAX_SCAN_TUPLES = 20_000;
+// Scoped retrieval reserves this many eligible candidates per requested
+// proceeding, so one document-heavy proceeding cannot exhaust another's share.
+export const DIP_SEARCH_DOCUMENTS_PER_PROCEEDING = 5;
 // A reader question auto-selects a proceeding only when the best dossier's
 // strongest evidence clears this floor and leads every rival by this gap;
 // otherwise the reader chooses. Off-target top hits reached 0.545 in the

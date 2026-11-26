@@ -38,6 +38,8 @@ export async function searchProceedingDossiers(
     .map((dossier) => dossier.apiId);
   if (!missing.length) return dossiers;
   // Step hits can fill the global window before a relevant PDF page appears.
+  // The query allocates candidates per requested proceeding, so a
+  // document-heavy proceeding cannot exhaust another's share.
   const documents = await searchDip(prisma, query, missing.length * 5, {
     embed: async () => embedding,
     documentProceedingIds: missing,

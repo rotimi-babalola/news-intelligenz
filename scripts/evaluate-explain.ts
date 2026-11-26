@@ -4,6 +4,7 @@ import { database } from "../src/db.js";
 import { MIN_CLAIM_QUOTE_LENGTH } from "../src/dip/constants.js";
 import {
   collectEvidence,
+  loadDocumentVariants,
   matchesDossier,
 } from "../src/dip/explain/evidence.js";
 import {
@@ -278,7 +279,12 @@ try {
     const current = await getProceeding(prisma, dossier.apiId);
     if (!current || !matchesDossier(current, dossier))
       throw new Error(`Dossier changed before evaluation: ${dossier.apiId}`);
-    const evidence = await collectEvidence(prisma, current, dossier);
+    const evidence = await collectEvidence(
+      prisma,
+      current,
+      dossier,
+      await loadDocumentVariants(prisma, dossier),
+    );
     const answer = await generateProceedingBrief(prisma, {
       question: label.question,
       language: label.language,

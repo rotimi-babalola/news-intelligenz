@@ -797,7 +797,8 @@ test("a cache hit returns before reading pages and chunks", async () => {
   const request = { question: "Question", language: "en" as const, dossier };
   const first = await generateProceedingBrief(prisma, request, provider);
   assert.equal(generated, 1);
-  assert.equal(reads.variants, 1);
+  // One variant read keys the cache, one rechecks the cited variant.
+  assert.equal(reads.variants, 2);
   assert.ok(reads.chunks > 0);
   assert.ok(reads.pages > 0);
 
@@ -808,7 +809,8 @@ test("a cache hit returns before reading pages and chunks", async () => {
     first,
   );
   assert.equal(generated, 1);
-  assert.equal(reads.variants, 2);
+  // A cache hit still keys the cache, but skips pages, chunks and the recheck.
+  assert.equal(reads.variants, 3);
   assert.equal(reads.chunks, chunks);
   assert.equal(reads.pages, pages);
 });

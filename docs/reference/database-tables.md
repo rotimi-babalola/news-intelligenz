@@ -198,13 +198,18 @@ earlier text counts as a new version, mirroring publications).
 
 `dip_embeddings` carries an HNSW index on the `vector(1024)` column using
 `vector_cosine_ops`, so retrieval ranks a bounded candidate window instead of
-scoring the whole corpus before joining. Each search sets
-`hnsw.ef_search` above the window because the index returns at most that many
-tuples; the default 40 would otherwise starve the window. The first migration
-builds the index with `CREATE INDEX CONCURRENTLY`; the build scans every
-embedding, writes the index, and adds I/O while it runs but does not block
-writes. Rebuilding after a bulk reindex costs the same scan; keep the default
-`m = 16` and `ef_construction = 64` unless recall requires more.
+scoring the whole corpus before joining. The window pre-filters current
+versions, current document variants and stored chunks, so stale rows cannot
+consume slots citable ones need. Each search also sets `hnsw.ef_search` to the
+window and, where pgvector supports it, `hnsw.iterative_scan = relaxed_order`
+with a bounded `hnsw.max_scan_tuples`; model/instruction filters are applied
+after the index walk, so a plain bounded scan can otherwise return nothing when
+another embedding configuration supplies every nearby tuple. An empty indexed
+result falls back to an exact scan rather than answering with nothing. The
+first migration builds the index with `CREATE INDEX CONCURRENTLY`; the build
+scans every embedding, writes the index, and adds I/O while it runs but does not
+block writes. Rebuilding after a bulk reindex costs the same scan; keep the
+default `m = 16` and `ef_construction = 64` unless recall requires more.
 
 Fetched PDF bytes are cached in Cloudflare R2 under
 `documents/<reference_id>/<byte_hash>.pdf`; PostgreSQL keeps the object key and
