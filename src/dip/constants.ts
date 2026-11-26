@@ -47,10 +47,10 @@ export const DOSSIER_DOCUMENT_LIMIT = 3;
 // Candidate-first retrieval ranks this many nearest chunks before joining
 // documents, steps and pages. It bounds the join cost without the index;
 // raise it if reviewed evidence coverage drops.
-export const DIP_SEARCH_CANDIDATE_LIMIT = 500;
+export const DIP_SEARCH_CANDIDATE_LIMIT = 200;
 // HNSW returns at most hnsw.ef_search tuples, so the candidate list must be
 // larger than the result window for model/instruction filters to fill it.
-export const DIP_SEARCH_HNSW_EF_SEARCH = 1000;
+export const DIP_SEARCH_HNSW_EF_SEARCH = 200;
 // A reader question auto-selects a proceeding only when the best dossier's
 // strongest evidence clears this floor and leads every rival by this gap;
 // otherwise the reader chooses. Off-target top hits reached 0.545 in the
