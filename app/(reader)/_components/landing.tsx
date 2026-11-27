@@ -52,6 +52,8 @@ const errorCodes = new Set<ErrorCode>([
   "search_failed",
 ]);
 
+const LANGUAGE_KEY = "klarantwort.language";
+
 const copy = {
   en: {
     languageLabel: "Language",
@@ -73,7 +75,8 @@ const copy = {
         ? "1 proceeding matches. Choose it."
         : `${count} proceedings match. Choose one.`,
     pickerTitle: "Choose the proceeding",
-    pickerDescription: "Choose the proceeding that matches your question.",
+    recordNote:
+      "Official record titles, types and statuses are shown in German. Your answer will be in English.",
     searchProceedings: "Search proceedings",
     noCandidate: "No proceeding matches.",
     close: "Close",
@@ -110,7 +113,6 @@ const copy = {
         ? "1 Vorgang passt. Wählen Sie ihn aus."
         : `${count} Vorgänge passen. Wählen Sie einen aus.`,
     pickerTitle: "Vorgang auswählen",
-    pickerDescription: "Wählen Sie den Vorgang, der zu Ihrer Frage passt.",
     searchProceedings: "Vorgänge durchsuchen",
     noCandidate: "Kein Vorgang passt.",
     close: "Schließen",
@@ -173,12 +175,7 @@ export function Landing() {
   languageValue.current = language;
   const t = copy[language];
   const error = errorCode ? t.errors[errorCode] : null;
-  const statusText =
-    phase === "searching"
-      ? t.searching
-      : candidateList?.length
-        ? t.chooseStatus(candidateList.length)
-        : "";
+  const statusText = phase === "searching" ? t.searching : "";
 
   useEffect(() => {
     document.documentElement.lang = language;
@@ -186,6 +183,15 @@ export function Landing() {
       document.documentElement.lang = "en";
     };
   }, [language]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(LANGUAGE_KEY);
+      if (stored === "en" || stored === "de") setLanguage(stored);
+    } catch {
+      // Storage can be unavailable in private or embedded contexts.
+    }
+  }, []);
 
   useEffect(() => {
     return () => abortRef.current?.abort();
@@ -293,6 +299,15 @@ export function Landing() {
     void search(query);
   };
 
+  const chooseLanguage = (next: Language) => {
+    setLanguage(next);
+    try {
+      window.localStorage.setItem(LANGUAGE_KEY, next);
+    } catch {
+      // The toggle still works for this page without storage.
+    }
+  };
+
   const handlePickerOpenChange = (open: boolean) => {
     setPickerOpen(open);
     if (!open) {
@@ -316,14 +331,14 @@ export function Landing() {
             <button
               type="button"
               aria-pressed={language === "en"}
-              onClick={() => setLanguage("en")}
+              onClick={() => chooseLanguage("en")}
             >
               EN
             </button>
             <button
               type="button"
               aria-pressed={language === "de"}
-              onClick={() => setLanguage("de")}
+              onClick={() => chooseLanguage("de")}
             >
               DE
             </button>
@@ -446,7 +461,7 @@ export function Landing() {
                   {t.pickerTitle}
                 </DialogTitle>
                 <DialogDescription className={styles.dialogDescription}>
-                  {t.pickerDescription}
+                  {t.chooseStatus(candidateList.length)}
                 </DialogDescription>
               </div>
               <DialogClose className={styles.close} aria-label={t.close}>
@@ -454,10 +469,28 @@ export function Landing() {
               </DialogClose>
             </div>
 
+            <p className={styles.dialogQuestion}>
+              <span className={styles.dialogQuestionLabel}>{t.label}</span>
+              <span className={styles.dialogQuestionText}>{question}</span>
+            </p>
+            {language === "en" ? (
+              <p className={styles.dialogNote}>{copy.en.recordNote}</p>
+            ) : null}
+
             <Command
               className={styles.command}
               filter="contains"
               autoHighlight
+              announcement={(change) => {
+                if (change.type !== "results") return null;
+                if (change.loading)
+                  return language === "de" ? "Wird geladen" : "Loading";
+                if (!change.count)
+                  return language === "de" ? "Keine Treffer" : "No results";
+                return language === "de"
+                  ? `${change.count} ${change.count === 1 ? "Vorgang" : "Vorgänge"}`
+                  : `${change.count} ${change.count === 1 ? "proceeding" : "proceedings"}`;
+              }}
               onAction={(value) => {
                 const candidate = candidateList.find(
                   (item) => item.apiId === value,

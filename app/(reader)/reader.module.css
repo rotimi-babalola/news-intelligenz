@@ -338,6 +338,33 @@
   line-height: 1.45;
 }
 
+.dialogQuestion {
+  margin-top: var(--ka-space-md);
+}
+
+.dialogQuestionLabel {
+  display: block;
+  color: var(--ka-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.dialogQuestionText {
+  display: block;
+  margin-top: var(--ka-space-2xs);
+  font-size: 18px;
+  line-height: 1.4;
+  overflow-wrap: break-word;
+}
+
+.dialogNote {
+  margin-top: var(--ka-space-xs);
+  max-width: 60ch;
+  color: var(--ka-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .close {
   flex: 0 0 auto;
   display: inline-flex;
